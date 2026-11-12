@@ -1,0 +1,165 @@
+import type {
+  CompletionRequest,
+  CompletionResult,
+  SourceLineage,
+  TaskClass,
+  TaskPolicy,
+  TierZeroProvider,
+} from '@edugenesis/contracts';
+
+/**
+ * Tier 0 — deterministic learning that requires NO model provider (Doc 16 §6.4).
+ *
+ * WHY this is the floor: a learner must never lose access because a provider
+ * is down, a sponsor credit ran out, or every hosted model was suspended.
+ * `serve()` returns null whenever the bundle has nothing for the task, which
+ * is the signal for the gateway to escalate up the ladder.
+ */
+
+/** One cached curriculum atom. */
+export interface TierZeroEntry {
+  /** Curriculum id, e.g. `algebra/linear-eq`. */
+  id: string;
+  /** Task classes this cached lesson can serve. */
+  taskClasses: TaskClass[];
+  title: string;
+  body: string;
+  /** Licence id — the Licence Clearance Service gates on this. */
+  licence: string;
+  /** ISO-8601 retrieval timestamp. */
+  retrievedAt: string;
+  /** Locales this lesson is cleared for. Omit for "no locale restriction". */
+  locales?: string[];
+}
+
+export interface TierZeroOptions {
+  /** The offline curriculum bundle. */
+  entries?: TierZeroEntry[];
+  /** Bundle ids advertised to the offline bundle service. */
+  bundleIds?: string[];
+}
+
+/** A TierZeroProvider that also carries a stable id, for routing decisions. */
+export interface TierZeroProviderImpl extends TierZeroProvider {
+  readonly id: string;
+  readonly modelId: string;
+}
+
+export const TIER_ZERO_ID = 'tier-zero';
+export const TIER_ZERO_MODEL = 'offline-curriculum';
+
+const DEFAULT_ENTRIES: TierZeroEntry[] = [
+  {
+    id: 'algebra/linear-eq',
+    taskClasses: ['explain', 'quiz'],
+    title: 'Solving a linear equation',
+    body:
+      'A linear equation has the form ax + b = c. Subtract b from both sides, then divide both sides by a. Always substitute your solution back in to check it.',
+    licence: 'CC-BY-4.0',
+    retrievedAt: '2026-01-05T00:00:00.000Z',
+    locales: ['en'],
+  },
+  {
+    id: 'science/photosynthesis',
+    taskClasses: ['explain', 'quiz'],
+    title: 'Photosynthesis in one step',
+    body:
+      'Plants turn light energy into chemical energy: carbon dioxide plus water becomes glucose plus oxygen. Chlorophyll in the leaves captures the light.',
+    licence: 'CC-BY-4.0',
+    retrievedAt: '2026-01-05T00:00:00.000Z',
+    locales: ['en'],
+  },
+  {
+    id: 'math/fractions-basics',
+    taskClasses: ['explain'],
+    title: 'Fractions basics',
+    body:
+      'A fraction has a numerator (the top number) and a denominator (the bottom number). To compare two fractions with the same denominator, compare the numerators.',
+    licence: 'CC-BY-4.0',
+    retrievedAt: '2026-01-05T00:00:00.000Z',
+    locales: ['en'],
+  },
+];
+
+const DEFAULT_BUNDLE_IDS = ['curriculum-core-v1'];
+
+/** Matches `curriculum:<id>` in a prompt or in a source locator. */
+const CURRICULUM_REF = /curriculum:([A-Za-z0-9_\-/.]+)/g;
+
+function referencedCurriculumIds(req: CompletionRequest): string[] {
+  const found: string[] = [];
+  const collect = (text: string): void => {
+    for (const match of text.matchAll(CURRICULUM_REF)) {
+      const id = match[1];
+      if (id && !found.includes(id)) {
+        found.push(id);
+      }
+    }
+  };
+  collect(req.prompt);
+  for (const contextEntry of req.context ?? []) {
+    collect(contextEntry.source.locator);
+  }
+  return found;
+}
+
+function localeAllowed(entry: TierZeroEntry, locale: string | undefined): boolean {
+  if (!entry.locales || entry.locales.length === 0) {
+    return true;
+  }
+  if (!locale) {
+    return true;
+  }
+  const wanted = locale.toLowerCase();
+  const primary = (wanted.split('-')[0] ?? wanted).toLowerCase();
+  return entry.locales.some((candidate) => {
+    const value = candidate.toLowerCase();
+    return value === '*' || value === wanted || value === primary;
+  });
+}
+
+export function createTierZeroProvider(opts: TierZeroOptions = {}): TierZeroProviderImpl {
+  const entries = opts.entries ?? DEFAULT_ENTRIES;
+  const bundleIds = opts.bundleIds ?? DEFAULT_BUNDLE_IDS;
+
+  return {
+    id: TIER_ZERO_ID,
+    modelId: TIER_ZERO_MODEL,
+    async serve(policy: TaskPolicy, req: CompletionRequest): Promise<CompletionResult | null> {
+      for (const id of referencedCurriculumIds(req)) {
+        const entry = entries.find(
+          (candidate) =>
+            candidate.id === id &&
+            candidate.taskClasses.includes(policy.taskClass) &&
+            localeAllowed(candidate, req.locale ?? policy.locale),
+        );
+        if (!entry) {
+          continue;
+        }
+        const lineage: SourceLineage[] = [
+          {
+            sourceId: entry.id,
+            locator: `curriculum:${entry.id}`,
+            licence: entry.licence,
+            retrievedAt: entry.retrievedAt,
+            tier: 1,
+          },
+        ];
+        return {
+          text: entry.body,
+          providerId: TIER_ZERO_ID,
+          modelId: TIER_ZERO_MODEL,
+          // Offline, cached content costs no tokens.
+          usage: { inputTokens: 0, outputTokens: 0 },
+          latencyMs: 0,
+          sourceLineage: lineage,
+        };
+      }
+      // Nothing cached for this task: the gateway must escalate.
+      return null;
+    },
+    bundles(): string[] {
+      return [...bundleIds];
+    },
+  };
+}

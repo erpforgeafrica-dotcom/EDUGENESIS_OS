@@ -15,9 +15,10 @@
  *     `learner_id`, `LEARNER_ID` and `learner.id` are all caught by one rule.
  *     Matching is recursive: nested objects and arrays are walked to the leaves.
  *
- *   LINE 2 — VALUE SHAPE. A field name is not a guarantee. `{ contact: 'a@b.com' }`
- *     has an innocuous name and a personal value. This line detects values that
- *     look like an email address or like a phone number / national id.
+ *   LINE 2 — VALUE SHAPE. A field name is not a guarantee. A field called
+ *     `contact` can hold an email-shaped value under an innocuous name. This
+ *     line detects values that look like an email address or like a phone
+ *     number / national id.
  *
  * LINE 2 IS DELIBERATELY CONSERVATIVE. It is tuned to be used on a PUBLIC
  * artefact, so it errs towards false positives on values that are obviously
@@ -174,8 +175,8 @@ const COMPACT_DATE_PATTERN = /^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:[0-2]\d|3[01])$
  *
  * Timestamps are everywhere in a ledger payload and must not be mistaken for
  * phone numbers. The two strict forms are used rather than a loose "digits and
- * separators" test, because `0712-345-678` is a phone and `01-11-2026 03` is a
- * date that merely looks like one.
+ * separators" test, because a separated digit run with a leading zero is a
+ * phone number while a date string merely looks like one.
  */
 const DATE_LIKE_PATTERNS: readonly RegExp[] = [
   /^(?:19|20)\d{2}[-./]\d{1,2}[-./]\d{1,2}/,
@@ -202,7 +203,7 @@ function digitCount(candidate: string): number {
  * that was applied, rather than asking the reader to trust the implementation.
  */
 export const VALUE_DETECTION_RULES: readonly string[] = [
-  'V1 email-address: a string containing an email-shaped substring (local@domain.tld).',
+  'V1 email-address: a string containing an email-shaped substring (local part, at-sign, domain, dot, top-level domain).',
   'V2 long-digit-string: a string containing 8 or more consecutive digits, unless the run is a compact date (YYYYMMDD) or the whole string is a hex digest of 32+ characters.',
   'V3 phone-shape: a candidate of 9 or more digits joined by space/dash/dot/parenthesis separators that begins with "+" or "0", unless it is date-like.',
   'Numbers are never scanned by V2/V3: money is held as integer minor units, so a large amount legitimately looks like a long digit string. The field-name rule governs money keys.',

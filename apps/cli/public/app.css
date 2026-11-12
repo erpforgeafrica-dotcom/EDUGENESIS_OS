@@ -1,0 +1,191 @@
+/* ==========================================================================
+   EduGenesis OS — Settings UI styles.
+   Every colour, space, radius and motion value comes from the Aurora token
+   stylesheet (/assets/edugenesis-tokens.css). No raw hex appears here.
+   ========================================================================== */
+
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.eg-header {
+  border-bottom: 1px solid var(--eg-border-subtle);
+  background: var(--eg-surface);
+  padding: var(--eg-space-8) var(--eg-space-6);
+}
+
+.eg-header__inner,
+.eg-main,
+.eg-footer {
+  width: 100%;
+  max-width: var(--eg-container);
+  margin: 0 auto;
+  padding-left: var(--eg-space-6);
+  padding-right: var(--eg-space-6);
+}
+
+.eg-header h1 {
+  font-size: var(--eg-text-h1);
+  margin-top: var(--eg-space-2);
+}
+
+.lede {
+  color: var(--eg-text-secondary);
+  max-width: var(--eg-container-prose);
+  margin-top: var(--eg-space-3);
+}
+
+.eg-main {
+  flex: 1 1 auto;
+  padding-top: var(--eg-space-8);
+  padding-bottom: var(--eg-space-12);
+}
+
+.eg-main:focus {
+  outline: none;
+}
+
+.eg-section {
+  margin-bottom: var(--eg-space-6);
+}
+
+.eg-section h2 {
+  font-size: var(--eg-text-h3);
+  margin-bottom: var(--eg-space-2);
+}
+
+.eg-section h3 {
+  font-size: var(--eg-text-h4);
+  margin-top: var(--eg-space-6);
+  margin-bottom: var(--eg-space-2);
+}
+
+.hint {
+  color: var(--eg-text-tertiary);
+  font-size: var(--eg-text-caption);
+  margin-bottom: var(--eg-space-2);
+}
+
+.field {
+  margin-top: var(--eg-space-5);
+  max-width: var(--eg-container-prose);
+}
+
+.field label,
+.switch label {
+  display: block;
+  font-weight: var(--eg-weight-semibold);
+  font-size: var(--eg-text-body);
+  margin-bottom: var(--eg-space-2);
+}
+
+.field input,
+.eg-keys input {
+  width: 100%;
+  min-height: var(--eg-touch-target);
+  padding: var(--eg-space-3) var(--eg-space-4);
+  border-radius: var(--eg-radius-md);
+  border: 1px solid var(--eg-border-strong);
+  background: var(--eg-raised);
+  color: var(--eg-text-primary);
+  font-family: var(--eg-font-text);
+  font-size: var(--eg-text-body);
+}
+
+.eg-keys input {
+  font-family: var(--eg-font-mono);
+}
+
+.field input:hover,
+.eg-keys input:hover {
+  border-color: var(--eg-gold);
+}
+
+.switch {
+  margin-top: var(--eg-space-5);
+  max-width: var(--eg-container-prose);
+}
+
+.switch input {
+  width: var(--eg-space-5);
+  height: var(--eg-space-5);
+  margin-right: var(--eg-space-3);
+  vertical-align: middle;
+  accent-color: var(--eg-gold);
+}
+
+.switch label {
+  display: inline;
+  margin-bottom: 0;
+}
+
+.switch .hint {
+  margin-top: var(--eg-space-1);
+  margin-left: calc(var(--eg-space-5) + var(--eg-space-3));
+}
+
+.eg-keys {
+  display: flex;
+  flex-direction: column;
+  gap: var(--eg-space-4);
+  margin-top: var(--eg-space-4);
+}
+
+.eg-keys__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--eg-space-3);
+  align-items: center;
+}
+
+.eg-keys__row input {
+  flex: 1 1 16rem;
+}
+
+.eg-keys__row .btn {
+  flex: 0 0 auto;
+}
+
+.eg-keys__status {
+  color: var(--eg-text-tertiary);
+  font-size: var(--eg-text-caption);
+  font-family: var(--eg-font-mono);
+}
+
+.eg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--eg-space-4);
+  margin-top: var(--eg-space-8);
+}
+
+.eg-status {
+  margin: 0;
+  font-size: var(--eg-text-caption);
+  min-height: 1.5em;
+}
+
+.eg-status[data-tone="ok"] {
+  color: var(--eg-success);
+}
+
+.eg-status[data-tone="error"] {
+  color: var(--eg-danger);
+}
+
+.eg-footer {
+  border-top: 1px solid var(--eg-border-subtle);
+  padding-top: var(--eg-space-6);
+  padding-bottom: var(--eg-space-8);
+  color: var(--eg-text-tertiary);
+  font-size: var(--eg-text-caption);
+}
+
+code {
+  background: var(--eg-raised);
+  padding: 0 var(--eg-space-1);
+  border-radius: var(--eg-radius-sm);
+}

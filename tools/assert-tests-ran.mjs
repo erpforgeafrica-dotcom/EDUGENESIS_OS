@@ -5,16 +5,16 @@
  * ---------------
  * On Node 24, `node --test <directory>` resolves the path as a single module and
  * reports "tests 1, pass 1, fail 0" with exit code 0 — a FALSE GREEN that would
- * have shipped a CI pipeline which verifies nothing. The correct form is a glob:
- *
- *     node --test "packages/*\/dist/**/*.test.js"
+ * have shipped a CI pipeline which verifies nothing. The correct form is a glob
+ * that ends in ".test.js" and starts at each package's dist folder; see the
+ * npm script `test:only`, which is the single source of truth for the pattern.
  *
  * This wrapper makes that class of bug impossible to reintroduce: it runs the
  * test command, parses the reporter output, and fails if the number of tests
  * that actually ran is below a floor. A command that silently tests nothing is
  * a build failure, not a pass.
  *
- *   node tools/assert-tests-ran.mjs --min 1 -- node --test "packages/*/dist/**/*.test.js"
+ *   node tools/assert-tests-ran.mjs --min 1 -- node --test --test-reporter=spec <pattern>
  */
 import { spawnSync } from 'node:child_process';
 

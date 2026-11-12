@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8787
+  },
+  "paths": {
+    "dataDir": "./.edugenesis-data"
+  },
+  "providers": {
+    "primary": "local-echo",
+    "secondary": "local-echo",
+    "local": "local-echo",
+    "apiKeys": {}
+  },
+  "features": {
+    "accessibilityGuardian": true,
+    "offlineBundle": true,
+    "telemetry": false,
+    "publicAnchoring": false
+  },
+  "limits": {
+    "budgetUnits": 1000000,
+    "mediaBudgetBytes": 5242880,
+    "confidenceThreshold": 0.7
+  }
+}

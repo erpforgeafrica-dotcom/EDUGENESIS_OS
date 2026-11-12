@@ -215,7 +215,9 @@ function round4(value: number): number {
 }
 
 export function createSessionRiskService(opts: SessionRiskOptions = {}): SessionRiskServiceExtended {
-  const weights = new Map<RiskFactorKey, number>();
+  // Keyed by string so the lookup needs no cast; the map holds ONLY declared
+  // factors, which is what keeps an undeclared signal out of the score.
+  const weights = new Map<string, number>();
   for (const factor of DEFAULT_RISK_FACTORS) {
     const override = opts.weights?.[factor.key];
     weights.set(factor.key, typeof override === 'number' ? override : factor.weight);
@@ -243,7 +245,7 @@ export function createSessionRiskService(opts: SessionRiskOptions = {}): Session
         continue;
       }
       // Boundary 2: only declared factors can contribute at all.
-      const weight = weights.get(key as RiskFactorKey);
+      const weight = weights.get(key);
       if (weight === undefined) {
         ignoredUnknown.push(key);
         continue;

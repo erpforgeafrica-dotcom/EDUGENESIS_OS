@@ -1,0 +1,288 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:0970d561-fead-430a-9654-39bc168d7e41",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-12T18:40:32.576Z",
+    "tools": [
+      {
+        "vendor": "EduGenesis OS",
+        "name": "tools/sbom.mjs",
+        "version": "0.1.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "edugenesis-os",
+      "name": "edugenesis-os",
+      "version": "0.1.0"
+    },
+    "properties": [
+      {
+        "name": "edugenesis:packageManager",
+        "value": "npm"
+      },
+      {
+        "name": "edugenesis:nodeVersion",
+        "value": "v24.19.0"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@edugenesis/accessibility@0.1.0",
+      "name": "@edugenesis/accessibility",
+      "version": "0.1.0",
+      "purl": "pkg:npm/@edugenesis/accessibility@0.1.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e5b21c1875f81c581a5535843c5561bc2a69ff68567401bbc9cc910557dad97b"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@edugenesis/cli@0.1.0",
+      "name": "@edugenesis/cli",
+      "version": "0.1.0",
+      "purl": "pkg:npm/@edugenesis/cli@0.1.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9ab427d933062855ce6bfa8d149a0d420442b359ef5b78889e6faa8cec18a0ca"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@edugenesis/contracts@0.1.0",
+      "name": "@edugenesis/contracts",
+      "version": "0.1.0",
+      "purl": "pkg:npm/@edugenesis/contracts@0.1.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4d6d5875e00faf55fadc30e80c2cfc85ac0aa418083de1307be6e240c02329c0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@edugenesis/identity@0.1.0",
+      "name": "@edugenesis/identity",
+      "version": "0.1.0",
+      "purl": "pkg:npm/@edugenesis/identity@0.1.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "9dee79203d57acd08ec2b42a3241b2a67601d8e782d6e5f66e52836d0293d7f0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@edugenesis/ledger@0.1.0",
+      "name": "@edugenesis/ledger",
+      "version": "0.1.0",
+      "purl": "pkg:npm/@edugenesis/ledger@0.1.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ea021c4b53db0801f7f3871fb1514d4a31c0633735faf9c974aa6e40f259269b"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@edugenesis/onekey@0.1.0",
+      "name": "@edugenesis/onekey",
+      "version": "0.1.0",
+      "purl": "pkg:npm/@edugenesis/onekey@0.1.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0c668662061078512cf1b551e5e48e311240cf9a4d0c55fad0d2744c5c523441"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@edugenesis/verification@0.1.0",
+      "name": "@edugenesis/verification",
+      "version": "0.1.0",
+      "purl": "pkg:npm/@edugenesis/verification@0.1.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "319a8522411ef825d1ac836d5f84056bb3f7cdb0824c3812809f8b40761f1241"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@types/node@22.20.5",
+      "name": "@types/node",
+      "version": "22.20.5",
+      "purl": "pkg:npm/@types/node@22.20.5",
+      "scope": "required",
+      "description": "TypeScript definitions for node",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "ec27ad6fe29dccfaeded0d3dd12e5f9b28ca24a1b5cb75331a752f3c6a1e8c77"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/typescript@5.9.3",
+      "name": "typescript",
+      "version": "5.9.3",
+      "purl": "pkg:npm/typescript@5.9.3",
+      "scope": "required",
+      "description": "TypeScript is a language for application scale JavaScript development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.typescriptlang.org/"
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/microsoft/TypeScript.git"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "44bd9e04e2c25408450ce177acdc7deba1762976cc26b3635ba3003d10f91589"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/undici-types@6.21.0",
+      "name": "undici-types",
+      "version": "6.21.0",
+      "purl": "pkg:npm/undici-types@6.21.0",
+      "scope": "required",
+      "description": "A stand-alone types package for Undici",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://undici.nodejs.org"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/nodejs/undici.git"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "06ef03d495178469f089b636ed6523bd81cec602289553ba78d02b263edf08d4"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "edugenesis-os",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/@edugenesis/accessibility@0.1.0",
+      "dependsOn": [
+        "pkg:npm/@edugenesis/contracts@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/@edugenesis/cli@0.1.0",
+      "dependsOn": [
+        "pkg:npm/@edugenesis/contracts@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/@edugenesis/contracts@0.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/@edugenesis/identity@0.1.0",
+      "dependsOn": [
+        "pkg:npm/@edugenesis/contracts@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/@edugenesis/ledger@0.1.0",
+      "dependsOn": [
+        "pkg:npm/@edugenesis/contracts@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/@edugenesis/onekey@0.1.0",
+      "dependsOn": [
+        "pkg:npm/@edugenesis/contracts@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/@edugenesis/verification@0.1.0",
+      "dependsOn": [
+        "pkg:npm/@edugenesis/contracts@0.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/@types/node@22.20.5",
+      "dependsOn": [
+        "pkg:npm/undici-types@6.21.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/typescript@5.9.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/undici-types@6.21.0",
+      "dependsOn": []
+    }
+  ]
+}

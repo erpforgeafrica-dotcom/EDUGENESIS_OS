@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>EduGenesis OS — Settings</title>
+    <link rel="stylesheet" href="/assets/edugenesis-tokens.css" />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to the settings</a>
+
+    <header class="eg-header">
+      <div class="eg-header__inner">
+        <p class="label">EduGenesis OS</p>
+        <h1>Settings</h1>
+        <p class="lede">
+          Everything on this page is stored inside this project folder. Nothing is written to your
+          user profile and no API key is ever sent back to this page.
+        </p>
+      </div>
+    </header>
+
+    <main id="main" class="eg-main" tabindex="-1">
+      <form id="settings-form" novalidate>
+        <section class="card eg-section" aria-labelledby="heading-server">
+          <h2 id="heading-server">Server</h2>
+          <p class="hint">The local server and this Settings page listen on this address.</p>
+
+          <div class="field">
+            <label for="server-host">Host</label>
+            <input id="server-host" name="server.host" type="text" autocomplete="off" spellcheck="false" />
+            <p class="hint" id="hint-server-host">127.0.0.1 keeps this page on your own computer.</p>
+          </div>
+
+          <div class="field">
+            <label for="server-port">Port</label>
+            <input id="server-port" name="server.port" type="number" min="1" max="65535" step="1" inputmode="numeric" />
+            <p class="hint">A port change takes effect the next time the server starts.</p>
+          </div>
+        </section>
+
+        <section class="card eg-section" aria-labelledby="heading-paths">
+          <h2 id="heading-paths">Storage</h2>
+          <div class="field">
+            <label for="paths-datadir">Data folder</label>
+            <input id="paths-datadir" name="paths.dataDir" type="text" autocomplete="off" spellcheck="false" />
+            <p class="hint">
+              Relative to this project folder. An absolute path would break the project on another
+              computer.
+            </p>
+          </div>
+        </section>
+
+        <section class="card eg-section" aria-labelledby="heading-features">
+          <h2 id="heading-features">Features</h2>
+
+          <div class="switch">
+            <input id="features-accessibilityGuardian" name="features.accessibilityGuardian" type="checkbox" />
+            <label for="features-accessibilityGuardian">Accessibility Guardian</label>
+            <p class="hint">Every learner-facing output passes through the accessibility contract.</p>
+          </div>
+
+          <div class="switch">
+            <input id="features-offlineBundle" name="features.offlineBundle" type="checkbox" />
+            <label for="features-offlineBundle">Offline bundle (Tier 0)</label>
+            <p class="hint">Learning continues with no model provider at all.</p>
+          </div>
+
+          <div class="switch">
+            <input id="features-telemetry" name="features.telemetry" type="checkbox" />
+            <label for="features-telemetry">Telemetry</label>
+            <p class="hint">Pseudonymous interaction telemetry. Off by default.</p>
+          </div>
+
+          <div class="switch">
+            <input id="features-publicAnchoring" name="features.publicAnchoring" type="checkbox" />
+            <label for="features-publicAnchoring">Public ledger anchoring</label>
+            <p class="hint">Publish the ledger root to a public anchor. Off by default.</p>
+          </div>
+        </section>
+
+        <section class="card eg-section" aria-labelledby="heading-limits">
+          <h2 id="heading-limits">Limits</h2>
+
+          <div class="field">
+            <label for="limits-budgetUnits">Budget units</label>
+            <input id="limits-budgetUnits" name="limits.budgetUnits" type="number" min="0" step="1" inputmode="numeric" />
+            <p class="hint">Hard cap for the default budget pool. Zero disables paid tiers.</p>
+          </div>
+
+          <div class="field">
+            <label for="limits-mediaBudgetBytes">Media budget (bytes)</label>
+            <input
+              id="limits-mediaBudgetBytes"
+              name="limits.mediaBudgetBytes"
+              type="number"
+              min="0"
+              step="1"
+              inputmode="numeric"
+            />
+            <p class="hint">Maximum media size for a single emission.</p>
+          </div>
+
+          <div class="field">
+            <label for="limits-confidenceThreshold">Confidence threshold</label>
+            <input
+              id="limits-confidenceThreshold"
+              name="limits.confidenceThreshold"
+              type="number"
+              min="0"
+              max="1"
+              step="0.01"
+              inputmode="decimal"
+            />
+            <p class="hint">Below this confidence an uncertainty marker is mandatory.</p>
+          </div>
+        </section>
+
+        <section class="card eg-section" aria-labelledby="heading-providers">
+          <h2 id="heading-providers">Providers</h2>
+
+          <div class="field">
+            <label for="providers-primary">Primary provider (Tier 1)</label>
+            <input id="providers-primary" name="providers.primary" type="text" autocomplete="off" spellcheck="false" />
+          </div>
+
+          <div class="field">
+            <label for="providers-secondary">Secondary provider (Tier 2)</label>
+            <input id="providers-secondary" name="providers.secondary" type="text" autocomplete="off" spellcheck="false" />
+          </div>
+
+          <div class="field">
+            <label for="providers-local">Local model (Tier 3)</label>
+            <input id="providers-local" name="providers.local" type="text" autocomplete="off" spellcheck="false" />
+          </div>
+
+          <h3 id="heading-api-keys">API keys</h3>
+          <p class="hint">
+            Keys are write-only. This page can set a key but can never read one back. Leave a field
+            empty to keep the stored key unchanged.
+          </p>
+          <div id="api-keys" class="eg-keys"></div>
+          <div class="field">
+            <label for="providers-apiKey-new-name">Add a provider key</label>
+            <div class="eg-keys__row">
+              <input id="providers-apiKey-new-name" type="text" placeholder="provider name" autocomplete="off" spellcheck="false" />
+              <label class="sr-only" for="providers-apiKey-new">Provider secret value</label>
+              <input id="providers-apiKey-new" type="password" placeholder="secret value" autocomplete="new-password" />
+            </div>
+            <p class="hint">The name identifies the provider, for example <code>local-echo</code>.</p>
+          </div>
+        </section>
+
+        <div class="eg-actions">
+          <button type="submit" class="btn btn--primary">Save settings</button>
+          <button type="button" class="btn btn--quiet" id="reload-button">Reload</button>
+          <p class="eg-status" id="status" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+    </main>
+
+    <footer class="eg-footer">
+      <p>EduGenesis OS — settings are stored inside the project folder.</p>
+    </footer>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,386 @@
+/* ==========================================================================
+   EDUGENESIS OS — AURORA DESIGN SYSTEM · v1.0
+   Design tokens. Single source of truth for colour, type, space, radius,
+   elevation, motion, breakpoints and z-index.
+
+   Evidence: every colour pair below was verified with a WCAG 2.x relative
+   luminance computation (see 02_DESIGN_SYSTEM.md §3 "Contrast Ledger").
+   Contrast values are stated next to each token pair.
+
+   RULE 1 — Dark is the brand expression (marketing, sponsor surfaces,
+            admin console). Light is the LEARNER DEFAULT, because the target
+            device fleet is low-end Android with LCD panels, shared devices
+            and intermittent power (Document 2 §10, Document 1 v1.2).
+   RULE 2 — No raw hex may appear in a component. Tokens only.
+   RULE 3 — Text tokens are role-named, never colour-named.
+   ========================================================================== */
+
+:root {
+  /* ---------------------------------------------------------------------
+     1. COLOUR — CORE BRAND
+     --------------------------------------------------------------------- */
+  --eg-gold:        #E8C15C;  /* signature — generosity, dignity, value      */
+  --eg-gold-soft:   #F3D896;  /* gold highlight / hover / aurora peak        */
+  --eg-gold-deep:   #C9A227;  /* gold on dark surfaces (AAA 8.05:1)          */
+  --eg-gold-ink:    #7A5E05;  /* gold as TEXT on light surfaces (AA 5.76:1)   */
+  --eg-teal:        #2FD8B4;  /* aurora — intelligence, progress, energy      */
+  --eg-teal-ink:    #0B7A66;  /* teal as text on light surfaces (AA 4.96:1)   */
+  --eg-indigo:      #6C8CFF;  /* interactive / link on dark (AA 6.34:1)       */
+  --eg-indigo-ink:  #2A4BD8;  /* interactive / link on light (AA 6.39:1)      */
+
+  /* ---------------------------------------------------------------------
+     2. COLOUR — DARK THEME  (brand / marketing / sponsor / admin)
+     --------------------------------------------------------------------- */
+  --eg-canvas:      #070C1C;  /* page canvas                                 */
+  --eg-surface:     #0E1633;  /* cards, panels                               */
+  --eg-raised:      #161F45;  /* raised cards, hover, popovers                */
+  --eg-overlay:     #1E2A58;  /* modals, sheets                              */
+  --eg-ink:         #070C1C;  /* text ON gold / teal fills                   */
+
+  --eg-text-primary:   #F4F1E9; /* warm ivory — AAA 17.25:1 on canvas          */
+  --eg-text-secondary: #B6BFD8; /* mist         — AAA 10.60:1 on canvas         */
+  --eg-text-tertiary:  #7F89A8; /* muted       — AA   5.61:1 on canvas         */
+  --eg-text-inverse:   #070C1C; /* on light fills                               */
+
+  --eg-border-subtle: rgba(244, 241, 233, 0.10); /* dividers, decoration      */
+  --eg-border-strong: #5E6DA8;   /* functional borders — 3.58:1 vs surface      */
+  --eg-focus-ring:    #8FA8FF;   /* focus — 8.54:1 vs canvas, 7.80:1 vs surface */
+
+  --eg-success: #3DDC97;  /* AAA 11.02:1 */
+  --eg-warning: #FFC24B;  /* AAA 12.12:1 */
+  --eg-danger:  #FF7A93;  /* AAA  7.84:1 */
+  --eg-info:    #6FA8FF;  /* AAA  8.09:1 */
+
+  /* Accent used AS TEXT. On dark = gold (11.33:1). On light = gold-ink (5.76:1).
+     The raw --eg-gold is a FILL token and is never used as text on light surfaces. */
+  --eg-accent-text:   var(--eg-gold);
+  --eg-accent-2-text: var(--eg-teal);   /* teal as text  */
+  --eg-link-text:     var(--eg-indigo);  /* link colour   */
+
+  /* ---------------------------------------------------------------------
+     3. COLOUR — LIGHT THEME  (learner PWA default)
+     --------------------------------------------------------------------- */
+  --eg-canvas-light:      #FAF8F2;
+  --eg-surface-light:     #FFFFFF;
+  --eg-raised-light:      #F2EEE4;
+  --eg-text-primary-light:   #131A2C; /* AAA 16.32:1 on canvas                   */
+  --eg-text-secondary-light: #47526C; /* AAA  7.35:1 on canvas                   */
+  --eg-text-tertiary-light:  #5E6982; /* AA   5.18:1 on canvas                   */
+  --eg-border-subtle-light: #E3DED1;
+  --eg-border-strong-light: #8A90A1;  /* 3.19:1 vs card — WCAG 1.4.11 compliant   */
+  --eg-focus-ring-light:    #2A4BD8;  /* 6.39:1 vs canvas                          */
+  --eg-success-light: #0F7A43;
+  --eg-warning-light: #8A5A00;
+  --eg-danger-light:  #B4232F;
+  --eg-info-light:    #1F5FBF;
+
+  /* ---------------------------------------------------------------------
+     4. SIGNATURE GRADIENT — "Aurora Dawn"
+     Genesis (deep indigo, origin) → dawn (gold, opportunity).
+     Used ONLY for the hero, the brand mark and the "Empowerment" moment.
+     Never used behind body text without a contrast check.
+     --------------------------------------------------------------------- */
+  --eg-aurora: linear-gradient(135deg, #1B2C6B 0%, #6C4A8E 38%, #C9A227 72%, #F3D896 100%);
+  --eg-aurora-glow: radial-gradient(ellipse at 50% 120%, rgba(232,193,92,0.28) 0%, transparent 62%);
+
+  /* ---------------------------------------------------------------------
+     5. TYPOGRAPHY
+     Display  : Playfair Display — editorial, luxury, institutional voice
+     Text/UI  : Inter — legibility at small sizes, variable (one file)
+     Mono     : JetBrains Mono — ledger hashes, code, telemetry, model IDs
+     CJK      : Noto Sans SC — Chinese-language sponsor material
+     Opt-in   : Atkinson Hyperlegible — dyslexia-friendly body (a11y setting)
+     --------------------------------------------------------------------- */
+  --eg-font-display: "Playfair Display", "Noto Serif SC", Georgia, "Times New Roman", serif;
+  --eg-font-text:    "Inter", "Noto Sans SC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+  --eg-font-mono:    "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --eg-font-readable: "Atkinson Hyperlegible", "Inter", Arial, sans-serif;
+
+  /* Type scale — 1.250 (major third) from a 16px base.
+     Absolute floor is 12px; body never below 16px. */
+  --eg-text-display-xl: clamp(2.75rem, 6.5vw, 4.5rem);  /* 44 → 72px  hero      */
+  --eg-text-display-l:  clamp(2rem, 4.6vw, 3.25rem);    /* 32 → 52px  section    */
+  --eg-text-h1:         2.25rem;   /* 36px */
+  --eg-text-h2:         1.75rem;   /* 28px */
+  --eg-text-h3:         1.375rem;  /* 22px */
+  --eg-text-h4:         1.125rem;  /* 18px */
+  --eg-text-body-lg:    1.125rem;  /* 18px — long-form reading                */
+  --eg-text-body:       1rem;      /* 16px — BASE                             */
+  --eg-text-body-sm:    0.9375rem; /* 15px                                     */
+  --eg-text-caption:    0.875rem;  /* 14px                                     */
+  --eg-text-micro:      0.75rem;   /* 12px — uppercase label, tracked          */
+
+  --eg-leading-display: 1.06;
+  --eg-leading-heading: 1.18;
+  --eg-leading-body:    1.6;   /* long-form readability, exceeds 1.5 floor   */
+  --eg-leading-tight:   1.4;
+
+  --eg-tracking-display: -0.02em;
+  --eg-tracking-heading: -0.01em;
+  --eg-tracking-body:    0;
+  --eg-tracking-label:   0.16em; /* uppercase micro labels                    */
+
+  --eg-weight-regular: 400;
+  --eg-weight-medium:  500;
+  --eg-weight-semibold:600;
+  --eg-weight-bold:    700;
+
+  /* ---------------------------------------------------------------------
+     6. SPACE — 4px base, 8-point grid
+     --------------------------------------------------------------------- */
+  --eg-space-1:  0.25rem;  /*  4px */
+  --eg-space-2:  0.5rem;   /*  8px */
+  --eg-space-3:  0.75rem;  /* 12px */
+  --eg-space-4:  1rem;     /* 16px */
+  --eg-space-5:  1.25rem;  /* 20px */
+  --eg-space-6:  1.5rem;   /* 24px */
+  --eg-space-8:  2rem;     /* 32px */
+  --eg-space-10: 2.5rem;   /* 40px */
+  --eg-space-12: 3rem;     /* 48px */
+  --eg-space-16: 4rem;     /* 64px */
+  --eg-space-20: 5rem;     /* 80px */
+  --eg-space-24: 6rem;     /* 96px */
+  --eg-space-32: 8rem;     /* 128px */
+
+  --eg-section-y: clamp(3.5rem, 8vw, 7rem); /* responsive section rhythm */
+  --eg-gutter:    clamp(1.25rem, 4vw, 4rem);
+
+  /* ---------------------------------------------------------------------
+     7. RADIUS, ELEVATION, BORDER
+     --------------------------------------------------------------------- */
+  --eg-radius-sm:   6px;
+  --eg-radius-md:   10px;
+  --eg-radius-lg:   16px;
+  --eg-radius-xl:   24px;
+  --eg-radius-pill: 999px;
+
+  --eg-shadow-sm: 0 1px 2px rgba(7, 12, 28, 0.30);
+  --eg-shadow-md: 0 8px 24px rgba(7, 12, 28, 0.35);
+  --eg-shadow-lg: 0 20px 50px rgba(7, 12, 28, 0.45);
+  --eg-shadow-gold: 0 8px 30px rgba(232, 193, 92, 0.28);
+
+  --eg-border-width: 1px;
+  --eg-focus-width: 3px;
+  --eg-focus-offset: 2px;
+
+  /* ---------------------------------------------------------------------
+     8. MOTION — three tiers, always reducible
+     --------------------------------------------------------------------- */
+  --eg-duration-instant: 0ms;   /* state feedback that must feel instant      */
+  --eg-duration-fast:   120ms;  /* hover, focus, press                         */
+  --eg-duration-base:   200ms;  /* standard transition                         */
+  --eg-duration-slow:   320ms;  /* panel, sheet, card entrance                 */
+  --eg-duration-scene:  1200ms; /* aurora mesh loop (Tier 3)                  */
+
+  --eg-ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+  --eg-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --eg-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---------------------------------------------------------------------
+     9. BREAKPOINTS + Z-INDEX
+     --------------------------------------------------------------------- */
+  --eg-bp-sm: 480px;
+  --eg-bp-md: 768px;
+  --eg-bp-lg: 1024px;
+  --eg-bp-xl: 1280px;
+  --eg-bp-2xl: 1536px;
+
+  --eg-z-base: 0;
+  --eg-z-raised: 10;
+  --eg-z-sticky: 100;
+  --eg-z-nav: 200;
+  --eg-z-overlay: 300;
+  --eg-z-modal: 400;
+  --eg-z-toast: 500;
+
+  /* ---------------------------------------------------------------------
+     10. LAYOUT CONSTANTS
+     --------------------------------------------------------------------- */
+  --eg-container: 1200px;
+  --eg-container-wide: 1440px;
+  --eg-container-prose: 68ch;  /* measure — readability ceiling */
+  --eg-touch-target: 44px;     /* WCAG 2.2 AA 2.5.8 minimum                  */
+  --eg-tap-spacing: 8px;       /* WCAG 2.2 AA 2.5.8 spacing                  */
+}
+
+/* ==========================================================================
+   THEME SWITCHING
+   ========================================================================== */
+[data-theme="light"] {
+  --eg-canvas:      var(--eg-canvas-light);
+  --eg-surface:     var(--eg-surface-light);
+  --eg-raised:      var(--eg-raised-light);
+  --eg-text-primary:   var(--eg-text-primary-light);
+  --eg-text-secondary: var(--eg-text-secondary-light);
+  --eg-text-tertiary:  var(--eg-text-tertiary-light);
+  --eg-border-subtle: var(--eg-border-subtle-light);
+  --eg-border-strong: var(--eg-border-strong-light);
+  --eg-focus-ring:    var(--eg-focus-ring-light);
+  --eg-success: var(--eg-success-light);
+  --eg-warning: var(--eg-warning-light);
+  --eg-danger:  var(--eg-danger-light);
+  --eg-info:    var(--eg-info-light);
+  /* --eg-ink is deliberately NOT remapped here. It is the text colour used
+     ON gold and teal fills, and must stay dark in both themes:
+     #070C1C on #E8C15C = 11.33:1. Remapping it to the light canvas would
+     drop that to ~1.9:1. */
+  --eg-accent-text: var(--eg-gold-ink);
+  --eg-accent-2-text: var(--eg-teal-ink);
+  --eg-link-text: var(--eg-indigo-ink);
+}
+
+/* ==========================================================================
+   BASE
+   ========================================================================== */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--eg-canvas);
+  color: var(--eg-text-primary);
+  font-family: var(--eg-font-text);
+  font-size: var(--eg-text-body);
+  line-height: var(--eg-leading-body);
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3 {
+  font-family: var(--eg-font-display);
+  font-weight: var(--eg-weight-semibold);
+  line-height: var(--eg-leading-heading);
+  letter-spacing: var(--eg-tracking-heading);
+  margin: 0;
+}
+h4, h5, h6 {
+  font-family: var(--eg-font-text);
+  font-weight: var(--eg-weight-semibold);
+  line-height: var(--eg-leading-tight);
+  margin: 0;
+}
+p { margin: 0 0 var(--eg-space-4); max-width: var(--eg-container-prose); }
+
+a { color: var(--eg-link-text); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+a:hover { color: var(--eg-gold); }
+
+code, kbd, pre, samp { font-family: var(--eg-font-mono); font-size: 0.9em; }
+
+/* ==========================================================================
+   FOCUS — dual ring so it is visible on gold, teal AND dark fills.
+   The single indigo ring scores only 1.33:1 on the gold button fill, which
+   fails WCAG 1.4.11. The inner dark ring restores it.
+   ========================================================================== */
+:focus-visible {
+  outline: var(--eg-focus-width) solid var(--eg-focus-ring);
+  outline-offset: var(--eg-focus-offset);
+  border-radius: var(--eg-radius-sm);
+  box-shadow: 0 0 0 calc(var(--eg-focus-width) + var(--eg-focus-offset)) var(--eg-surface);
+}
+.btn--gold:focus-visible, .chip--gold:focus-visible {
+  outline-color: var(--eg-text-primary);
+  box-shadow: 0 0 0 calc(var(--eg-focus-width) + var(--eg-focus-offset)) var(--eg-gold);
+}
+
+/* ==========================================================================
+   REDUCED MOTION — hard gate. Every animation, including the WebGL scene,
+   must read this media query. The 3D scene must also STOP RENDERING,
+   not merely stop CSS transitions.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   HIGH CONTRAST / FORCED COLORS
+   ========================================================================== */
+@media (forced-colors: active) {
+  .btn, .chip, .card { border: 1px solid CanvasText; }
+  :focus-visible { outline: 3px solid Highlight; }
+}
+
+/* ==========================================================================
+   READABLE MODE — dyslexia-friendly body font + wider measure.
+   ========================================================================== */
+[data-readable="on"] {
+  --eg-font-text: var(--eg-font-readable);
+  --eg-font-display: var(--eg-font-readable);
+  --eg-container-prose: 58ch;
+  --eg-leading-body: 1.75;
+}
+
+/* ==========================================================================
+   COMPONENT PRIMITIVES
+   ========================================================================== */
+.btn {
+  min-height: var(--eg-touch-target);
+  min-width: var(--eg-touch-target);
+  padding: var(--eg-space-3) var(--eg-space-6);
+  border-radius: var(--eg-radius-pill);
+  border: 1px solid transparent;
+  font-family: var(--eg-font-text);
+  font-size: var(--eg-text-body);
+  font-weight: var(--eg-weight-semibold);
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform var(--eg-duration-fast) var(--eg-ease-out),
+              box-shadow var(--eg-duration-fast) var(--eg-ease-out),
+              background-color var(--eg-duration-fast) var(--eg-ease-out);
+}
+.btn--primary { background: var(--eg-gold); color: var(--eg-ink); box-shadow: var(--eg-shadow-gold); }
+.btn--primary:hover { background: var(--eg-gold-soft); transform: translateY(-2px); }
+.btn--secondary { background: transparent; color: var(--eg-gold); border-color: var(--eg-gold); }
+.btn--secondary:hover { background: rgba(232,193,92,0.10); transform: translateY(-2px); }
+.btn--quiet { background: var(--eg-raised); color: var(--eg-text-primary); }
+.btn--quiet:hover { background: var(--eg-overlay); }
+
+.card {
+  background: var(--eg-surface);
+  border: 1px solid var(--eg-border-subtle);
+  border-radius: var(--eg-radius-lg);
+  padding: var(--eg-space-6);
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: var(--eg-space-2);
+  padding: var(--eg-space-1) var(--eg-space-3);
+  border-radius: var(--eg-radius-pill);
+  border: 1px solid var(--eg-border-strong);
+  font-size: var(--eg-text-caption);
+  font-weight: var(--eg-weight-medium);
+}
+.chip--gold { border-color: var(--eg-gold); color: var(--eg-accent-text); }
+.chip--teal { border-color: var(--eg-teal); color: var(--eg-accent-2-text); }
+
+.label {
+  font-family: var(--eg-font-text);
+  font-size: var(--eg-text-micro);
+  font-weight: var(--eg-weight-semibold);
+  letter-spacing: var(--eg-tracking-label);
+  text-transform: uppercase;
+  color: var(--eg-accent-text);
+}
+
+/* Utility: skip link (WCAG 2.4.1 Bypass Blocks) */
+.skip-link {
+  position: absolute; left: var(--eg-space-4); top: -100px;
+  z-index: var(--eg-z-toast);
+  background: var(--eg-gold); color: var(--eg-ink);
+  padding: var(--eg-space-3) var(--eg-space-5);
+  border-radius: var(--eg-radius-md);
+  font-weight: var(--eg-weight-semibold);
+  text-decoration: none;
+}
+.skip-link:focus { top: var(--eg-space-4); }
+
+/* Utility: visually hidden but announced */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

@@ -231,11 +231,12 @@ export function createConsentService(opts: ConsentServiceOptions = {}): ConsentS
     scope: ConsentScope,
     withdrawalActor: 'learner' | 'guardian' | 'system',
     at: string,
+    event: 'withdrawal' | 'refusal' = 'withdrawal',
   ): ConsentRecord {
     const state = scopeState(learnerId, scope);
     state.granted = false;
     state.history.push({ at, granted: false, actor: withdrawalActor });
-    record(learnerId, scope, 'withdrawal', withdrawalActor, at);
+    record(learnerId, scope, event, withdrawalActor, at);
 
     // Cascade to every dependent, in the same synchronous call.
     for (const dependent of transitiveDependents(scope)) {
@@ -252,11 +253,7 @@ export function createConsentService(opts: ConsentServiceOptions = {}): ConsentS
     const grantActor: 'learner' | 'guardian' = grant.guardianId ? 'guardian' : 'learner';
     if (!grant.granted) {
       // An explicit refusal is recorded like a withdrawal and is never erased.
-      const refused = performWithdrawal(grant.learnerId, grant.scope, grantActor, grant.at);
-      record(grant.learnerId, grant.scope, 'refusal', grantActor, grant.at, {
-        ...(grant.learnerAssent === undefined ? {} : { learnerAssent: grant.learnerAssent }),
-      });
-      return refused;
+      return performWithdrawal(grant.learnerId, grant.scope, grantActor, grant.at, 'refusal');
     }
 
     const state = scopeState(grant.learnerId, grant.scope);

@@ -1,0 +1,116 @@
+# EduGenesis OS — continuous integration.
+#
+# Every job runs on Node 22 (the supported floor) and uses only the project's
+# own scripts. There is no third-party action beyond the GitHub-maintained
+# checkout, setup-node and upload-artifact actions.
+#
+# A green pipeline is the only claim this repository makes.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Typecheck every workspace project
+        run: npm run typecheck
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Run the test suite
+        run: npm run test:only
+
+  secrets:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Scan the published tree for secrets
+        run: npm run secrets:scan
+
+  sbom:
+    name: SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Generate the CycloneDX SBOM
+        run: npm run sbom
+      - name: Upload the SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: artifacts/sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 30
+
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Typecheck, test, scan and inventory
+        run: npm run verify
+      - name: Environment doctor
+        run: npm run doctor

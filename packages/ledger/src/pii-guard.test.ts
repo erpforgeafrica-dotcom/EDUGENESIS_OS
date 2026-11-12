@@ -41,7 +41,7 @@ test('normalisation collapses every spelling of the same field name', () => {
 });
 
 test('a forbidden field name is refused whatever its casing', () => {
-  const result = assertNoPersonalData({ learner_name: 'Ada Lovelace' });
+  const result = assertNoPersonalData({ learner_name: 'Synthetic Learner' });
   assert.equal(result.ok, false);
   assert.equal(result.violations.length, 1);
   assert.match(result.violations[0] ?? '', /learner_name/);
@@ -77,7 +77,7 @@ test('a long digit string (phone / national id) is caught under an innocuous key
 });
 
 test('a separated phone number is caught', () => {
-  const result = assertNoPersonalData({ reference: '+254 712 345 678' });
+  const result = assertNoPersonalData({ reference: '+000 000 0000' });
   assert.equal(result.ok, false);
 });
 
@@ -115,7 +115,7 @@ test('the guard reports the exact paths it found', () => {
   assert.deepEqual(findForbiddenFieldPaths({ a: { b: [{ learner_name: 'x' }] } }), [
     'a.b[0].learner_name',
   ]);
-  assert.equal(findPersonalDataValues({ a: 'b@c.de' }).length, 1);
+  assert.equal(findPersonalDataValues({ a: 'learner@example.org' }).length, 1);
 });
 
 test('the detection rules are published so an auditor can read them', () => {

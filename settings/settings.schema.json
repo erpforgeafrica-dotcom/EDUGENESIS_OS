@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://edugenesis.local/schemas/settings.schema.json",
+  "title": "EduGenesisSettings",
+  "description": "Versioned, portable settings for EduGenesis OS. Mirrors EduGenesisSettings in packages/contracts/src/index.ts. Secrets live only in an untracked local override; the committed default carries an empty apiKeys map.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "server",
+    "paths",
+    "providers",
+    "features",
+    "limits"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1,
+      "description": "Schema version. A file older than this is migrated on load; a file newer than this is rejected rather than silently misread."
+    },
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "port"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[A-Za-z0-9._:-]+$",
+          "description": "Interface the local server binds to. 127.0.0.1 keeps the Settings UI off the network."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "TCP port for the local server and Settings UI."
+        }
+      }
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dataDir"],
+      "properties": {
+        "dataDir": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?![A-Za-z]:[\\\\/])(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:$|[\\\\/])).+$",
+          "description": "Data folder, RELATIVE to the project root. Absolute paths, drive letters, UNC paths and any '..' segment are rejected so the project stays portable."
+        }
+      }
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "secondary", "apiKeys"],
+      "properties": {
+        "primary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Provider id used for Tier 1 routing."
+        },
+        "secondary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Provider id used for Tier 2 routing."
+        },
+        "local": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Optional local model id used for Tier 3 routing."
+        },
+        "apiKeys": {
+          "type": "object",
+          "description": "Provider credentials. Never logged, never committed, never returned in full over HTTP.",
+          "propertyNames": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9._-]+$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 4096
+          }
+        }
+      }
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "accessibilityGuardian",
+        "offlineBundle",
+        "telemetry",
+        "publicAnchoring"
+      ],
+      "properties": {
+        "accessibilityGuardian": {
+          "type": "boolean",
+          "description": "Route every learner-facing emission through the Accessibility Guardian."
+        },
+        "offlineBundle": {
+          "type": "boolean",
+          "description": "Enable the Tier 0 signed offline bundle (no model provider required)."
+        },
+        "telemetry": {
+          "type": "boolean",
+          "description": "Enable pseudonymous interaction telemetry. Off by default."
+        },
+        "publicAnchoring": {
+          "type": "boolean",
+          "description": "Publish the ledger Merkle root to a public anchor. Off by default; requires Board sign-off."
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["budgetUnits", "mediaBudgetBytes", "confidenceThreshold"],
+      "properties": {
+        "budgetUnits": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000000,
+          "description": "Hard cap for the default budget pool. Zero disables paid tiers."
+        },
+        "mediaBudgetBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1073741824,
+          "description": "Media budget per emission in bytes."
+        },
+        "confidenceThreshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence below which an uncertainty marker is mandatory."
+        }
+      }
+    },
+    "extra": {
+      "type": "object",
+      "description": "Keys found in an older settings file that this schema does not know. They are preserved here by the migration step so nothing is ever dropped silently.",
+      "additionalProperties": true
+    }
+  }
+}

@@ -143,7 +143,7 @@ test('PII REFUSAL: a payload with a forbidden field name is refused', () => {
   const store = makeStore();
   assert.throws(
     () => {
-      store.append('sponsor_deposit', { amount_cents: 100, learner_name: 'Ada Lovelace' });
+      store.append('sponsor_deposit', { amount_cents: 100, learner_name: 'Synthetic Learner' });
     },
     (error: unknown) => {
       assert.ok(error instanceof LedgerPiiError);
