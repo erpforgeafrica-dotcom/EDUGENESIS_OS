@@ -8,7 +8,7 @@
  *   node tools/scaffold.mjs
  */
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -49,8 +49,15 @@ for (const pkg of PACKAGES) {
 
   const tsPath = join(dir, 'tsconfig.json');
   if (!existsSync(tsPath)) {
+    // RELATIVE paths only. An absolute path here bakes a drive letter and a user
+    // name into the project, which the portability law forbids and which
+    // tools/verify-portability.mjs fails the build on.
+    const relToRoot = (target) => {
+      const rel = relative(dir, target).split(/[\\/]/).join('/');
+      return rel.startsWith('.') ? rel : `./${rel}`;
+    };
     const ts = {
-      extends: join(ROOT, 'tsconfig.base.json').replace(/\\/g, '/'),
+      extends: relToRoot(join(ROOT, 'tsconfig.base.json')),
       compilerOptions: { rootDir: './src', outDir: './dist' },
       include: ['src/**/*.ts'],
       exclude: ['dist', 'node_modules'],
@@ -58,7 +65,7 @@ for (const pkg of PACKAGES) {
     if ((pkg.deps ?? []).length > 0) {
       ts.references = pkg.deps.map((d) => {
         const target = PACKAGES.find((p) => p.name === d);
-        return { path: join(ROOT, target.dir, 'tsconfig.json').replace(/\\/g, '/') };
+        return { path: relToRoot(join(ROOT, target.dir, 'tsconfig.json')) };
       });
     }
     writeFileSync(tsPath, JSON.stringify(ts, null, 2) + '\n', 'utf8');
@@ -72,7 +79,9 @@ for (const pkg of PACKAGES) {
     writeFileSync(
       readme,
       `# ${pkg.name}\n\nOwned by swarm unit **${pkg.dir}**. Implements the interfaces declared in \`packages/contracts\`.\n\n` +
-        `- Source: \`src/\`\n- Tests: \`src/**/*.test.ts\` (compiled to \`dist/**/*.test.js\`, run with \`node --test\`)\n` +
+        `- Source: \`src/\`\n- Tests: \`src/**/*.test.ts\` (compiled to \`dist/**/*.test.js\`)\n` +
+        `- Run them with a GLOB: \`node --test "packages/${pkg.dir.split('/').pop()}/dist/**/*.test.js"\`.\n` +
+        `- NEVER use a bare directory path with \`node --test\` on Node 24 — it resolves as one module and reports a FALSE GREEN ("tests 1, pass 1") while running nothing. \`npm run test:only\` wraps the command in a meta-gate that fails on a zero-test run.\n` +
         `- This package MUST NOT import a provider SDK. Provider access lives behind \`packages/onekey\`.\n` +
         `- This package MUST NOT contain a raw hex colour or a hardcoded absolute path.\n`,
       'utf8'

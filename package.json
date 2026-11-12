@@ -16,14 +16,15 @@
     "build": "tsc -b packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
     "clean": "tsc -b --clean packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
     "typecheck": "tsc -b --pretty false packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
-    "test": "npm run build && node --test --test-reporter=spec \"packages/*/dist/**/*.test.js\" \"apps/*/dist/**/*.test.js\"",
-    "test:only": "node --test --test-reporter=spec",
+    "test": "npm run build && npm run test:only",
+    "test:only": "node tools/assert-tests-ran.mjs --min 20 -- node --test --test-reporter=spec \"packages/*/dist/**/*.test.js\" \"apps/*/dist/**/*.test.js\"",
     "doctor": "node apps/cli/dist/doctor.js",
     "serve": "node apps/cli/dist/serve.js",
     "selftest": "node apps/cli/dist/selftest.js",
     "settings": "node apps/cli/dist/settings.js",
     "sbom": "node tools/sbom.mjs",
     "secrets:scan": "node tools/secrets-scan.mjs",
+    "tsconfig:fix": "node tools/fix-tsconfig-paths.mjs",
     "verify": "npm run typecheck && npm run test:only && npm run secrets:scan && npm run sbom"
   },
   "devDependencies": {

@@ -1,5 +1,5 @@
 {
-  "extends": "C:/Users/pc/Desktop/new Global edu project/EDUGENESIS_OS_BUILD/tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist"
