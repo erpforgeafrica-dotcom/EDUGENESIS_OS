@@ -92,6 +92,11 @@ Each agent owns exactly one package directory. Interfaces are fixed by contract 
 | A-09 | Run six swarm units in parallel | **PARTIAL** | S1, S3 and S4 completed and committed. S2, S0a and S5 wrote their full file sets but their agent sessions hit the provider's free-usage ceiling before they could report. Their output was integrated and verified by Solo, not taken on trust. |
 | A-10 | Full workspace typecheck | **PASS** | `tsc -b` over contracts, accessibility, onekey, ledger, identity, verification, cli — exit 0 |
 | A-11 | Full test suite through the meta-gate | **PASS** | 345 tests reported, 345 passed, 0 failed, 0 cancelled, 0 skipped; `META-GATE PASS` |
+| A-12 | First full gate sweep (`verify-all`) | **FAIL (5 blockers)** | accessibility-contract, failover-drill, no-pii-in-source, no-provider-leak, path-portability — each triaged in §9.1 |
+| A-13 | Re-run the two repaired gates | **PASS** | contract gate now resolves `hashCanonicalContent`; failover gate resolves `runFailoverDrill` — both PASS with evidence lines |
+| A-14 | Repair the three hygiene findings | **PASS** | PII fixtures allowlisted; provider boundary corrected; drive-letter regex bounded — 2 new regression tests |
+| A-15 | Full suite after repairs | **PASS** | 347 tests reported, 347 passed, 0 failed; `META-GATE PASS` |
+| A-16 | Second full gate sweep (`verify-all`) | **PASS** | 10 gates, 10 passed, 0 blockers failed, exit 0 |
 
 ---
 
@@ -106,7 +111,7 @@ Each agent owns exactly one package directory. Interfaces are fixed by contract 
 | Core learning is never denied on credit exhaustion | A test that exhausts the budget and asserts Tier 0 still answers | **PASS** | gateway test: budget at zero still returns a Tier 0 answer |
 | No API key is exposed | A secrets scan over the tracked tree | **PASS** | 146 files scanned, 1 skipped, 0 findings |
 | The build is portable | Copy-to-new-path run with a different profile, zero source edits | **PASS** | `tools/verify-portability.mjs` — see §11 |
-| No critical dependency vulnerabilities | `dependency-analyzer` MCP report | **PASS** | 10 packages, 2 dev-only direct dependencies (`typescript`, `@types/node`), zero runtime dependencies |
+| No critical dependency vulnerabilities | `npm audit` in the build repo (the MCP analyzer resolved the wrong root — §11.2) | **PASS** | 0 critical / 0 high / 0 moderate / 0 low / 0 total; `dependencies: {}`; dev deps are `typescript` + `@types/node` only |
 | Two independent reviewers pass | Santa Method dual review, both PASS | **PENDING** | dispatched after the gate sweep; see §12 |
 | Tokens meet WCAG in both themes | Contrast gate over resolved custom properties | **PASS** | 46 checks, 46 passed, 0 failed |
 | The test command cannot silently run nothing | Meta-gate floor | **PASS** | `tests reported: 345`, floor 20, `META-GATE PASS` |
@@ -154,6 +159,24 @@ Each agent owns exactly one package directory. Interfaces are fixed by contract 
 | I-01 | **Cross-unit payload convention seam.** The ledger's sponsor report reads the keys `units`, `requested_units`, `cost_cents`, `latency_ms`, `fallback_tier`, `served_offline`, `amount_cents`, `category`. These are S3's definition. If another unit writes different key names, sponsor metrics read empty. | S3 (raised, not silently assumed) | Named integration task: freeze the key set in `packages/contracts` before any sponsor-report consumer is built. Slice 0 has no such consumer, so nothing is currently misreported. | open, scoped to Slice 1 |
 | P-01 | **Policy question raised by S3.** The 60 % engine counts an allocation once (allocation side only) when the same amount is also recorded as a `device_purchase`. | S3 | Requires an explicit Finance Lead ruling rather than an implicit one. | open, owner decision |
 
+### 9.1 Gate-sweep findings (first `verify-all` run, commit `05d3a79`)
+
+Five blocker FAILs. Each was classified **before** any edit. The classification rule: if the product
+behaves correctly and the gate misreads it, the gate is repaired; if the product is wrong, the product
+is repaired. A gate is never relaxed to manufacture a pass.
+
+| # | Gate | Classification | Root cause | Repair | Direction |
+|---|---|---|---|---|---|
+| A-12a | `accessibility-contract` | **Gate defect** | The fixture hashed the raw body string; ARC-I9 hashes the canonical **content object**. A valid emission therefore failed with a spurious `ARC-I9`. | Gate borrows the package's own `hashCanonicalContent`; a third fixture asserts a tampered digest **is** caught. | **stricter** (new assertion) |
+| A-12b | `failover-drill` | **Gate defect** | `findDrill` matched `buildFailoverDrillGateway` and called a *builder*; it returned a gateway object, so "tiers observed: none". | Builders (`build|create|make|new`) are excluded from drill resolution; `runFailoverDrill` is resolved. | unchanged (correct semantics) |
+| A-12c | `no-pii-in-source` | **Real defect** | Doc comments carried literal email/phone examples; two fixtures used a real-looking name and a real-looking phone number. | Comments rephrased without literals; fixtures use documented synthetic markers (`Synthetic Learner`, `+000 000 0000`, `learner@example.org`); `synthetic` added to the documented allowlist. | unchanged (fixtures are still refused by the ledger guard) |
+| A-12d | `no-provider-leak` | **Gate defect + real defect** | The gate excluded only `onekey/src/providers/`, contradicting its own title, C10 and ADR-0001, so the registry flagged itself. Separately, `apps/cli` doc examples named a provider. | Exclusion corrected to `packages/onekey/` (the ADR boundary); CLI examples now say `<providerId>`. Rubric C5 wording corrected to match C10/ADR-0001 **before** review. | unchanged outside the boundary |
+| A-12e | `path-portability` | **Gate defect** | `/[A-Za-z]:\\/` matched the last letter of English words in template strings (`settings:\n`, `schema:\n`, `machine:\n`) — three false blockers. | Boundary lookbehind: a drive letter must be a standalone token. Two regression tests added (escape sequence ignored; lowercase drive letter still caught). | **stricter** (regression tests) |
+
+**Residual risk documented, not hidden.** A string that begins a line with a single lowercase letter,
+a colon and a newline escape (`s:\n`) would still be read as a drive letter. No such string exists in
+the tree, and the positive lowercase test proves real lowercase paths are still caught.
+
 ---
 
 ## 10. Swarm unit completion record
@@ -178,7 +201,7 @@ Each agent owns exactly one package directory. Interfaces are fixed by contract 
 | Gate | Command | Result |
 |---|---|---|
 | Typecheck, all packages | `tsc -b … --pretty false` | **exit 0** |
-| Full suite + meta-gate | `assert-tests-ran.mjs --min 20 -- node --test …` | **345 / 345 pass**, 0 fail, `META-GATE PASS` |
+| Full suite + meta-gate | `assert-tests-ran.mjs --min 20 -- node --test …` | **347 / 347 pass**, 0 fail, `META-GATE PASS` |
 | Token contrast | `node tools/verify-contrast.mjs` | **46 checks, 46 passed, 0 failed** — both themes |
 | Secrets | `node tools/secrets-scan.mjs` | **146 files scanned, 0 findings** |
 | SBOM | `node tools/sbom.mjs` | CycloneDX written to `artifacts/sbom.cdx.json` |
@@ -188,10 +211,43 @@ Each agent owns exactly one package directory. Interfaces are fixed by contract 
 
 ### 11.1 `verify-all` output
 
-Recorded from the live run; the portability gate copies the project to a path containing a different
-user-like segment and points `USERPROFILE` / `HOME` at a non-existent directory.
+Recorded from the live run at commit `ca26c4f`; the portability gate copies the project to a path
+containing a different user-like segment and points `USERPROFILE` / `HOME` at a non-existent directory.
 
-_(appended on completion — see the run log)_
+| Gate | Severity | Result | Detail |
+|---|---|---|---|
+| accessibility-contract | blocker | **PASS** | broken emission blocked, complete emission accepted, tampered hash caught |
+| failover-drill | blocker | **PASS** | all five fallback tiers exercised |
+| ledger-integrity | blocker | **PASS** | clean chain verifies, tampering detected, personal data refused |
+| consent-withdrawal | blocker | **PASS** | sharing blocked by withdrawal, core learning still permitted |
+| no-pii-in-source | blocker | **PASS** | no personal data found in 95 source files |
+| no-provider-leak | blocker | **PASS** | no provider reference outside `packages/onekey` in 68 source files |
+| path-portability | blocker | **PASS** | no absolute path in 105 shipped files |
+| design-token-governance | blocker | **PASS** | no raw colour literal in 95 source files |
+| token-contrast | blocker | **PASS** | every role pair meets its WCAG requirement in both themes |
+| path-portability-runtime | blocker | **PASS** | the copy runs from a different path under a different profile |
+
+```
+gates: 10   passed: 10   blockers failed: 0   warnings: 0
+RESULT: PASS — no blocker failed.
+exit 0
+```
+
+The first sweep was **5 blocker FAILs** (`accessibility-contract`, `failover-drill`, `no-pii-in-source`,
+`no-provider-leak`, `path-portability`). Each was triaged as a gate defect or a real defect before any
+edit — see §9.1. No gate was weakened to produce this pass; two gates were made stricter (a tampered
+content hash must now be caught, and the path scanner has a positive lowercase-drive regression test).
+
+### 11.2 Dependency evidence (scope note)
+
+`npm audit` in the build repo: **0 info, 0 low, 0 moderate, 0 high, 0 critical**. Direct dependencies:
+`typescript` and `@types/node` only; `dependencies` is `{}`. The seven runtime roots `npm ls` reports are
+the workspace packages themselves.
+
+The `dependency-analyzer` MCP tool was invoked, but it resolves the **session working directory**
+(`C:\Users\pc`), not the build repo — it reported `exceljs`, `pg`, `xlsx`, `mammoth`, which are not this
+project's dependencies. That report is therefore **not** evidence for this build and is not used as such.
+`npm audit` inside the build repo is the evidence of record.
 
 ---
 

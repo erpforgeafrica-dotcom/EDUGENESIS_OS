@@ -40,8 +40,9 @@ When the budget pool reaches its hard cap and overage is disabled, a learner sti
 ### C5 — Provider independence
 No learner-path code depends on a provider SDK or a provider hostname. A provider change is a registry change.
 
-- PASS condition: a static gate exists that scans the tree and fails if a provider host/SDK appears outside `packages/onekey/src/providers/`, and that gate passes on the current tree.
+- PASS condition: a static gate exists that scans the tree and fails if a provider host/SDK appears outside `packages/onekey/`, and that gate passes on the current tree.
 - FAIL signal: the gate exists but a provider host string is present in another package, or the gate scans nothing.
+- **Boundary note (corrected before review round 1):** ADR-0001 and C10 both define the boundary as the package `packages/onekey/`, not its `src/providers/` subfolder. The registry and the redaction list necessarily name providers — that is what a registry is — so a `src/providers/`-only exclusion makes the gate flag the package's own registry. The gate and this criterion now use the same boundary as C10.
 
 ### C6 — The public ledger holds no personal data
 The ledger stores only hashes, counters and proofs. A PII-bearing payload is refused before it is written.
