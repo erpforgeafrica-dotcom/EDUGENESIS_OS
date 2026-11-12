@@ -1,0 +1,25 @@
+﻿# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Runtime data and settings secrets — NEVER committed (portability law: settings live in the project)
+.edugenesis-data/
+settings/settings.local.json
+settings/*.local.json
+
+# Secrets — never committed
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

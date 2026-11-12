@@ -1,0 +1,33 @@
+{
+  "name": "edugenesis-os",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EduGenesis OS — zero-cost, AI-first global education, generosity and opportunity infrastructure. Genesis Slice 0 (Phases 0, 1, 5).",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
+    "clean": "tsc -b --clean packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
+    "typecheck": "tsc -b --pretty false packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
+    "test": "npm run build && node --test --test-reporter=spec \"packages/*/dist/**/*.test.js\" \"apps/*/dist/**/*.test.js\"",
+    "test:only": "node --test --test-reporter=spec",
+    "doctor": "node apps/cli/dist/doctor.js",
+    "serve": "node apps/cli/dist/serve.js",
+    "selftest": "node apps/cli/dist/selftest.js",
+    "settings": "node apps/cli/dist/settings.js",
+    "sbom": "node tools/sbom.mjs",
+    "secrets:scan": "node tools/secrets-scan.mjs",
+    "verify": "npm run typecheck && npm run test:only && npm run secrets:scan && npm run sbom"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
