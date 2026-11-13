@@ -16,9 +16,10 @@
   "raw_finding_count": 85,
   "merged_finding_count": 85,
   "counts": {
-    "blocker": 10,
-    "major": 39,
-    "minor": 36
+    "blocker": 2,
+    "major": 27,
+    "minor": 34,
+    "open_total": 63
   },
   "proven_count": 85,
   "unverified_count": 0,
@@ -1771,5 +1772,104 @@
         "minor": 3
       }
     }
-  ]
+  ],
+  "reconciliation": {
+    "round": 4,
+    "at": "2026-11-13",
+    "head": "677f415fddc1b680a089c211cd696ea8f105aabc",
+    "closed_ids": [
+      "F0-02",
+      "F0-07",
+      "F1-01",
+      "F1-02",
+      "F1-03",
+      "F1-04",
+      "F1-05",
+      "F1-06",
+      "F1-08",
+      "F1-11",
+      "F3-01",
+      "F3-02",
+      "F3-03",
+      "F3-04",
+      "F3-05",
+      "F3-06",
+      "F3-08",
+      "F3-10",
+      "F3-12",
+      "F5-05",
+      "F5-06",
+      "F5-11",
+      "F8-01",
+      "F8-02",
+      "F8-03",
+      "F8-05",
+      "F8-06",
+      "F8-08",
+      "F8-10"
+    ],
+    "open_counts": {
+      "blocker": 2,
+      "major": 21,
+      "minor": 33,
+      "total": 56
+    },
+    "open_blockers": [
+      "F0-01",
+      "F0-03"
+    ],
+    "superseded": {
+      "F3-12": "F8-06 (destination, not scheme)",
+      "F1-01": "F6-R4-01 (reproducibility)",
+      "F0-07": "F6-R4-01 (reproducibility)"
+    },
+    "new_findings": [
+      "F6-R4-01",
+      "F6-R4-02",
+      "F6-R4-03",
+      "F6-R4-04",
+      "F2-R4-01",
+      "F2-R4-02"
+    ],
+    "closed_after_round4": {
+      "batch_a_authority": {
+        "F8-03": "consent grant/withdraw require an actor plus an injected authoriser; tests: guardian refused without policy or permission, service-clock recordedAt",
+        "F8-01": "guardian token refused unless the principal holds the guardian role; tests: learner and unknown principals refused",
+        "F8-02": "age band is only written from an age-assurance attestation; a caller band is recorded as ageBandUnverified; tests: unverified/attested/contradictory bands",
+        "F8-05": "PII keys are folded across compound, full-width, Cyrillic and Greek variants before the deny check; tests: three homoglyph refusals",
+        "F8-06": "assertSafeBaseUrl takes an allowedHosts set, refuses metadata/link-local/credential hosts; tests: non-allowlisted host, plaintext, metadata, credentials",
+        "F8-08": "settings writes require a loopback peer plus same-origin Origin/Sec-Fetch-Site; tests: 9 CSRF cases",
+        "F8-10": "locator refuses drive-relative and scheme-only forms; tests: filesystem spellings, malformed escapes"
+      },
+      "evidence_and_gates": {
+        "F6-01": "tools/attest.mjs stores no VCS-derived field at all (no gitHead, no gitDirty, no dirty flag, no changed paths, no HEAD-derived timestamp): committing the attestation is what makes the tree clean, so a stored dirty flag contradicts itself on commit. HEAD, code-tree and artifact-tree state print to the console only; the attested bytes are a function of content, with buildTime only when SOURCE_DATE_EPOCH is declared. tools/sbom.mjs applies the same rule to metadata.timestamp. npm run verify:repro compares two consecutive runs and fails on drift.",
+        "F6-02": "tools/checksums.mjs includes assets/ and excludes *.tsbuildinfo AND gitignored settings/*.local.json (machine-local, may hold API keys); manifest 179 files, assets covered",
+        "F6-R4-01": "same fix as F6-01; verify:repro is the executable check",
+        "F6-R4-04": "NEW, found while fixing F6-02, fixed: gitignored settings/settings.local.json was in the checksum manifest, so two copies of the same commit disagreed and a secret-bearing file received a published digest; now excluded by EXCLUDE_PATTERNS in tools/checksums.mjs. An earlier draft recorded this fix under F6-R4-02, which is the secrets-scan finding and stays open."
+      },
+      "accessibility": {
+        "F2-02": "light-theme --eg-overlay remapped to #E6E0D2; a:hover uses --eg-accent-text; three stateful pairs added to tools/verify-contrast.mjs",
+        "F2-03": "every hinted control carries aria-describedby with a matching hint id in apps/cli/public/index.html; 11 of 15 inputs are described controls and 13 of 13 hints have ids",
+        "F2-R4-01": "the stylesheet authors a dual-ring :focus-visible for links, buttons, inputs, checkboxes and the skip link, so the source-level defect is closed; the keyboard-focus gate that would enforce it does NOT exist (F2-04).",
+        "F2-R4-02": "0 broken aria-describedby references: 11 of 15 inputs are described controls, 13 of 13 hint paragraphs have ids (self-check against apps/cli/public/index.html)."
+      }
+    },
+    "open_after_round4": {
+      "F6-R4-02": "OPEN (minor): tools/secrets-scan.mjs excludes artifacts/ and walks the working tree only, so a secret in git history or in a published artifact is invisible.",
+      "F6-R4-03": "OPEN (minor): tools/verify-coverage.mjs enumerates six hard-coded gateway paths; a new learner-facing path is not counted."
+    },
+    "reviewer_corpus": {
+      "source": "delegated digests, F2-round4.json (17 rows) and F6-round4.json (33 rows)",
+      "net_new": 41,
+      "severity_of_net_new": { "blocker": 3, "major": 15, "minor": 23 },
+      "closed": ["F6-02", "F2-02", "F2-03"],
+      "open": { "blocker": 2, "major": 13, "minor": 23, "total": 38 },
+      "open_blockers": ["F6-03", "F6-04"],
+      "blocker_detail": {
+        "F6-03": "gates.ts summarise() returns passed: blockerFailures.length === 0, so a gate that cannot run (sibling package unbuilt) comes back as severity 'warning' and the run still reports passed and exits 0. Closing it is a policy change (warning = could not verify = not a pass). Owner decision D-5.",
+        "F6-04": "PARTIALLY FIXED: the dead config-file scan is repaired (stat-before-read; four named root configs incl render.yaml, plus packages/* and apps/* tsconfig.json/package.json; 140 files = 122 source + 18 config; locked by paths.test.ts). Still open: the scan.ts detectors match backslash spellings only, so /Users/..., /home/... and C:/Users/... pass, and .md/.csv are never read."
+      }
+    },
+    "note": "Round-4 re-verification at HEAD 677f415, plus the Batch A authority repairs and the F6 gate/evidence repairs applied in the working tree afterwards. Batch A closed with npm run verify green: 483/483 tests, 16/16 gates, 179-file manifest, attestation PASS. open_counts covers the 85 round-3 findings only (56 open); the round-4 findings are in new_findings, open_after_round4 and closed_after_round4, and the delegated reviewer counts are in reviewer_corpus. F6-04 is open_after_round4 as PARTIALLY FIXED: the dead config scan is repaired but the detectors are still backslash-only. F6-R4-02 is the secrets-scan finding and remains OPEN; the settings.local.json checksum fix is recorded as F6-R4-04. See docs/AUDIT_ROUND4.md sections 7-9."
+  }
 }
