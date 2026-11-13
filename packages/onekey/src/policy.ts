@@ -9,6 +9,7 @@ import type {
 import type { CircuitBreaker } from './circuit-breaker.js';
 import type { KillSwitch } from './kill-switch.js';
 import type { ModelRegistryEntry, ProviderRegistry } from './registry.js';
+import { redactSecret } from './redact.js';
 
 /**
  * The routing policy engine (Doc 2 §7; Doc 16 §6.4).
@@ -169,7 +170,7 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
           providerId,
           tier,
           rule: 'killed',
-          detail: `provider was killed: ${killSwitch.reasonFor(providerId) ?? 'no reason recorded'}`,
+          detail: `provider was killed: ${redactSecret(killSwitch.reasonFor(providerId) ?? 'no reason recorded')}`,
         });
         continue;
       }

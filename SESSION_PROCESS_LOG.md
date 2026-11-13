@@ -112,6 +112,16 @@ Each agent owns exactly one package directory. Interfaces are fixed by contract 
 | A-29 | Evidence chain: deterministic SBOM, machine-readable report, checksums, attestation | **PASS** | SBOM is byte-identical across two runs (content-derived v5 serial; `SOURCE_DATE_EPOCH` → git commit date → now). `verify-all` writes `artifacts/verify-report.json`; `tools/checksums.mjs` hashes 173 files; `tools/attest.mjs` binds all three and **refuses** a red build — proved by injecting a red report and a tampered report, both refused, exit 1, with the stale attestation removed |
 | A-30 | Batch 5 suite after the repairs | **PASS** | 394 tests reported, 394 passed, 0 failed, 0 cancelled, 0 skipped; `META-GATE PASS` |
 | A-31 | Third full gate sweep (`verify-all`) | **PASS** | 14 gates, 14 passed, 0 blockers failed, 0 warnings, exit 0 |
+| A-32 | Recover the round-2 Santa verdicts, which the previous session never read | **PASS (verdicts FAIL)** | Reviewer B: FAIL on C10 — raw hex literals live in `apps/cli/public` and the design-token gate could not see them; the amendments register has no `commit` field. Reviewer C: FAIL on C1 — P1-1 was recorded `met` while neither enrolment branch existed. Both verdicts were exported from the reviewer sessions and parsed. |
+| A-33 | Run the suite against the tree the previous session left behind | **FAIL (2 tests)** | 413 reported, 411 passed: the widened scan scope began seeing the gates' own negative fixtures. Triaged as a **gate defect**, not a product defect. The concurrent session then committed `99563c9` with the suite green at 414/414. |
+| A-34 | Dispatch an 8-surface forensic audit swarm (intent vs reality, per package) | **PARTIAL** | 4 of 8 surfaces completed — F1 traceability, F3 OneKey, F5 ledger, plus Solo's own first-hand review of the live tree. F2 accessibility, F4 identity, F6 verification+tools, F7 runtime reality and F8 security were **killed by repeated OpenCode server restarts**, not by a defect in the build. Disclosed in `docs/AUDIT_ROUND3.md` §6; those surfaces are NOT audited to completion. |
+| A-35 | Repair: a provider reporting ZERO usage threw an untyped `Error` out of `complete()` | **PASS** | `budget.ts:78` refuses a zero-unit charge and `gateway.ts:302` re-threw anything that was not `BudgetExceededError`, so the whole fallback ladder was bypassed. The gateway now treats an empty answer and an uncostable answer as provider failures and walks to the next tier. 2 new gateway tests. |
+| A-36 | Repair: the kill-switch reason reached the DELIVERED result unredacted | **PASS** | `gateway.ts:253` and `policy.ts:173` interpolated the raw reason, and `decision.reason` becomes `meta.policyReason` on the delivered result. `redactSecret` is now applied at both sinks; a new test asserts the credential appears in neither the attempt trail nor the result. |
+| A-37 | Repair: P1-4 was MISLABELLED — the PWA rendered the DARK theme by default | **PASS** | The stylesheet's base `:root` defined the dark canvas and the light tokens were reachable only through an opt-in `[data-theme="light"]` attribute the document never set, so the page rendered dark with light browser form controls painted over it. `<html data-theme="light">`; **new blocker gate `pwa-light-default`** with 4 negative fixtures; P1-4's evidence now cites that gate. |
+| A-38 | Repair: ADR-0013 recorded a `node:sqlite` repository interface and adapter that exist nowhere | **PASS** | No source file imports `node:sqlite`; `private-store.ts` says it is in-memory by design. **ADR-0017 supersedes ADR-0013** and records the truth (in-memory behind a repository seam; the adapter is deferred to Slice 1). ADR-0013's decision text is preserved unchanged. The ledger README and `render.yaml` no longer claim a SQLite-backed store. |
+| A-39 | Repair: the ADR index contradicted the ADR records, and the accountable role was unregistered | **PASS** | All four local ADRs name *Chief Systems Architect*; the index named three different roles; and that role had no row in the appointment register, so nobody could ever be appointed to it. The index now mirrors the records, the role is registered **VACANT**, and the **new blocker gate `adr-governance`** parses the index, requires a non-placeholder owner that is a registered role, and cross-checks each record against its row. P0-2 now cites the gate — its old string-contains check could not detect a missing owner. 4 negative fixtures. |
+| A-40 | Regenerate the evidence chain at the release commit | **PASS** | The committed attestation had named `gitHead 7889041` while the tree shipped in `99563c9`. The SBOM, the checksum manifest and the attestation are regenerated after the code commit and committed in a follow-up commit. |
+| A-41 | Full gate sweep after the round-3 repairs | **PASS** | **16 gates, 16 passed, 0 blockers failed, 0 warnings, exit 0**; 425/425 tests through the meta-gate; secrets scan 171 files / 0 findings with a live canary. |
 | A-32 | Round-2 Santa review (Reviewer B and Reviewer C, both fresh) | **FAIL (both)** | B: 2 critical issues (C10 ×2). C: 1 critical issue (C1). 3 merged blockers plus 3 defects the repair itself uncovered — see §12.2 |
 | A-33 | Repair: the enrolment path the Phase 1 criterion names did not exist | **PASS** | `packages/identity/src/enrolment.ts`: a guardian consent token, verified against the identity service's own verifier, bound to one learner, single-use, expiring; the learner enrols provisionally; the scopes the guardian authorised become ordinary consent grants; the path taken is written to the enrolment audit log. The passkey seam refuses with a typed error naming the deferred ceremony (D-05). 13 tests. **A defect in my own first implementation was caught by my own test**: the presented token's claims were trusted, so a caller could widen the scopes — the token is now a handle to server-side claims and a mismatch is refused |
 | A-34 | Repair: the design-token gate could not see the shipped browser assets | **PASS** | One shared scan root (`listScannableDirs`): `packages/*/src`, `apps/*/src`, `apps/*/public`, `tools/`, `assets/`; `.svg` and `.webmanifest` added to the scanned extensions. Widening it immediately exposed 5 findings the narrow scope had hidden. A literal in a format that cannot express a CSS variable (the manifest, the icon, the theme-color meta) is allowed **only** when the value is one the token stylesheet defines — a checked exemption, not a hole. Two of the five findings were false positives of my own making and were fixed at the cause: SVG path geometry is not personal data, and a scanner must not name a provider |
@@ -365,7 +375,8 @@ they are recorded because they are the reason the round-2 sweep was not simply a
 
 **Suggestions taken from both reviewers** (none of them relax a criterion): the officer register now
 records the three roles the architecture document names (ten remain vacant, so P0-6 stays
-owner-blocked); four exports with no caller outside their own module are now module-internal; the
+owner-blocked; §13 adds an eleventh — the role the ADRs name as accountable had no row at
+all — so eleven now remain); four exports with no caller outside their own module are now module-internal; the
 README labels the Render free-tier limits as TARGET LIMITS quoted from vendor documentation rather
 than measurements this build made; and the README names `npm audit` as the dependency advisory check
 of record, stating that a tool resolving a different working directory is not evidence about this
@@ -374,3 +385,50 @@ project.
 **Round 2 outcome:** both reviewers FAIL, so the slice is **not** accepted. Every merged issue is
 repaired. Round 3 is the last round the method allows; if it does not produce two PASS verdicts, the
 decision escalates to the owner rather than continuing.
+
+---
+
+## 13. Round 3 — the forensic audit (a different question from the rubric)
+
+Round 1 and round 2 asked *does the build satisfy its own rubric?* Round 3 asked a different
+question: **for every function in the tree, does it do what the code, the contracts, the docs
+and the ADR set say it does — and does the running system actually do the thing the
+proposal sells?**
+
+**Method.** Eight surfaces were audited in parallel against a frozen snapshot
+(`eg-audit-snapshot`, 180 files) so a finding could not drift while it was being read. Four
+surfaces completed; four were killed by repeated OpenCode server restarts and are **not**
+audited to completion — disclosed in `docs/AUDIT_ROUND3.md` §6 rather than hidden.
+
+**Result.** 73 findings — **10 blockers, 31 majors, 32 minors, every one PROVEN**. Machine
+register: `docs/gap-register.json`. Report: `docs/AUDIT_ROUND3.md`.
+
+**The headline.** Genesis Slice 0 is a **library plus a gate suite**, not a running learner
+product, and three documents said otherwise. The served API exposes `/api/health` and
+`/api/settings` and nothing else; `apps/` imports the platform packages in one file
+(`apps/cli/src/selftest.ts`); the enrolment service has **zero runtime callers**; and no store
+is durable — no source file imports `node:sqlite`, although ADR-0013 promised an adapter
+behind a repository interface. ADR-0017 now records the truth, the README states the slice
+boundary, and `render.yaml` no longer claims a SQLite-backed store.
+
+**Repairs in this round** are in the attempt log at A-35 … A-41. Two **new blocker gates**
+were added, each proven able to fail by negative fixtures: `pwa-light-default` and
+`adr-governance`. No gate was weakened; P0-2 and P1-4 were made *stronger* by replacing
+evidence that could not fail with gates that can.
+
+**Three suspicions were refuted** before they entered the register, and are therefore not
+findings: the suspected UTF-8 corruption in `package.json`/`index.html` (0 U+FFFD in tracked
+files), the suspected missing `PORT` handling in `eg serve` (it honours `process.env['PORT']`
+in hosted mode), and the suspected placeholder credential hashing (real scrypt, salted
+verifier, `timingSafeEqual`).
+
+**Still open.** Six blockers in `packages/onekey` — the egress allowlist has no production
+caller while the only real adapter ships raw grounded context to the provider; routing trusts
+client-declared `dataClass`/`safetyTier`; Tier 0's last resort serves an unrelated lesson
+while claiming it covers the topic; the hard cap does not bound real spend; the conformance
+suite destroys a live adapter's credential and then fails its own budget rule because of it;
+and no adapter is required to run that suite. All are closable in code. Four **owner
+decisions** are listed in `docs/AUDIT_ROUND3.md` §5.
+
+**The Santa round-3 verdict is still outstanding.** The rubric method is unchanged: two
+fresh, independent reviewers must both PASS. This audit does not substitute for it.

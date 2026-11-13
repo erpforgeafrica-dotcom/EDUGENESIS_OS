@@ -1,0 +1,1526 @@
+{
+  "generated_from": [
+    "F0",
+    "F1",
+    "F3",
+    "F5"
+  ],
+  "surfaces_loaded": 4,
+  "surfaces_missing": [
+    "F2",
+    "F4",
+    "F6",
+    "F7",
+    "F8"
+  ],
+  "raw_finding_count": 73,
+  "merged_finding_count": 73,
+  "counts": {
+    "blocker": 10,
+    "major": 31,
+    "minor": 32
+  },
+  "proven_count": 73,
+  "unverified_count": 0,
+  "owner_blocked_count": 0,
+  "findings": [
+    {
+      "surface": "F0",
+      "id": "F0-01",
+      "severity": "blocker",
+      "title": "There is no learner runtime: the shipped server exposes a health check and a settings API, and nothing else",
+      "file": "apps/cli/src/serve.ts",
+      "line": 217,
+      "intent": "09 §12.3 and the proposal sell a learner who asks a question and receives a lesson; the OneKey gateway, guardian, ledger, consent and enrolment are the mechanisms that produce it",
+      "reality": "The served API has exactly three routes: GET /api/health, /api/settings and /assets/edugenesis-tokens.css. A grep of apps/ shows @edugenesis/{accessibility,onekey,ledger,identity} is imported ONLY in apps/cli/src/selftest.ts. The learner-facing machinery is reachable from the library and the test suite, and from no runtime route.",
+      "evidence": "grep -n \"pathname ===|pathname.startsWith\" apps/cli/src/serve.ts -> 3 matches (/api/health:217, /api/settings:247, /assets/edugenesis-tokens.css:310); grep -rn \"@edugenesis/(onekey|ledger|identity|accessibility)\" apps/ -> 4 matches, all in apps/cli/src/selftest.ts",
+      "failure_mode": "Every learner-path guarantee in this build is a property of a library that no learner can reach. A reviewer or sponsor who reads the proposal and then runs the product finds a settings page.",
+      "fix": "Disclose the slice boundary in the README (done) and open a named Slice 1 item to wire the gateway to a route. Do not claim a learner runtime for Slice 0.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-01"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-03",
+      "severity": "blocker",
+      "title": "The enrolment service has zero runtime callers: the P1-1 path exists as a library and nowhere else",
+      "file": "packages/identity/src/enrolment.ts",
+      "line": 222,
+      "intent": "P1-1 (09 §12.3 exit criterion 1): 'A learner can enrol via passkey, or via provisional identity plus guardian consent token; the path taken is recorded in the audit log.'",
+      "reality": "createEnrolmentService is referenced only in packages/identity/src/enrolment.ts itself and in packages/identity/src/enrolment.test.ts. No CLI command, no HTTP route and no other package calls it. The implementation itself is sound (single-use token, claim matching against the issued token, expiry, salted credential, audit trail), but no learner can reach it.",
+      "evidence": "grep -rn 'createEnrolmentService|enrolWithGuardianConsent|issueGuardianConsentToken' -> 46 matches, every one inside packages/identity/src/enrolment.ts or its test file",
+      "failure_mode": "The criterion is satisfied at library level and not at system level. A learner cannot enrol because there is no enrolment route to call.",
+      "fix": "Disclosed in the README (done). The route is a Slice 1 item and is named as one.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-03"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-02",
+      "severity": "blocker",
+      "title": "P1-4 recorded met but the PWA renders the DARK theme by default; Accepted ADR-0011 is contradicted",
+      "file": "apps/cli/public/index.html",
+      "line": 2,
+      "intent": "09 12.3 exit criterion 5 / ADR-0011: 'The PWA renders the light theme by default with a verified contrast ledger'; 02_DESIGN_SYSTEM 3.4 Rule 1: light is the LEARNER DEFAULT.",
+      "reality": "The only served page (the PWA shell / Settings UI) has no data-theme attribute; the token stylesheet :root is the dark theme and the light values live under [data-theme=\"light\"], which nothing sets.",
+      "evidence": "index.html:2 '<html lang=\"en\">' (no data-theme); assets/edugenesis-tokens.css:21 '--eg-canvas: #070C1C' (dark) and :209 '[data-theme=\"light\"]' -> '--eg-canvas: var(--eg-canvas-light)'; grep for data-theme across apps/cli/public/* and apps/cli/src/*.ts returns only the tokens file; manifest theme_color #FAF8F2 is a declared colour, not the rendered theme.",
+      "failure_mode": "A learner on a low-end LCD in daylight gets the dark admin/sponsor theme the design system reserves for non-learner surfaces; the recorded P1-4 'met' is false and the Accepted ADR-0011 is violated in the shipped UI.",
+      "fix": "Put data-theme=\"light\" on the <html> element (or invert the tokens so :root is light and [data-theme=\"dark\"] overrides), and add a gate/test asserting the default render theme and that the light token set is the one applied.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-02"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-01",
+      "severity": "blocker",
+      "title": "Attestation certifies a red report: artifacts/attestation.json says PASS 14/14 while artifacts/verify-report.json on disk says FAIL 12/14",
+      "file": "artifacts/attestation.json",
+      "line": 4,
+      "intent": "README 'The evidence chain': the attestation 'Refuses to exist unless the report is green and every listed file still matches its recorded digest. A red or tampered tree is refused with exit 1, and any stale attestation from an earlier run is deleted.'",
+      "reality": "The shipped attestation is green and the shipped report is red, and they bind different bytes.",
+      "evidence": "attestation.json: result=PASS, counts {gates:14,passed:14,blockersFailed:0}, subjects[verify-report.json].sha256=c503c83e08f28e9b49f83728e7faaa7fe4f9da710ad49a424d427ed8251b0262 (3270 bytes). verify-report.json: result=FAIL, counts {gates:14,passed:12,blockersFailed:2} with no-pii-in-source FAIL ('1 personal-data literal(s) hardcoded in source') and path-portability-runtime FAIL. checksums.sha256 lists artifacts/verify-report.json = c503c83e... but Get-FileHash of the file on disk = 1ae16d3ca9475126bc7fad28e281383dead0be5f0dbbb9a6623c50c8e5d630ef (3278 bytes).",
+      "failure_mode": "Every green claim in the tree is unfalsifiable: a reviewer opening artifacts/ sees a PASS attestation and a FAIL report, and the attestation digest does not match the report it claims to bind. SESSION_PROCESS_LOG 11.1 repeats the green claim (14/14, 0 blockers) that the tree's own report contradicts.",
+      "fix": "Re-run the full chain (build -> test:only -> verify-all -> secrets:scan -> sbom -> checksums -> attest) on a clean tree and commit the resulting artifacts; make 'npm run verify' fail when attest is skipped; add a gate that re-hashes artifacts/verify-report.json and compares it to the attestation subject digest.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-01"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-03",
+      "severity": "blocker",
+      "title": "The learner path throws an UNTYPED Error when a provider reports zero usage (raw Error escapes complete())",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 295,
+      "intent": "The gateway's error path is typed: it distinguishes BudgetExceededError (not a health failure) from a provider failure, and only rethrows genuine bugs. No untyped error may reach a learner.",
+      "reality": "requiredUnits(budget, 0, 0) returns 0 for the 'token' unit, then ctx.budget.consume(0) throws a plain Error('Budget consumption for pool \"pool\" must be a positive number of units.') (budget.ts:78-80). The gateway catch at 302-313 only handles BudgetExceededError and does `throw err` for everything else, so the plain Error propagates out of complete() to the caller with a stack trace.",
+      "evidence": "PROBE 4 (executed) with the Qwen adapter returning HTTP 200 {error:{message:'model is overloaded'}} -> uncaught 'Error: Budget consumption for pool \"pool\" must be a positive number of units.' at budget.ts:79, thrown through gateway.ts:297 -> process exit code 1. The Qwen adapter returns usage {0,0} whenever the provider omits `usage` (qwen-adapter.ts:259-262).",
+      "failure_mode": "Any provider response without a usage block (or with zero tokens) kills the learner request with a non-contract Error carrying a stack trace, instead of falling back to the next tier. The whole fallback ladder is bypassed by a single malformed-but-200 response.",
+      "fix": "Charge Math.max(1, units) for token pools, or skip the charge when units===0 and record a zero-cost entry; make the gateway treat a zero-unit result as a provider failure (recordFailure + continue) rather than rethrowing; assert non-finite/zero usage in the adapter.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-03"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-05",
+      "severity": "blocker",
+      "title": "The policy engine trusts the CLIENT-declared data class and safety tier and ignores the server-side TaskPolicy's",
+      "file": "packages/onekey/src/policy.ts",
+      "line": 133,
+      "intent": "Doc 09 line 925: 'No implicit trust | Every request re-enters the OneKey policy engine; the client is never trusted to state risk tier, data class or model'. TaskPolicy carries dataClass and safetyTier precisely so the server states them.",
+      "reality": "The engine reads req.dataClass (line 133) and req.safetyTier (line 144) - both client-supplied fields of CompletionRequest - and never reads policy.dataClass or policy.safetyTier at all. Those two TaskPolicy fields are dead inputs across the whole package.",
+      "evidence": "PROBE 14 (executed): server policy {dataClass:'secret', safetyTier:'critical'}, client request {dataClass:'public', safetyTier:'low'} -> decision selects the hosted provider whose own clearance is maxDataClass 'learner_scoped' and clearedSafetyTiers ['low','medium']; decision.reason reads \"hard rules passed: data class 'public' within provider max 'learner_scoped', safety tier 'low' cleared\". rg: policy.ts contains no reference to policy.dataClass or policy.safetyTier.",
+      "failure_mode": "A client that declares dataClass 'public' for a request carrying a child's sensitive record is routed to a hosted provider, and the egress rule that would refuse 'sensitive'/'secret' is never invoked (F3-01). The server-side safety tier is advisory only.",
+      "fix": "Route on the stricter of policy.dataClass/safetyTier and req.dataClass/safetyTier, or make CompletionRequest carry no classification at all and take it from the server-side policy; add a test asserting a client cannot downgrade the declared class.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-05"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-01",
+      "severity": "blocker",
+      "title": "The egress allowlist is dead code: the only real provider adapter never calls it and ships raw grounded context to the third party",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 193,
+      "intent": "egress.ts declares itself 'the one place that decides what may leave the process', deny-by-default by field NAME, and states that grounded context 'needs its own projector before it may be sent; until then it is refused'. Doc 09 line 130 and Doc 10 line 182 promise 'no directly identifying learner data crosses the provider boundary' and 'refuses to send restricted data to unapproved providers'.",
+      "reality": "projectEgressPayload / tryProjectEgressPayload have ZERO production callers. rg across the whole snapshot matches only egress.ts and egress.test.ts. The Qwen adapter serialises req.prompt, req.system and every req.context[] entry (source.locator + text) straight into the HTTP body, with its own implicit allowlist that INCLUDES `context` - the exact field egress.ts refuses.",
+      "evidence": "PROBE 6 (executed, node --experimental-transform-types against a copy of the snapshot): outbound messages = [{role:'system',content:'You are a tutor'},{role:'user',content:'[file:///private/learner-record.pdf] SAFEGUARDING NOTE: learner has a disability accommodation flag']},{role:'user',content:'Explain photosynthesis'}]. Outbound body keys = model,messages,max_tokens,temperature,stream. rg evidence: egress.ts:112 (definition), egress.ts:184 (internal use), egress.test.ts:13,14,31,46,62,77,89,98,108,114,123,128,134 - and nowhere else in packages/ or apps/.",
+      "failure_mode": "A safeguarding note, a disability accommodation flag, an internal file:// locator and the learner prompt are sent to a third-party model provider with no allowlist, no redaction and no data-class check on the payload. The module whose doc claims to prevent exactly this is never invoked, so the control is documentation, not code.",
+      "fix": "Call projectEgressPayload inside the adapter (or in the gateway immediately before entry.adapter.complete) and refuse on EgressRejectedError; add a registry-guard rule that asserts every non-test module in the package imports the egress projector; give `context` its own projector as egress.ts already demands.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-01"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-02",
+      "severity": "blocker",
+      "title": "A live provider returning HTTP 200 with no/empty content delivers an EMPTY TEXT to the learner",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 258,
+      "intent": "A learner-facing completion must be a lesson. The conformance suite even defines the rule 'complete-returns-text-and-usage: complete() returns non-empty text and usage'.",
+      "reality": "isQwenChatResponse only rejects a body whose `choices` is present and not an array; a body of {error:{...}} or {choices:[]} passes. content then becomes '' via `?? ''`. The gateway never checks that the delivered text is non-empty (gateway.ts:470-497 copies result.text straight through) and the empty result is returned as a normal tier-1 completion.",
+      "evidence": "PROBE 5 (executed): stub returns {choices:[{message:{content:''}}],usage:{prompt_tokens:10,completion_tokens:0}} -> 'PROBE5 delivered text : \"\" | length 0', 'PROBE5 meta.tier/provider : 1 qwen'. PROBE 18 (executed): stub returns {choices:[],usage:{prompt_tokens:5,completion_tokens:0}} -> 'PROBE18 delivered text : \"\" | length 0'.",
+      "failure_mode": "A throttled/quota-shaped provider body or any empty completion reaches the learner as a blank lesson with meta.tier=1 and no error, so the UI shows nothing and the learner is silently given no instruction.",
+      "fix": "Treat a missing/empty choices[0].message.content as ProviderUnavailableError in the adapter, and add a non-empty assertion in the gateway before deliver(); make 'complete-returns-text-and-usage' a mandatory gateway-level rule, not only a conformance-suite rule.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-02"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-04",
+      "severity": "blocker",
+      "title": "Tier 0 last-resort serves an UNRELATED lesson while asserting it 'covers this topic'",
+      "file": "packages/onekey/src/providers/tier-zero.ts",
+      "line": 228,
+      "intent": "relevanceScore's doc says 'serving an unrelated lesson is not a fallback, it is a wrong answer'. TIER_ZERO_FALLBACK_NOTICE says 'Here is a lesson from your offline library that covers this topic.'",
+      "reality": "bestScore starts at -1 and the loop keeps candidates[0] when every score is 0, so a ZERO-relevance match is still served. The score is computed only over `entry.id` and `entry.title` - never the body - so even a body-level topical match scores 0. The notice is prepended unconditionally, asserting topical coverage that was never verified.",
+      "evidence": "PROBE 1 (executed): prompt 'Explain the water cycle' -> 'PROBE1 no-overlap lesson id : algebra/linear-eq'; text = 'Here is a lesson from your offline library that covers this topic.\\n\\nA linear equation has the form ax + b = c. Subtract ...'. The three DEFAULT_ENTRIES are algebra/linear-eq, science/photosynthesis, math/fractions-basics (tier-zero.ts:60-91).",
+      "failure_mode": "A learner asking about the water cycle is handed a linear-equation lesson prefixed with a false statement that it covers their topic. The gateway marks it tier 0 / servedOffline and the drill calls it a successful rescue, so the wrong answer is indistinguishable from a right one in every audit record.",
+      "fix": "Refuse the fallback below a relevance threshold (return null -> Tier 4 deferral) instead of serving an arbitrary entry; score against the body as well; never emit the 'covers this topic' wording unless the score cleared the threshold.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-04"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-02",
+      "severity": "blocker",
+      "title": "ADR-0013 records a node:sqlite repository interface and adapter that exist nowhere in the code",
+      "file": "docs/adr/ADR-0013-typescript-on-node-with-node-sqlite.md",
+      "line": 36,
+      "intent": "ADR-0013 (Accepted): 'Persistence goes through a repository interface. The interface is defined in packages/contracts; the node:sqlite implementation is an adapter behind it.' The ledger README claimed the package depends on 'node:crypto and node:sqlite only'.",
+      "reality": "No source file imports node:sqlite — the token appears only in ADR prose, a README and the process log. packages/ledger/src/private-store.ts states 'The store is in-memory by design.' packages/contracts contains no repository interface. Every store in the build is an in-memory structure.",
+      "evidence": "grep -rn 'node:sqlite' over the repo -> 12 matches, all in markdown; zero in any .ts/.mjs source file. packages/ledger/src/private-store.ts:27 'The store is in-memory by design.'",
+      "failure_mode": "The ADR set and the code disagree, which is rubric C13's explicit FAIL signal, and the README claims a dependency the build does not have. A reader who trusts the ADR believes the platform has ACID persistence; it has none.",
+      "fix": "DONE: ADR-0017 supersedes ADR-0013 and records the truth (in-memory behind a repository seam, adapter deferred to Slice 1); the ledger README now states that node:sqlite is not used; render.yaml no longer claims a SQLite-backed store.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-02"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-04",
+      "severity": "major",
+      "title": "The consent and enrolment audit trails are in-memory Maps: an audit log that dies with the process",
+      "file": "packages/identity/src/consent.ts",
+      "line": 165,
+      "intent": "The enrolment criterion requires the path taken to be 'recorded in the audit log'; the consent service records grants, withdrawals and refusals for the same product.",
+      "reality": "auditByLearner is a Map<string, ConsentAuditEvent[]> inside createConsentService, and the enrolment audit is a plain array inside createEnrolmentService. Neither is persisted, neither is hash-chained, and neither survives a restart.",
+      "evidence": "packages/identity/src/consent.ts:165 'const auditByLearner = new Map<string, ConsentAuditEvent[]>();'; packages/identity/src/enrolment.ts:226 'const audit: EnrolmentAuditEvent[] = [];'",
+      "failure_mode": "For a product sold on child safeguarding and sponsor accountability, the audit trail is a process-scoped array. Any claim of auditable enrolment or consent history is unsupported.",
+      "fix": "Recorded in ADR-0017 as a named consequence. A durable audit log is a Slice 1 item and must be backed by the repository seam.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-04"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-05",
+      "severity": "major",
+      "title": "issueGuardianConsentToken hands a fresh guardian credential to any caller and performs no authorisation check",
+      "file": "packages/identity/src/enrolment.ts",
+      "line": 258,
+      "intent": "A guardian's authority is proven by the credential secret; the function is the seam where a consent token is minted for a learner.",
+      "reality": "The function looks the guardian up, calls identity.issueCredential(guardianId) and RETURNS the new credential secret to its caller. It checks that the guardian exists, never that the caller is entitled to act for that guardian. Any code path that can call it receives a working guardian credential.",
+      "evidence": "packages/identity/src/enrolment.ts:269-283 — 'const credential = identity.issueCredential(input.guardianId);' then 'return { token, secret: credential.secret };'; the only guard is 'if (!guardian) throw new Error(...)'",
+      "failure_mode": "The minting step is the trust boundary for a minor's enrolment, and it is unguarded. A caller that reaches it can mint a token for any learner AND hold the guardian's credential.",
+      "fix": "Require an authorised actor (an operator or guardian session) to call issueGuardianConsentToken, and do not return the credential secret to the caller: the guardian should present their own secret to enrol.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-05"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-06",
+      "severity": "major",
+      "title": "Enrolment trusts a caller-supplied age band instead of the age-assurance service",
+      "file": "packages/identity/src/enrolment.ts",
+      "line": 361,
+      "intent": "packages/identity ships an age-assurance service; a learner under the age threshold is a protected subject.",
+      "reality": "input.ageBand is optional and is written straight onto the principal. The enrolment path never calls the age-assurance service, so a caller may declare an adult band for a minor, or omit the band entirely and enrol with no age classification at all.",
+      "evidence": "packages/identity/src/enrolment.ts:161 'readonly ageBand?: Principal[\"ageBand\"]' and :361 '...(input.ageBand !== undefined ? { ageBand: input.ageBand } : {})'",
+      "failure_mode": "The protected-status classification of a learner is asserted by the caller rather than derived, so the age protections downstream rest on an unverified value.",
+      "fix": "Enrolment must resolve the age band through the age-assurance service, or refuse enrolment when no corroborated age band is available.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-06"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-08",
+      "severity": "major",
+      "title": "P0-4's evidence points at a file with no tokens and no contrast ledger artefact is attached",
+      "file": "docs/exit-criteria.json",
+      "line": 46,
+      "intent": "09 12.2 exit criterion 4: 'The light theme token set is committed and its contrast ledger is attached (verifiable against Design System v1.0 3.4).'",
+      "reality": "The cited file is a consumer of the tokens, not the token set, and the contrast check prints to stdout without writing a ledger.",
+      "evidence": "exit-criteria.json P0-4 evidence = {file:'apps/cli/public/app.css', contains:['--eg-']} and {tool:'verify-contrast.mjs'}; apps/cli/public/app.css:1-5 says 'No raw hex appears here' and uses var(--eg-*) only; the token set is assets/edugenesis-tokens.css; tools/verify-contrast.mjs writes no file, and verify-all.mjs runTool stores only the last meaningful line in artifacts/verify-report.json, so the 46-pair table is not an attached artefact.",
+      "failure_mode": "The Phase 0 criterion's proof is a string match on a file that is not the token set, and the 'attached ledger' does not exist as a reviewable artefact; a drift in the tokens would not fail the cited file check.",
+      "fix": "Cite assets/edugenesis-tokens.css as the token-set evidence and have verify-contrast.mjs write a contrast-ledger artefact (or embed the full table in verify-report.json).",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-08"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-07",
+      "severity": "major",
+      "title": "P5-4's cited evidence proves continued delivery but not the 'no learner-facing credit message' clause",
+      "file": "docs/exit-criteria.json",
+      "line": 142,
+      "intent": "09 12.7 exit criterion 4 / AC-35: 'Core learning is never denied on credit exhaustion, and no learner-facing message mentions credits running out.'",
+      "reality": "The named test asserts only the first clause; the wording clause is checked elsewhere and is not cited.",
+      "evidence": "exit-criteria.json P5-4 evidence = gateway.test.js minTests 10; packages/onekey/src/gateway.test.ts:116-139 ('with the budget at zero...') asserts result.text.length>0, meta.tier=0 and sourceLineage, never the delivered copy; the only wording checks are packages/onekey/src/failover.test.ts:42 (a drill assertion) and the failover gate's OPERATIONS_TERMS regex (failover-gate.ts:27), neither cited by P5-4.",
+      "failure_mode": "Half of AC-35 is unproven by the register's named check: a regression that starts telling learners 'credits exhausted' would leave P5-4 met.",
+      "fix": "Extend the credit-exhaustion test to assert the delivered text matches the approved wording and contains no operations term, and cite that assertion (or cite failover.test.js) in the register.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-07"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-09",
+      "severity": "major",
+      "title": "No adapter is required to run the conformance suite, and the one real adapter would fail it",
+      "file": "packages/onekey/src/conformance.ts",
+      "line": 95,
+      "intent": "The suite exists 'so every adapter - hosted or local - is run through the same assertions before it is allowed near a learner'.",
+      "reality": "runAdapterConformance is called only from conformance.test.ts, on a hand-written mock, a non-compliant mock and createLocalEchoProvider(). The Qwen adapter - the only adapter that touches a network - is never conformance-tested. If it were, rule 7 would FAIL: the adapter maps max_tokens but never clamps or verifies the response, and a stub reporting 24 completion tokens against a 4-token ceiling breaks the rule.",
+      "evidence": "rg -n 'runAdapterConformance' across the snapshot -> conformance.test.ts:115,126,137,143 only. qwen-adapter.test.ts never imports the suite. qwen-adapter.ts:204 sends max_tokens = Math.min(req.maxOutputTokens, 8192) and returns usage straight from the provider (lines 259-262) with no ceiling verification.",
+      "failure_mode": "The only network-facing provider is never held to the contract the suite defines, and the suite is not wired into registration, a CI gate or a deployment check, so 'allowed near a learner' is not enforced anywhere.",
+      "fix": "Call the suite from registry.register() (or a CI gate that runs it for every adapter in the repo) and fix the Qwen adapter's ceiling handling so it satisfies rule 7.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-09"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-08",
+      "severity": "major",
+      "title": "The conformance suite destroys a live adapter's credential and then fails its own budget rule because of it",
+      "file": "packages/onekey/src/conformance.ts",
+      "line": 226,
+      "intent": "'The suite runs entirely offline: it needs no key, no network and no real provider, so it can be executed against a mock adapter in CI.'",
+      "reality": "Rule 5 calls adapter.dispose(). For the Qwen adapter dispose() drops the credential closure binding (qwen-adapter.ts:292-295), so after the suite the adapter is permanently dead. Rule 6 then runs complete() with an empty pool, the adapter refuses because there is no key, and the rule FAILS. Rule 7 passes VACUOUSLY because its catch branch records passed=true for ANY thrown error. Rules 3, 6 and 7 each call complete(), so a live adapter is hit three times over the network with the real key.",
+      "evidence": "PROBE 8 (executed) against a live Qwen adapter with a stub fetch: 6 PASS + 'FAIL over-budget-refused :: the provider refused with an untyped error: Provider \"qwen\" unavailable: no API key is configured for this provider' and 'PASS max-output-tokens-respected :: the request was refused: Provider \"qwen\" unavailable: no API key is configured'. Then 'PROBE8 adapter still usable? NO -> ProviderUnavailableError | no API key is configured for this provider'.",
+      "failure_mode": "Running the compliance suite against a registered live provider silently disables that provider for the rest of the process lifetime (the key cannot be restored - it is captured in a closure), and reports a false PASS on the output-ceiling rule while failing the budget rule for the wrong reason.",
+      "fix": "Never call dispose() in the suite (or snapshot/restore adapter state); make rule 7 pass only on an observed clamp, never on an arbitrary throw; make the suite operate on a declared read-only interface.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-08"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-16",
+      "severity": "major",
+      "title": "No single request walks all five tiers; tiersExercised is a Set union that hides the double Tier 0 visit",
+      "file": "packages/onekey/src/failover.ts",
+      "line": 291,
+      "intent": "failover.ts: 'this module walks the FULL five-tier ladder against deliberately failing providers'; Doc 09 line 2489: 'All five tiers are exercised in a documented failover test, including the §6.6 procedure end to end (verifiable from the failover report)'.",
+      "reality": "The three scenarios use three different requests and three different policies. offline-rescue walks 0,1,2,3,0 and never reaches tier 4; human-deferral walks 0,1,2,3,0,4; exhausted skips tier 0 entirely ('0:skipped', because that gateway is built without a tierZero). tiersExercised is built from a Set, so the repeated tier 0 and the skipped tier 0 are invisible in the report.",
+      "evidence": "PROBE 12 (executed): 'offline-rescue -> rungs: T0:no-offline-content | T1:failed | T2:failed | T3:failed | T0:served | servedBy tier 0'; 'human-deferral -> rungs: T0:no-offline-content | T1:failed | T2:failed | T3:failed | T0:no-offline-content | T4:served'; 'exhausted -> rungs: T0:skipped | T1:failed | T2:failed | T3:failed | T4:deferred'; 'report.tiersExercised : [0,1,2,3,4]'. failover.ts:291-295 collapses with a Set.",
+      "failure_mode": "The sponsor-facing failover evidence proves only that three different requests each touched a subset of the ladder; it does not prove that one learner request walks 0->1->2->3->4, and the report cannot show the duplication that actually happens.",
+      "fix": "Report per-scenario rung sequences (not a Set union), assert a single scenario that walks all five rungs, and record the tier-0 double visit explicitly as part of the §6.6 3->0->4 step.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-16"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-07",
+      "severity": "major",
+      "title": "'Core learning is never denied on credit exhaustion' is caller-conditional, and the denial message states that credits ran out",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 214,
+      "intent": "Doc 09 line 2265 exit criterion: 'core learning is never denied on credit exhaustion'; line 1531: credit exhaustion 'may never ... produce a learner-facing message implying that credits ran out'; line 851: 'Tier 0 is not optional'.",
+      "reality": "tierZero is an OPTIONAL GatewayOptions field ('Omit to run without tier 0'). With it absent and any budget exhausted (or no eligible provider), complete() throws AllTiersExhaustedError whose message names the budget pool and the exhaustion. The guarantee is therefore not structural - it depends on a caller setting an option.",
+      "evidence": "PROBE 3 (executed, no tierZero, zero pool): 'PROBE3 THREW: AllTiersExhaustedError'; 'PROBE3 message: All fallback tiers exhausted: T0(no offline tier is configured) -> T4(every model tier failed; the request is deferred to human support)'. PROBE 9 (executed, budget too small for the answer): the message contains 'the budget was exhausted before the answer could be charged (8 units needed, 5 left)'. rg over apps/ shows the only consumer of @edugenesis/onekey is apps/cli/src/selftest.ts (a factory probe); no application wires a Tier 0 provider.",
+      "failure_mode": "With credit exhausted and no offline tier configured, the learner is denied and the failure text states that the budget was exhausted - precisely what the spec forbids. The protection is a wiring convention, not a property of the code.",
+      "fix": "Make a Tier 0 provider mandatory in createOneKeyGateway (or ship a default offline bundle provider), and map exhaustion to a typed learner-safe outcome whose message never mentions credit.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-07"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-13",
+      "severity": "major",
+      "title": "A 429 rate-limit trips the health circuit on a healthy provider",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 288,
+      "intent": "Doc 09 §6.6 procedure: the circuit breaker is opened on the AVAILABILITY branch (5xx or timeout). The QUOTA branch goes to CAP -> FB and the AUTH branch to ROT -> FB; neither opens the circuit. The gateway itself knows the distinction for budget: 'A budget refusal is NOT a health failure'.",
+      "reality": "Every non-BudgetExceededError from the adapter calls breaker.recordFailure, and the Qwen adapter maps 429 to ProviderUnavailableError (qwen-adapter.ts:242-249). So a throttle opens the circuit for 30s and the provider is removed from routing under exactly the load conditions where it is most needed.",
+      "evidence": "PROBE 15 (executed): three stubbed 429 responses -> 'PROBE15 circuit state after 3 rate-limit responses: open'. qwen-adapter.ts:242-249 maps 429 to ProviderUnavailableError; gateway.ts:288 then records a failure.",
+      "failure_mode": "During a sponsor quota window the primary provider is excluded for the whole cooldown, routing every learner to the secondary or offline tier - the outage the ladder exists to absorb is manufactured by the breaker itself.",
+      "fix": "Introduce a typed non-health error (e.g. QuotaExceededError) and exclude it from recordFailure, exactly as BudgetExceededError is excluded; keep the circuit for 5xx/timeout only.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-13"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-06",
+      "severity": "major",
+      "title": "The hard cap does not bound real provider spend: the provider is called and paid for, then the charge is refused and the answer discarded",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 297,
+      "intent": "budget.ts: 'the sponsor's pledge is a CEILING, not a suggestion ... A request that would exceed the cap is REFUSED, never silently over-spent'. Doc 09 line 2265 requires hard_cap_amount with overage_enabled = FALSE.",
+      "reality": "The gateway checks remaining()>0 BEFORE the call, but the real cost (requiredUnits on the reported usage) is only known AFTER. When the ledger refuses the charge the already-produced answer is thrown away and the request falls to the next tier - the provider's tokens are spent and are never recorded. The Qwen adapter has the same ordering: its budget check (qwen-adapter.ts:266) happens after the HTTP call. Separately, createBudgetLedger keeps `consumed` in a closure (budget.ts:57), so a process restart resets consumption to 0.",
+      "evidence": "PROBE 9 (executed): pool cap 5 tokens, provider reports 4 in + 4 out -> 'PROBE9 provider called : 1 time(s)', 'PROBE9 ledger consumed : 0 of 5', and the request ended in AllTiersExhaustedError ('the budget was exhausted before the answer could be charged (8 units needed, 5 left)').",
+      "failure_mode": "Sponsor credit burn is unbounded and invisible: the ledger under-reports real consumption, the learner is denied a lesson that was already paid for, and a restart or a second replica resets the cap entirely.",
+      "fix": "Pre-authorise against a conservative estimate (maxOutputTokens + prompt estimate) before the call, reconcile after, and persist the ledger outside the process; make the cap durable and shared across replicas.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-06"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-20",
+      "severity": "major",
+      "title": "The audit trail records 'the request is deferred to human support' even when no Tier 4 handler exists",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 392,
+      "intent": "The attempt trail is the audit evidence for the sponsor; it must describe what actually happened.",
+      "reality": "After the loop, the gateway unconditionally records tier 4 / 'deferred' with the reason 'every model tier failed; the request is deferred to human support' - then throws AllTiersExhaustedError. When no tierFour handler is configured (the default) no human is ever involved. When a handler IS configured but returns null, the same false sentence is recorded.",
+      "evidence": "PROBE 3 (executed, no tierFour configured): the thrown error's attempts contain {tier:4, providerId:'human-support', reason:'every model tier failed; the request is deferred to human support'}. PROBE 13 (executed, same). gateway.ts:373-391 only records a real tier-4 'served' when a handler returns a result.",
+      "failure_mode": "The audit trail asserts that a human was asked for help when the learner was simply denied; incident review and the sponsor drill both read this trail and would conclude a human fallback exists.",
+      "fix": "Record the tier-4 outcome only when a handler exists; otherwise record 'no human-support tier is configured'.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-20"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-15",
+      "severity": "major",
+      "title": "The failure the learner path throws carries the raw provider error (HTTP status, provider id, 'credential')",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 393,
+      "intent": "Doc 09 §6.6 step 1: 'Classify the error and never surface it raw to the learner'. Doc 09 line 640 and the drill's own assertion (failover.test.ts:42) treat provider vocabulary as an operations concern.",
+      "reality": "AllTiersExhaustedError's message concatenates every attempt reason (contracts/src/index.ts:723). Those reasons contain 'the provider failed: Provider \"qwen\" unavailable: the provider rejected the credential (HTTP 401): ...' and 'budget pool ... has no remaining units'. The gateway has no learner-safe projection of its own failures.",
+      "evidence": "PROBE 13 (executed): error message = 'All fallback tiers exhausted: T0(no offline tier is configured) -> T1(the provider failed: Provider \"qwen\" unavailable: the provider rejected the credential (HTTP 401): invalid api key [redacted]) -> T4(...)'. The credential VALUE is masked by redactSecret, but the status code, the provider name and the word 'credential' are not.",
+      "failure_mode": "Any caller that surfaces err.message to a learner (a chat UI, a toast, an API error body) shows operations vocabulary: provider names, HTTP 401, budget pool ids. The package supplies no neutral learner-safe error type to use instead.",
+      "fix": "Add a typed learner-facing outcome (e.g. LearningUnavailableError with neutral text) alongside the audit-grade AllTiersExhaustedError, and keep the raw chain in the audit trail only.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-15"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-11",
+      "severity": "major",
+      "title": "The kill switch is per-process and in-memory: a kill issued on one replica does not stop traffic on another",
+      "file": "packages/onekey/src/kill-switch.ts",
+      "line": 29,
+      "intent": "kill-switch.ts: 'It takes effect immediately and outranks every routing preference.' Doc 10 line 182 lists 'emergency disablement' as a model-sovereignty capability; Doc 10 line 437 makes 'kill switch and emergency provider disablement tested' a Stage 5 exit requirement.",
+      "reality": "The killed set is a Map inside the closure of one createKillSwitch() call, i.e. per gateway instance, per process, lost on restart. The circuit breaker is the same shape. Nothing persists or broadcasts the state, and a kill does not abort an in-flight call.",
+      "evidence": "PROBE 16 (executed): two gateways, gA.killSwitch('qwen','incident') -> 'PROBE16 A routes to: tier-zero | B routes to: qwen <- the kill did not cross instances'. kill-switch.ts:31 `const killed = new Map<string, string>()`; circuit-breaker.ts:57 `const entries = new Map<string, CircuitEntry>()`.",
+      "failure_mode": "In the containerised/multi-replica deployment the spec describes, a safety-incident kill stops traffic on one replica only; the provider keeps serving learners - with a safeguarding or data-residency breach - on the others. The kill-switch tests only exercise the local object, never a deployment.",
+      "fix": "Back the kill switch and breaker with a shared store (the platform ledger/config service) and poll/subscribe; prove it with a two-instance test.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-11"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-19",
+      "severity": "major",
+      "title": "The routing decision asserts servedOffline/tier-zero even when no Tier 0 provider exists, so the decision can promise a delivery the gateway refuses",
+      "file": "packages/onekey/src/policy.ts",
+      "line": 231,
+      "intent": "RoutingDecision is the contract-level promise of what will happen ('providerId, modelId, tier, servedOffline').",
+      "reality": "createPolicyEngine receives no Tier 0 provider. When nothing is eligible it hardcodes providerId='tier-zero', tier=0, servedOffline=true and a reason stating 'the deterministic offline tier 0 is selected so the learner is never blocked'. The gateway, which owns the real Tier 0 wiring, may then throw AllTiersExhaustedError.",
+      "evidence": "PROBE 7 (executed): decision = {providerId:'tier-zero', tier:0, servedOffline:true} for a request with no eligible provider; PROBE 3 (executed) shows complete() then throwing AllTiersExhaustedError on the same gateway shape. policy.ts:290 states the promise in the reason string itself.",
+      "failure_mode": "Any consumer of route() alone (a dashboard, an SLO, a capacity planner, a UI that shows 'offline') is told the learner will be served when the gateway will fail the request.",
+      "fix": "Inject the Tier 0 capability (or a boolean 'offlineAvailable') into the policy engine and report servedOffline only when it is true; otherwise report the honest 'no eligible provider' decision.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-19"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-12",
+      "severity": "major",
+      "title": "The provider base URL is unvalidated: any scheme or host, and redirects are followed",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 134,
+      "intent": "Doc 10 line 182: OneKey 'uses allowlisted models and endpoints'. egress.ts is the declared outbound boundary.",
+      "reality": "`const baseUrl = (opts.baseUrl ?? QWEN_BASE_URL).replace(/\\/+$/, '')` - no scheme check, no host allowlist, no port check. The Authorization: Bearer <key> header is attached to whatever URL results. platformFetch (lines 115-129) does not set redirect:'manual', so the platform fetch follows redirects by default; DNS rebinding is not considered either.",
+      "evidence": "PROBE 17 (executed): baseUrl 'http://169.254.169.254/latest/meta-data' -> 'PROBE17 URL contacted : http://169.254.169.254/latest/meta-data/chat/completions'; baseUrl 'file:///etc/passwd' -> 'PROBE17 non-http scheme : file:///etc/passwd/chat/completions'. No URL validation exists anywhere in the package (rg over egress.ts shows field-name allowlisting only).",
+      "failure_mode": "A mis-set or tampered baseUrl in settings turns every learner request into an authenticated SSRF probe against internal services or the cloud metadata endpoint, carrying the learner prompt and the provider credential.",
+      "fix": "Validate the base URL against an https-only endpoint allowlist (exact host + path prefix), reject other schemes, set redirect:'manual' and re-validate the Location target, and resolve-then-pin the IP.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-12"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-17",
+      "severity": "major",
+      "title": "The Tier 0 learner message does not satisfy §6.6 step 6 and frames Tier 0 as a degraded fallback",
+      "file": "packages/onekey/src/providers/tier-zero.ts",
+      "line": 58,
+      "intent": "Doc 09 §6.6 step 6: 'If Tier 0 serves the learner, the learner-facing message states that core learning continues and that sponsors are being notified - never that credits ran out or that the provider failed'. Doc 09 line 851: 'Tier 0 is not optional and not a degraded experience'.",
+      "reality": "The only learner-facing Tier 0 text is 'Here is a lesson from your offline library that covers this topic.' It does not say learning continues, does not mention sponsor notification, and frames the answer as material pulled from a fallback library.",
+      "evidence": "tier-zero.ts:58 (constant) and tier-zero.ts:242 (prepended to every fallback lesson). failover.test.ts:33-44 asserts only that the notice starts the text and that the text contains no provider/credit vocabulary - the spec's required content is not asserted anywhere.",
+      "failure_mode": "The learner is told they are being served from an 'offline library' rather than that core learning continues, which is exactly the degraded framing the spec forbids, and the sponsor-notification half of the requirement is simply absent.",
+      "fix": "Implement the §6.6 step-6 wording and assert it in the drill, including the 'core learning continues' and sponsor-notification clauses.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-17"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-03",
+      "severity": "major",
+      "title": "Chain integrity is not enforced on read/write; tampering only detected when caller explicitly verifies",
+      "file": "packages/ledger/src/ledger-store.ts",
+      "line": 256,
+      "intent": "A tamper-evident public ledger should make corruption/tampering visible at trust boundaries (on read/export/use), not only when an optional verification method is called.",
+      "reality": "`append` never verifies existing chain state before linking (221-254). `all()` returns live entries without verification (256-269). `exportPublic()` and `merkleRoot()` compute/return data without calling `verify()` (310-345). `verify()`/`assertChainIntact()` are opt-in utilities.",
+      "evidence": "ledger-store.ts:256-269 `all()` returns `entries` directly; 310-319 `exportPublic()` maps without integrity check; 321-345 `merkleRoot()` builds over stored hashes without check; sponsor-report.ts:255,266,267 consumes `ledger.verify()` and `ledger.merkleRoot()` but other consumers may not. No write-time revalidation.",
+      "failure_mode": "Consumers that trust `all()`, `exportPublic()` payloads, or derived artifacts without explicit verification can act on a tampered/broken chain; a mid-life in-memory mutation (or corrupted future persistence) remains silently served until someone calls `verify()`.",
+      "fix": "Verify chain (or at least tail linkage invariants) on load/open and before high-trust exports/reports; consider having `exportPublic`/report builders assert integrity or return verification status alongside data and require callers to handle failure.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-03"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-06",
+      "severity": "major",
+      "title": "Sponsor report silently defaults missing/mismatched producer keys to zero/false, hiding contract drift",
+      "file": "packages/ledger/src/sponsor-report.ts",
+      "line": 209,
+      "intent": "Cross-package reporting conventions must fail loudly or surface evidence gaps when producers use different key names; silent zeros can fabricate apparently valid metrics.",
+      "reality": "`buildSponsorReport` reads operational fields with permissive defaults: `units ?? 0`, `requested_units ?? units`, `fallback_tier ?? 0`, `served_offline === true` only, missing cost/latency samples omitted, `credit_received` units default 0 (209-229). If a producer uses alternate keys, the report computes from zeros/omissions without recording a per-entry schema violation.",
+      "evidence": "sponsor-report.ts:209-229; README lists expected keys (credit_consumed: units/requested_units/cost_cents/latency_ms/fallback_tier/served_offline). No validation/error/exclusion entry is emitted for unknown key shapes on consumption/receipt records.",
+      "failure_mode": "A producer key rename or mismatch yields underreported usage/cost/latency/credits and distorted availability/fallback rates while `privacy.piiScan`/ledger chain may still look healthy, misleading sponsors and operators.",
+      "fix": "Validate required operational keys per entry type, record explicit exclusions/anomalies when required metrics are absent or mistyped, and surface them in the report (or fail hard in strict mode) instead of defaulting to zero.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-06"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-10",
+      "severity": "major",
+      "title": "meta.policyReason is not redacted: a raw key in a kill reason reaches the delivered result",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 508,
+      "intent": "redact.ts: 'Everything that is written into a reason string goes through here first' and 'The package never logs a credential, and never writes one to disk'.",
+      "reality": "Attempts are redacted (gateway.ts:202 redactSecret(reason)) but meta.policyReason is assigned decision.reason verbatim, and decision.reason embeds every PolicyRejection.detail - including the free-text kill reason (policy.ts:296-299) - unredacted.",
+      "evidence": "PROBE 10 (executed): killSwitch('p1','credential sk-LIVESECRET-99887766 leaked in the incident report') -> 'PROBE10 policyReason contains raw key? true', while 'PROBE10 attempts[].reason (redacted)' shows the attempts path masking properly.",
+      "failure_mode": "A credential pasted into an incident reason is returned to the caller inside the successful result's meta and lands in any audit log or analytics event that records meta.",
+      "fix": "Run redactSecret over decision.reason before assigning meta.policyReason (and over every PolicyRejection.detail at construction).",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-10"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-14",
+      "severity": "major",
+      "title": "§6.6 step 2 (revoke/rotate the credential on 401/403, never retry it) is not implemented",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 236,
+      "intent": "Doc 09 §6.6 step 2: 'On 401/403: revoke the adapter credential immediately; rotate the key in the vault; do not retry the same credential ... Immediate'.",
+      "reality": "The adapter maps 401/403 to ProviderUnavailableError carrying the status text. Nothing revokes the key, nothing disables the adapter, nothing records an incident, and the key stays in the closure. After the 30s cooldown the half-open probe re-uses the same rejected credential.",
+      "evidence": "qwen-adapter.ts:236-241 (the whole 401/403 branch is a throw). gateway.ts:288-290 records a failure and continues to the next tier; the adapter keeps its apiKey (qwen-adapter.ts:142 - only dispose() clears it). PROBE 13 (executed) shows the 401 surfacing as 'the provider rejected the credential (HTTP 401): invalid api key [redacted]' with the key still configured.",
+      "failure_mode": "A leaked or expired credential stays live and is retried indefinitely (once per 30s cooldown, on every request that reaches the provider), instead of being revoked on first use.",
+      "fix": "On 401/403: clear the adapter's credential, mark the registry entry disabled, emit an incident event for the Security Officer, and refuse further calls until the key is rotated.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-14"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-05",
+      "severity": "major",
+      "title": "Negative monetary values can be appended for money-key fields; append path does not enforce non-negative amounts",
+      "file": "packages/ledger/src/ledger-store.ts",
+      "line": 163,
+      "intent": "Ledger monetary amounts must be valid integer minor units; negative or absurd amounts should not enter the public record as money.",
+      "reality": "`canonicalisePayload` validates money-key fields (`MONEY_KEY_PATTERN`) only for finiteness and integerness, not sign (178-183). `readAmountCents` rejects negatives (64-66) but is not used at append time. Therefore a payload like `{ amount_cents: -100 }` can be appended and stored; downstream engines/readers using `readAmountCents` will treat it as unusable/excluded rather than rejecting the record at source.",
+      "evidence": "ledger-store.ts:163-197 shows no `value < 0` check for money keys; money.ts:64-66 rejects negative in `readAmountCents`. Reinvestment/sponsor-report read money via `readAmountCents` (reinvestment.ts:142,155; sponsor-report.ts indirectly via money usage in some paths? report uses readInt for units/cost/latency and readAmountCents not directly except funding/allocation in engine), so negative money can pollute stored ledger state even if later excluded.",
+      "failure_mode": "Invalid negative amounts can be permanently recorded in the append-only chain, undermining reconciliation and enabling confusing/inconsistent reports (entry exists but may be excluded from computations).",
+      "fix": "In `canonicalisePayload`, reject negative values for money-key fields (and optionally enforce safe-integer bounds) at append time, mirroring `readAmountCents` invariants.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-05"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-07",
+      "severity": "major",
+      "title": "The committed attestation names a different commit than the tree it ships with",
+      "file": "artifacts/attestation.json",
+      "line": 31,
+      "intent": "The evidence chain binds the verification report, the SBOM and the checksum manifest to the tree that was verified, so a reader can trust that the shipped code passed the shipped gates.",
+      "reality": "The committed attestation records gitHead 7889041 while the commit that contains it is 99563c9. The attestation therefore describes an earlier tree than the one it ships in.",
+      "evidence": "artifacts/attestation.json:31 '\"gitHead\": \"7889041b3946f5c9f94083f9956fb0a0deafed9d\"'; git rev-parse HEAD -> 99563c933071313aa2b12e710b7c2f61d33bf682",
+      "failure_mode": "The evidence does not describe the code it is shipped with. A reader who verifies the attestation's subject digests still cannot conclude that THESE files passed the gates.",
+      "fix": "Regenerate the evidence chain after the code commit and commit the artifacts in a follow-up commit, and add a gate that checks the attestation's subject digests against the files on disk and its gitHead against HEAD or an ancestor of HEAD.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-07"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-06",
+      "severity": "major",
+      "title": "P0-5 recorded met, but there is no accessibility CI job and no red build",
+      "file": ".github/workflows/ci.yml",
+      "line": 24,
+      "intent": "09 12.2 exit criterion 5: 'An accessibility CI job exists that fails a build on an ARC-I1 violation (verifiable by an intentionally broken fixture and a red build).'",
+      "reality": "The evidence is the accessibility-contract gate; CI has no accessibility job and no red-build artefact.",
+      "evidence": "ci.yml jobs = typecheck, test, secrets, sbom, verify (lines 24-150); exit-criteria.json P0-5 evidence = {kind:gate, target:'accessibility-contract'}; the gate (packages/verification/src/gates/contract-gate.ts:160-242) asserts the validator blocks brokenEmission() but no CI run or fixture demonstrates a red build; packages/verification/src/gates/negative-fixtures.test.ts covers the failover assessor, provider gate, hex gate and contracts gate, not the accessibility-contract gate's failure.",
+      "failure_mode": "AC-23 ('accessibility runtime contract enforced in CI with a demonstrated failing fixture') is asserted, not demonstrated; the criterion's CI-job and red-build proof is absent, so a future CI change that stops running the gate would not be caught.",
+      "fix": "Add a dedicated accessibility CI job that runs the gate against a deliberately broken ARC-I1 fixture and asserts a non-zero exit, and record the red run URL/artefact against P0-5.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-06"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-04",
+      "severity": "major",
+      "title": "ADR owner column contradicts the ADR prose for 11 of 16 records; P0-2's check cannot detect it",
+      "file": "docs/adr/README.md",
+      "line": 30,
+      "intent": "09 12.2 exit criterion 2 / AC-21: 'Every ADR in 11 carries a named Owner and a recorded Status.'",
+      "reality": "The register's Owner column disagrees with the Owner named inside each ADR record; the P0-2 evidence only string-matches the README header.",
+      "evidence": "README rows vs ADR bodies: ADR-0002 proposal 'Founder & CEO (ErpForgeAfrica)' vs register 'Chief AI & Model Orchestrator'; ADR-0003 'Security Officer' vs 'Finance Lead'; ADR-0004 'Chief Systems Architect' vs 'Chief AI & Model Orchestrator'; ADR-0008 'Privacy Officer' vs 'Security Officer'; ADR-0009 'Founder & CEO (allocation)' vs 'Chief AI & Model Orchestrator'; ADR-0010 'Founder & CEO' vs 'Governance Lead'; ADR-0012 'Privacy Officer' vs 'Child Safeguarding Officer'; ADR-0013..0016 bodies all say 'Chief Systems Architect' vs register 'Chief AI & Model Orchestrator'/'Security Officer'/'OpenCode Lead'. exit-criteria.json P0-2 evidence contains only ['| ADR | Title | Status | Owner |','ADR-0016','Accepted'].",
+      "failure_mode": "Accountability is misattributed: the register that satisfies AC-21 names owners the ADRs themselves do not name, and the gate reports P0-2 met. A reviewer cannot tell who actually owns ADR-0009 (the Render allocation) or ADR-0002.",
+      "fix": "Reconcile the register Owner column against each ADR body (proposal 11 for 0001-0012, docs/adr/*.md for 0013-0016) and add a gate that parses both and fails on any mismatch.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-04"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-03",
+      "severity": "major",
+      "title": "P1-1's register evidence cites identity.test.js, which contains no enrolment test",
+      "file": "docs/exit-criteria.json",
+      "line": 75,
+      "intent": "09 12.3 exit criterion 1: 'A learner can enrol via passkey, or via provisional identity plus guardian consent token; the path taken is recorded in the audit log.'",
+      "reality": "The register's named proof is the wrong file; the enrolment proof lives in enrolment.test.ts.",
+      "evidence": "exit-criteria.json P1-1 evidence = {kind:test, target:'packages/identity/dist/identity.test.js', minTests:5}; packages/identity/src/identity.test.ts has 16 tests, all register/authenticate/credentials, zero enrolment cases; packages/identity/src/enrolment.test.ts has 13 tests including 'a learner enrols provisionally on a guardian consent token' and 'the path taken is recorded in the audit log'. The exit-criteria gate only counts passes (exit-criteria-gate.ts:281-297), so it cannot see the mismatch.",
+      "failure_mode": "The Phase 1 exit criterion's recorded proof is invalid: a regression that breaks enrolment would still leave the cited identity.test.js green, so the register would keep reporting P1-1 met.",
+      "fix": "Point P1-1's evidence at packages/identity/dist/enrolment.test.js; extend the gate to assert the cited test file mentions the criterion's key terms (enrol/audit/method).",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-03"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-09",
+      "severity": "major",
+      "title": "Phase 5 work items unimplemented: 13-item model card + lifecycle, signed Tier 0 bundle pipeline, adapter regions allowlist, Tier 2 adapter",
+      "file": "packages/onekey/src/registry.ts",
+      "line": 14,
+      "intent": "09 12.7 work items: 'Model registry and model cards with the thirteen mandatory items; lifecycle Select -> ... -> Retire'; 'Tier 0 signed offline bundle pipeline with version watermark, refresh check and deterministic conflict-safe sync'; 'Adapter regions allowlist and the deny-by-default provider egress payload allowlist'; 'at least one Tier 1 and one Tier 2 adapter implemented against it.'",
+      "reality": "The registry is an 8-field provider row with no model card, no lifecycle and no regions; Tier 0 is an in-memory static list with no signing/watermark/sync; the only adapters are local-echo (tier 1) and qwen-adapter (defaults tier 1), so no tier-2 adapter exists.",
+      "evidence": "registry.ts:14-38 ModelRegistryEntry = {providerId, modelId, tier, capabilities, status, locales, sponsorPreferred, adapter}; grep 'model card|modelCard|signed bundle|bundleSignature|regions' over packages/*/src returns nothing in onekey; qwen-adapter.ts:155 'tier: opts.tier ?? 1'; local-echo.ts:65 'tier: opts.tier ?? 1'; tier-zero.ts DEFAULT_ENTRIES is a hard-coded array.",
+      "failure_mode": "The sponsor-facing model-sovereignty and signed-offline-bundle promises are not implemented, and because they are work items rather than exit criteria the register stays green; a reviewer comparing 12.7 to the tree finds the gap only by reading the work items.",
+      "fix": "Implement each item, or record an explicit deferral per item (ADR or session-log row) and add a register row so the gap is visible rather than silent.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-09"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-18",
+      "severity": "major",
+      "title": "The nine-element compliance emission is computed and then thrown away",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 456,
+      "intent": "gateway.ts: 'The gateway is the boundary between a raw provider completion and a learner-facing emission, so this is where the contract shape is created'; the equivalence verifier 'must withhold the emission rather than let a false true reach a learner'.",
+      "reality": "buildEmission() computes the nine-element emission (content hash, equivalence verdict, uncertainty note, lineage, risk tier) and deliver() then returns only the text. The result object carries no emission and meta carries no equivalence flag, content hash or uncertainty note. The compliance artifact is unobservable and unauditable.",
+      "evidence": "PROBE 20 (executed): result keys = 'text, providerId, modelId, usage, latencyMs, sourceLineage, meta'; meta keys = 'requestId, policyVersion, tier, providerId, modelId, servedOffline, budgetPoolId, policyReason, attempts'; 'emission in result? false | equivalence_verified anywhere in the result? false'. gateway.ts:597 sets emission.equivalence_verified and the emission is then dropped.",
+      "failure_mode": "ARC-I1 (equivalence), ARC-I9 (content hash) and ARC-I4 (uncertainty note) can be neither audited nor replayed from anything the gateway returns, so the nine-element contract is unproven at the point of delivery.",
+      "fix": "Return the emission (or at least its content_hash, equivalence_verified and uncertainty_note) on the result and record it in the audit trail.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-18"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-01",
+      "severity": "major",
+      "title": "Ledger is in-memory only, not SQLite/append-only durable store as hunted; no WAL/journal, crash/truncation semantics absent",
+      "file": "packages/ledger/src/ledger-store.ts",
+      "line": 216,
+      "intent": "Hunt/intent expects a public ledger persisted via SQLite (node:sqlite) with append-only hash-chained durability, WAL/journal behavior, and crash-recovery/truncation considerations; corrections must survive process boundaries.",
+      "reality": "`createLedgerStore` stores entries in a process-local array (`const entries: LedgerEntry[] = []`, line 219) with no imports of `node:sqlite`, no file path, no WAL/journal mode, and no persistence. All chain state is lost on process exit; truncation/corruption of a DB file is not applicable because no DB exists.",
+      "evidence": "ledger-store.ts:1-395 contains no `sqlite` usage; `entries` is in-memory (219) and mutated only in-process (252). README states \"Zero runtime dependencies: `node:crypto` and `node:sqlite` only\" but implementation uses only crypto/hash helpers; no persistence API is exposed.",
+      "failure_mode": "Any claim of durable, auditable, append-only public record across restarts/crashes is untrue for this implementation; auditors cannot verify a chain after process loss, and there is no recoverable-on-disk ledger to truncate/corrupt-test.",
+      "fix": "Either implement the contract on `node:sqlite` with append-only schema (INSERT-only, no UPDATE/DELETE), monotonic seq UNIQUE constraint, WAL mode, transactional append, and verification-on-open, or explicitly narrow docs/intent to an in-memory reference implementation and remove durable-ledger claims.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-01"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-05",
+      "severity": "major",
+      "title": "ADR-0013 records a repository interface + node:sqlite adapter; neither exists in the code",
+      "file": "docs/adr/ADR-0013-typescript-on-node-with-node-sqlite.md",
+      "line": 36,
+      "intent": "ADR-0013 decision: 'Persistence goes through a repository interface. The interface is defined in packages/contracts; the node:sqlite implementation is an adapter behind it. No learner-path code may import the database driver directly.'",
+      "reality": "There is no repository interface in packages/contracts and no node:sqlite import anywhere; the stores are in-memory.",
+      "evidence": "grep node:sqlite/DatabaseSync over packages/*/src, apps/cli/src and tools: only a comment at packages/ledger/src/private-store.ts:27 'The store is in-memory by design. Node 24 ships node:sqlite...'; packages/contracts/src/index.ts exports contain no repository/store interface; render.yaml:11-14 repeats the claim ('Genesis Slice 0 persists through a repository interface backed by SQLite').",
+      "failure_mode": "The deployment artefact and the Accepted ADR misdescribe the runtime: an owner or reviewer would expect durable SQLite persistence and a PostgreSQL migration seam the tree does not contain.",
+      "fix": "Either implement the repository interface + node:sqlite adapter, or supersede ADR-0013 with a Slice 0 in-memory decision and correct render.yaml's persistence wording.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-05"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-02",
+      "severity": "major",
+      "title": "No concurrency serialization or seq uniqueness enforcement; concurrent appends can fork the hash chain",
+      "file": "packages/ledger/src/ledger-store.ts",
+      "line": 221,
+      "intent": "Append-only hash chain must remain linear: each entry must link to the single prior head; concurrent writers must be serialized or conflict-detected so two entries cannot share the same predecessor.",
+      "reality": "`append` reads `previous = entries[entries.length - 1]` (239), computes seq as `entries.length + 1` (238), computes hash, then pushes (252) with no lock, transaction, compare-and-set, or UNIQUE constraint. In-memory single-threaded usage avoids races, but there is no correctness mechanism for concurrent/async interleaving across store instances or future persistence layers.",
+      "evidence": "ledger-store.ts:238-252 perform non-atomic read-prev/compute/push; no mutex/transaction primitives. No verification on append that head is unchanged. Hunt item (c) requires serialized writes/transaction per append/UNIQUE on seq — none present.",
+      "failure_mode": "Two writers interleaved around the same head can both compute entries with identical `previousEntryHash`/seq assumptions in a shared persistent/concurrent context, forking or duplicating sequence logic; in durable DB form this would require explicit serialization/constraints to prevent.",
+      "fix": "For durable implementation use a transaction with serialized write (e.g. BEGIN IMMEDIATE), derive seq from MAX(seq)+1 inside tx, enforce UNIQUE(seq) and FK/consistency checks, and commit atomically. For in-memory, document single-writer assumption or add an async mutex if multi-producer use is possible.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-02"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-10",
+      "severity": "minor",
+      "title": "Token claim matching compares scopes by position, so a client that reorders scopes is refused",
+      "file": "packages/identity/src/enrolment.ts",
+      "line": 299,
+      "intent": "The presented token must match the issued token exactly, so a caller cannot widen or redirect it.",
+      "reality": "matchesIssuedToken compares scope arrays element by element by index. A client that sorts or normalises the scope list before presenting it is refused as a mismatch, even though the set is identical.",
+      "evidence": "packages/identity/src/enrolment.ts:298-299 'presented.scopes.length === issued.scopes.length && presented.scopes.every((scope, index) => scope === issued.scopes[index])'",
+      "failure_mode": "A harmless normalisation on the client side is reported as tampering. The refusal is safe, but the diagnostic is wrong and a legitimate client can be locked out.",
+      "fix": "Compare the scope SETS, not the sequences.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-10"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-13",
+      "severity": "minor",
+      "title": "The nine-element emission's concrete fields differ from Doc 7 5.1/5.2 (reading_level nesting, sensory_profile and interaction_mode shape)",
+      "file": "packages/contracts/src/index.ts",
+      "line": 116,
+      "intent": "07 5.1 element 7 puts reading level at language.reading_level; 5.2 reference emission has sensory_profile {visual,auditory,motion,stimulation} and interaction_mode {input,timing,extra_time_multiplier,target_size_min_px,break_reminder}, plus easy_read_text, dyslexia_friendly_text, low_stimulation_variant and sign_language_slot.",
+      "reality": "The frozen contract uses a top-level reading_level, boolean sensory flags (hasNonVisual/hasNonAudio/hasNonMotor/reducedMotionSafe/captioned/transcribed) and interaction_mode {input,output}; the easy-read/dyslexia/low-stimulation/sign-language fields do not exist.",
+      "evidence": "packages/contracts/src/index.ts:63-93 ReadingLevel/SensoryProfile/InteractionMode; :116-155 AccessibilityEmission; 07 5.1 table and 5.2 reference emission (lines 236-347). No ADR records this deviation.",
+      "failure_mode": "A downstream consumer built to Doc 7's reference shape will not read the code's emissions (reading_level at the wrong path, sensory variants absent); the 'nine elements' claim is true by name but the field contract diverges from the accessibility plan that specifies it.",
+      "fix": "Reconcile the frozen contract with Doc 7 5.1/5.2 (or record the deviation in an ADR with the reason), so the emission shape and the accessibility plan agree.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-13"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-14",
+      "severity": "minor",
+      "title": "P1-3's coverage gate enumerates six hard-coded gateway paths, so a new learner-facing path would not be counted",
+      "file": "tools/verify-coverage.mjs",
+      "line": 116,
+      "intent": "09 12.3 exit criterion 4 / AC-19: 'A learner-facing output that bypasses the Guardian is impossible: the coverage assertion reports 100 %.'",
+      "reality": "The gate's path list is a static array of six scenarios; it is not derived from the gateway's route surface, and the operator control is a single path.",
+      "evidence": "verify-coverage.mjs:116-176 learnerPaths = [tier-0-exact, tier-1-primary, tier-2-fallback, tier-3-local, tier-0-last-resort, tier-4-human-deferral]; the header (lines 6-19) claims 'every delivery path the gateway can produce'; a new emission path added outside this array would leave the 6/6 figure unchanged.",
+      "failure_mode": "Coverage can silently drop below 100 % for a path nobody added to the array; the '100 %' claim is only as complete as a hand-maintained list.",
+      "fix": "Derive the path list from the gateway's routing surface (or add a static check that every learnerFacing delivery calls ctx.guardian.intercept) and assert the list is non-empty and matches the gateway's exported scenarios.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-14"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-23",
+      "severity": "minor",
+      "title": "The ladder is six rungs, not five, and the package's own docstring says five",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 40,
+      "intent": "gateway.ts: 'The ladder, in order: Tier 0 ... Tier 1 ... Tier 2 ... Tier 3 ... Tier 4'. Doc 09 line 834: 'Fallback ladder | Tier 0 -> 1 -> 2 -> 3 -> 4'.",
+      "reality": "The code visits Tier 0 twice: once before the paid ladder (line 214) and once as the §6.6 3->0->4 last resort (line 337). The docstring lists five rungs and does not mention the second visit; failover.ts carries a duplicated doc block (lines 78-84 and 85-91) left over from a removed export.",
+      "evidence": "gateway.ts:214-235 and 337-366; gateway.test.ts:92-96 asserts the 5-rung sequence ['0:no-offline-content','1:failed','2:failed','3:failed','0:served']; failover.ts:78-91 contains the same 'A provider that always fails' comment twice.",
+      "failure_mode": "A reader (or a reviewer) counting rungs from the docstring will mis-model the ladder, and any tier-coverage assertion written against 'five rungs' is wrong.",
+      "fix": "Document the 0->1->2->3->0->4 sequence explicitly (and cite §6.6 step 5 for the second Tier 0) and delete the duplicated comment block.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-23"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-34",
+      "severity": "minor",
+      "title": "The package's public surface re-exports the concrete Qwen adapter, and the registry guard exempts exactly the file that does it",
+      "file": "packages/onekey/src/index.ts",
+      "line": 29,
+      "intent": "registry.ts: 'a provider change is a registry change - no learner-path code may import a provider SDK ... src/registry.test.ts enforces that mechanically.'",
+      "reality": "index.ts exports './providers/qwen-adapter.js', and registry.test.ts's isProductionLearnerPath() exempts index.ts and failover.ts from the guard. Any consumer of @edugenesis/onekey therefore receives the concrete Alibaba adapter as part of the package's public API.",
+      "evidence": "index.ts:29 `export * from './providers/qwen-adapter.js';`; registry.test.ts:68-80 (the exemption list: providers/, index.ts, failover.ts, testing/, *.test.ts).",
+      "failure_mode": "The 'provider change is a registry change' guarantee holds inside the package but the package's own public surface names a specific vendor, so swapping providers still touches an import somewhere.",
+      "fix": "Keep concrete adapters in a separate entry point (@edugenesis/onekey/providers) and keep the root export provider-agnostic.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-34"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-31",
+      "severity": "minor",
+      "title": "Locale coverage is only a tie-break, never an eligibility rule - and Tier 0 treats it as a hard filter",
+      "file": "packages/onekey/src/policy.ts",
+      "line": 200,
+      "intent": "localeCovered() is documented as 'Whether a provider covers a requested locale'; Doc 10 line 182 lists 'language quality' as a routing factor.",
+      "reality": "localeCovered() only sets a ranking flag. A provider declaring ['sw'] is still eligible for an 'en-KE' request and is selected when it is the only candidate - the reason string even reports 'capabilities do not include the requested locale' while still selecting it. The Tier 0 provider treats the same condition as a hard filter (tier-zero.ts:115-128).",
+      "evidence": "policy.ts:200 (localeMatch) and 205-206 (sort key only); no 'locale' member exists in the PolicyRejection.rule union (policy.ts:64). tier-zero.ts:124-127 filters strictly.",
+      "failure_mode": "The learner can be routed to a provider that does not serve their language, while the offline tier refuses the same mismatch - the two halves of the ladder disagree about what a locale mismatch means.",
+      "fix": "Add 'locale' to PolicyRejection.rule and make coverage an eligibility rule (or document explicitly that coverage is advisory and align Tier 0 with it).",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-31"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-35",
+      "severity": "minor",
+      "title": "The local-echo input-token estimate ignores the request context, under-charging the ledger",
+      "file": "packages/onekey/src/providers/local-echo.ts",
+      "line": 81,
+      "intent": "'Rough token estimate. Deterministic and dependency-free.'",
+      "reality": "estimateTokens(req.prompt) counts only the prompt; req.context (grounded sources) and req.system are excluded, so the tokens actually sent are not the tokens charged.",
+      "evidence": "local-echo.ts:77-81 (the digest and the usage both use req.prompt only); the adapter also never reads req.context when composing its answer.",
+      "failure_mode": "The ledger under-counts the local tier's cost, and the offline 'free' path silently consumes provider capacity without being accounted for.",
+      "fix": "Estimate over prompt + system + context, or state that the local tier is uncharged by design.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-35"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-26",
+      "severity": "minor",
+      "title": "Redaction is string-only and is skipped on some of the same package's error paths",
+      "file": "packages/onekey/src/redact.ts",
+      "line": 35,
+      "intent": "'Everything that is written into a reason string goes through here first' and 'The package never logs a credential'.",
+      "reality": "redactSecret can only mask a string; it cannot traverse a nested object, an array, a header map or a stack. The gateway applies it to attempt reasons and error messages only - not to result.text (the provider's answer, which is delivered verbatim to the learner) and not to meta.policyReason (F3-10). conformance.ts:58-60 defines its own describeError with no redaction at all.",
+      "evidence": "redact.ts:35-41 (string in, string out); gateway.ts:202 (redactSecret(reason)) vs gateway.ts:508 (policyReason assigned raw); conformance.ts:58-60 `function describeError(err) { return err instanceof Error ? err.message : String(err); }` with no redactSecret import.",
+      "failure_mode": "A provider that echoes a credential in its answer text delivers it to the learner and stores it in the result; the conformance report can echo a raw provider message into a report file.",
+      "fix": "Redact the provider answer before delivery (or make redaction a structured, recursive function), and use the redacting describeError in conformance.ts.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-26"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-27",
+      "severity": "minor",
+      "title": "Dead options and exports: refuseOverBudget, timeoutMs, GatewayOptions.policyEngine, tryProjectEgressPayload",
+      "file": "packages/onekey/src/testing/support.ts",
+      "line": 137,
+      "intent": "Every exported surface is a promise that something uses it.",
+      "reality": "MockAdapterOptions.refuseOverBudget is implemented but no test ever sets it (the budget-refusal test uses failWith with a BudgetExceededError instead). QwenAdapterOptions.timeoutMs is never set by any caller so the timeout is always 30s. GatewayOptions.policyEngine is never set by any caller. tryProjectEgressPayload and NEVER_EGRESS_DATA_CLASSES are public exports with no production consumer.",
+      "evidence": "rg 'refuseOverBudget' -> support.ts:137 and 171 only. rg 'timeoutMs' -> qwen-adapter.ts:84,138,177,227 only. rg 'policyEngine:' -> gateway.ts:90 (the interface member) only. rg 'tryProjectEgressPayload' -> egress.ts:179,184 and egress.test.ts only. rg 'NEVER_EGRESS_DATA_CLASSES' -> egress.ts:51,161 only.",
+      "failure_mode": "The public surface advertises capabilities that no consumer exercises (an untested timeout knob, an untested policy-engine injection, a non-throwing egress helper); reviewers and callers cannot tell which knobs are real.",
+      "fix": "Delete the unused knobs or add the tests that exercise them; keep the public surface honest.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-27"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-13",
+      "severity": "minor",
+      "title": "Test suite does not cover several adversarial/contract-risk cases (negative money at append, unicode-homoglyph/ZWSP field evasions beyond normalization assumptions, sponsor-report key drift failures)",
+      "file": "packages/ledger/src/ledger-store.test.ts",
+      "line": 270,
+      "intent": "Tests should prevent regressions in stated invariants: no invalid money states, robust PII boundary under adversarial naming/values, and loud failure on reporting contract drift.",
+      "reality": "Existing tests are meaningful for basic tamper/PII/correction/reproducibility, but gaps remain: no test asserts rejection of negative money-key values at append (270-281 only checks non-integer float); no explicit ZWSP/unicode-variant forbidden field test; no tests proving sponsor report behavior when producer keys differ (current behavior is silent defaults, untested as risk); no concurrency/fork tests (in-memory design makes this N/A but relevant if persisted).",
+      "evidence": "ledger-store.test.ts:270-281; pii-guard.test.ts lacks ZWSP example despite normalize stripping non-alnum (pii-guard.ts:140-142 likely handles it, but unproven by test); sponsor-report.test.ts fixtures always use canonical keys. No tests for `valueScan:'off'` migration path except behavior implied? ledger-store.test.ts:303-337 covers valueScan off/on interplay.",
+      "failure_mode": "Regressions in uncovered edge cases (e.g. allowing negative money, silent metric corruption on schema drift) may ship undetected, giving false confidence from green tests.",
+      "fix": "Add negative tests for negative money-key append rejection, unicode confusable/ZWSP forbidden field names, explicit report behavior on missing/renamed keys (assert anomaly/failure once implemented), and concurrency/transaction tests if/when storage becomes durable.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-13"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-07",
+      "severity": "minor",
+      "title": "PII guard value scanning cannot detect names/free-text PII under innocuous keys or obfuscated/non-pattern values",
+      "file": "packages/ledger/src/pii-guard.ts",
+      "line": 247,
+      "intent": "Public ledger/sponsor artefacts must never contain personal data; the guard is a defense-in-depth boundary but claims/expectations may exceed its provable coverage.",
+      "reality": "Field-name defense is strong (normalized recursive). Value defense scans only string values for email (V1), long digit runs (V2), and phone-shaped patterns starting with '+' or '0' (V3), with exemptions (205-276). It does not detect personal names, addresses, prose identifiers, or PII in non-matching formats/encodings under unknown keys. Numeric values are never scanned.",
+      "evidence": "pii-guard.ts:26-35 documents limits; 205-210 published rules V1-V3 only; 247-276 string-only checks. Allowed-field test includes `note: 'quarterly allocation'` (ledger-store.test.ts:185-195) showing free text is permitted if no pattern match; adversarial personal names in innocuous keys would pass if not matching V1-V3.",
+      "failure_mode": "Personal data that is not email/phone/digit-shaped (e.g. learner name, location narrative) can be appended and published if placed under a non-forbidden key, violating the no-PII boundary despite guard/self-scan passing.",
+      "fix": "Treat guard as necessary-but-not-sufficient: enforce strict payload schemas/allowlists per entry type, prohibit arbitrary free-text fields in public payloads, and add policy/review/static checks for non-pattern PII. Consider stronger classifiers only with explicit false-positive handling.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-07"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-08",
+      "severity": "minor",
+      "title": "Private-store separation and privacy are enforced by in-memory convention/interface, not durable isolation/encryption controls",
+      "file": "packages/ledger/src/private-store.ts",
+      "line": 149,
+      "intent": "Private operational data (identity, consent, safeguarding, transcripts) must be stored separately from the public ledger with strong isolation and minimization guarantees.",
+      "reality": "`createPrivateStore` is an in-memory Map with no persistence path, no encryption-at-rest, no key protection, and no access control boundary beyond module/API convention (149-192). Redaction produces aggregates but does not provide cryptographic separation from source records in-process.",
+      "evidence": "private-store.ts:28-33 explicitly states in-memory by design and defers persistence/retention/wipe; 149-191 store/copy behavior only. No filesystem, crypto, or permission primitives. Hunt (h) asks where it writes/encrypted/protected — implementation writes nowhere and is plaintext in memory.",
+      "failure_mode": "A service embedding this store without additional controls would have no durable private-store security properties (encryption, tenancy isolation, retention enforcement) from this package; memory disclosure/process dumps could expose raw records.",
+      "fix": "Document non-goals clearly at API boundary and implement/require a hardened persistence adapter in the owning service (encrypted storage, access control, retention/wipe, audit) before handling real private data.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-08"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-11",
+      "severity": "minor",
+      "title": "Sponsor report does not fail when ledger chain is broken; it publishes a report with chainOk=false",
+      "file": "packages/ledger/src/sponsor-report.ts",
+      "line": 255,
+      "intent": "Sponsor-facing evidence should be trustworthy; a broken/tampered ledger chain undermines the validity of derived financial and impact claims.",
+      "reality": "`buildSponsorReport` records verification result (`verification = ledger.verify()`) into `report.ledger.chainOk/brokenAtSeq/chainDetail` but continues computing and returning the full report (255-327). It does not throw or gate publication on integrity.",
+      "evidence": "sponsor-report.ts:255,263-269 include chain status fields; no conditional abort. Caller must inspect `ledger.chainOk` themselves.",
+      "failure_mode": "Consumers may overlook `chainOk=false` and rely on funding/usage aggregates computed from untrusted/tampered source state, weakening audit guarantees.",
+      "fix": "Provide a strict mode that throws on broken chain (using `assertChainIntact`) or clearly separate 'unverified draft' outputs; default sponsor-facing publication paths should refuse to emit on integrity failure.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-11"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-10",
+      "severity": "minor",
+      "title": "CI does not implement the 9.2 GL-01..GL-08 pipeline the Phase 0 work item promises",
+      "file": ".github/workflows/ci.yml",
+      "line": 24,
+      "intent": "09 12.2 work item: 'the CI pipeline with the GL-01…GL-08 stages (9.2)'; 9.2 defines 9 stages (intake, branch+build, static analysis, independent review, rework, loop testing, correction, resolution, package/sign/deploy).",
+      "reality": "ci.yml has 5 jobs (typecheck, test, secrets, sbom, verify); no SAST/DAST, licence audit, ledger-compatibility, rollback-test or independent-review stage.",
+      "evidence": "ci.yml jobs at lines 24-150; no job named for GL-01..GL-08; the only scan is npm run secrets:scan.",
+      "failure_mode": "The Phase 0 'CI with the GL-01…GL-08 stages' promise is narrowed to a build/test/scan pipeline without the narrowing being recorded; 'CI green' covers far less than the spec's release gate.",
+      "fix": "Either add the missing stages or record the Slice 0 narrowing in the session log/ADR and correct the Phase 0 work-item claim.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-10"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-36",
+      "severity": "minor",
+      "title": "The gateway can be constructed with a policy engine that holds a different breaker and kill switch than the gateway's own",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 168,
+      "intent": "GatewayOptions lets a deployment inject a policy engine; the gateway and the engine are supposed to share one breaker and one kill switch.",
+      "reality": "opts.policyEngine is used verbatim, while the gateway's own breaker/killSwitch (opts.breaker/opts.killSwitch or fresh instances) are used for its per-candidate checks. If the injected engine was built with different breaker/killSwitch instances, the decision and the execution disagree about which providers are tripped or killed. No test covers this configuration.",
+      "evidence": "gateway.ts:155-169 (three independent sources of breaker/killSwitch) and gateway.ts:248-260 (the gateway's own checks) vs policy.ts:155-175 (the engine's checks). rg 'policyEngine:' -> gateway.ts:90 only: the option is never exercised.",
+      "failure_mode": "A deployment that injects a policy engine with its own breaker silently gets two independent breaker states, so a provider can be routed by the engine and skipped by the gateway (or the reverse).",
+      "fix": "Derive the gateway's breaker/killSwitch from the injected engine, or reject the combination; add a test.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-36"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-29",
+      "severity": "minor",
+      "title": "Provider statusText is returned to the audit trail without redaction",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 315,
+      "intent": "redact.ts: everything written into a reason string goes through redactSecret first.",
+      "reality": "readErrorDetail redacts the JSON error.message, but when the body is not JSON it returns response.statusText raw. statusText is provider-controlled and lands in the gateway attempt trail.",
+      "evidence": "qwen-adapter.ts:300-316: `return response.statusText || 'no detail was returned';` - no redactSecret call on that path.",
+      "failure_mode": "A provider echoing a key in its status line lands unredacted in the audit trail.",
+      "fix": "Apply redactSecret to the statusText fallback.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-29"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-10",
+      "severity": "minor",
+      "title": "Double-count detection for semantically duplicated funding/allocation records is absent; engine trusts ledger entries as unique facts",
+      "file": "packages/ledger/src/reinvestment.ts",
+      "line": 141,
+      "intent": "The 60% engine must not misstate compliance due to double-counting (build log concern: same amount recorded as both allocation and device purchase or otherwise duplicated).",
+      "reality": "Engine classifies by `entry.type` and sums amounts: funding types add to base, `reinvestment_allocation` adds to allocated; other types excluded (141-184). It does not detect duplicate economic events recorded as multiple entries, cross-references, idempotency keys, or semantic overlap between allocation and purchase events (purchase types not modeled here).",
+      "evidence": "reinvestment.ts:141-184 has no dedupe/idempotency logic; exclusions only record reasons like outside period or not funding type. Correctly avoids counting the same entry as both base and allocation, but cannot catch duplicated entries representing same underlying transaction.",
+      "failure_mode": "Duplicated or semantically overlapping entries can inflate eligible base or allocated totals, causing incorrect compliance outcomes and audit discrepancies despite deterministic arithmetic.",
+      "fix": "Require/validate idempotency or source-reference fields per economic event, detect duplicates (by ref/hash/business key) during computation, and surface suspected double-counts as exclusions/anomalies requiring reconciliation.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-10"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-09",
+      "severity": "minor",
+      "title": "The enrolmentMethod attribute is written and never read",
+      "file": "packages/identity/src/enrolment.ts",
+      "line": 359,
+      "intent": "The path taken is recorded so it can be audited.",
+      "reality": "attributes['enrolmentMethod'] is written on the principal but read nowhere in the tree. The audit trail does record the path (EnrolmentAuditEvent.method), so the attribute is a second, dead copy of it.",
+      "evidence": "grep -rn 'enrolmentMethod' -> enrolment.ts:359 (write) only; the policy engine reads linkedLearnerIds and guardianConsent (policy.ts:159, :170) but not enrolmentMethod",
+      "failure_mode": "Dead state on the principal invites a future reader to trust an attribute that nothing maintains.",
+      "fix": "Either remove the attribute or make a consumer of it. The audit trail is already the record of truth.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-09"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-11",
+      "severity": "minor",
+      "title": "P0-2's evidence is a string-contains check that cannot detect a missing owner or an 'unassigned' status",
+      "file": "docs/exit-criteria.json",
+      "line": 25,
+      "intent": "09 12.2 exit criterion 2: 'Every ADR in 11 shows a named Owner and a recorded Status; none reads unassigned.'",
+      "reality": "The gate only checks that the README contains three literal strings.",
+      "evidence": "exit-criteria.json P0-2 evidence contains ['| ADR | Title | Status | Owner |','ADR-0016','Accepted']; the exit-criteria gate's file check (exit-criteria-gate.ts:223-245) does a substring match and never parses the table, so a row with Owner '—' or Status 'unassigned' would still pass.",
+      "failure_mode": "The criterion can be reported met while an ADR row is unassigned; the check proves the register exists, not that the register satisfies the criterion.",
+      "fix": "Parse docs/adr/README.md in the gate and assert every ADR row has a non-empty owner and a status in {Accepted, Proposed, Superseded}.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-11"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-22",
+      "severity": "minor",
+      "title": "The ARC-I4 uncertainty note is unreachable: no adapter in the package reports confidence",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 591,
+      "intent": "'uncertainty_note is present whenever the provider reports confidence below the routing threshold (ARC-I4).'",
+      "reality": "The branch depends on result.confidence. The Qwen adapter (qwen-adapter.ts:270-277), local-echo (local-echo.ts:90-98) and tier-zero (tier-zero.ts:141-148) all return CompletionResult objects with no confidence field, so confidence is always undefined and uncertainty_note is always null.",
+      "evidence": "rg 'confidence' across packages/onekey/src -> only gateway.ts (the read + the branch) and the DEFAULT_CONFIDENCE_THRESHOLD import. No adapter sets it.",
+      "failure_mode": "The uncertainty marker is dead code in production; a low-confidence answer is delivered with no uncertainty note and no test can ever reach the branch.",
+      "fix": "Map a provider confidence field in the adapters, or drop the ARC-I4 claim and the branch.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-22"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-04",
+      "severity": "minor",
+      "title": "`all()` exposes live mutable entry objects, permitting in-process mutation/deletion outside append-only API semantics",
+      "file": "packages/ledger/src/ledger-store.ts",
+      "line": 256,
+      "intent": "Append-only means existing entries cannot be updated or deleted through any public API; corrections must be compensating entries.",
+      "reality": "While there is no `update`/`delete` method, `all()` intentionally returns the live internal array and live entry objects (256-269). Callers can mutate payload/hash/link fields or splice entries, breaking the chain. `exportPublic()` is the safe copy path (310-319). README documents this as tamper-evidence/testability choice.",
+      "evidence": "ledger-store.ts:256 comment explicitly states live array returned; tests mutate via `store.all()` to prove tamper detection (ledger-store.test.ts:78-86,90-104,109-115). No defensive copies/freeze on `all()`.",
+      "failure_mode": "Accidental or malicious in-process code holding a reference from `all()` can corrupt chain state without going through append/correction discipline; integrity becomes dependent on caller discipline despite append-only narrative.",
+      "fix": "Return deep-frozen snapshots from `all()` and keep a separate privileged internal accessor for auditor/tamper-test tooling, or rename/document `all()` as unsafe/internal and make safe copy the default.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-04"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-28",
+      "severity": "minor",
+      "title": "The half-open circuit does not admit exactly one probe, and the promotion happens on read",
+      "file": "packages/onekey/src/circuit-breaker.ts",
+      "line": 75,
+      "intent": "circuit-breaker.ts: 'The cooldown elapsed: allow exactly one probe (half-open).' Doc 09 line 833: 'closed -> open -> half-open'.",
+      "reality": "state() mutates the entry on every read (open -> half_open) and nothing tracks probe exclusivity: once half_open, every concurrent request passes the gateway's `breaker.state(id) === 'open'` check and calls the provider. There is no in-flight probe latch.",
+      "evidence": "circuit-breaker.ts:75-79 (read promotes); gateway.ts:257-260 (the only gate is `state(...) === 'open'`). PROBE 11 (executed) confirmed the read-promotes behaviour; the entry shape {state, consecutiveFailures, openedAt, lastDetail} shows exclusivity is unrepresentable.",
+      "failure_mode": "After a cooldown, a burst of concurrent requests all probe the failing provider, re-triggering the failure storm the breaker was opened to stop.",
+      "fix": "Add an explicit probe latch (a boolean or an in-flight counter) so only one request may probe while half_open.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-28"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-33",
+      "severity": "minor",
+      "title": "The failover drill accepts an injected gateway while claiming 'The drill is offline'",
+      "file": "packages/onekey/src/failover.ts",
+      "line": 57,
+      "intent": "failover.ts: 'The drill is offline: no key, no network, no hosted provider.'",
+      "reality": "FailoverDrillOptions.gateway lets a deployment inject its own gateway, which may contain live providers; the drill would then make real network calls and spend real credit while still being presented as the offline drill.",
+      "evidence": "failover.ts:55-58 ('A drill gateway is built when omitted'); failover.ts:20-27 ('The drill is offline: no key, no network, no hosted provider').",
+      "failure_mode": "A 'documented failover test' could be run against a live registry and produce a report indistinguishable from the offline one, while spending sponsor credit.",
+      "fix": "Assert that an injected gateway contains no non-local providers, or mark the report as live when an injected gateway is used.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-33"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-25",
+      "severity": "minor",
+      "title": "The per-request attempt trail is never evicted",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 170,
+      "intent": "attemptsFor(requestId) is a live audit surface for a long-running service.",
+      "reality": "attemptsByRequest is a Map that is written on every complete() and never pruned. There is no TTL, no size bound and no removal.",
+      "evidence": "gateway.ts:170 `const attemptsByRequest = new Map<string, GatewayAttempt[]>();`, gateway.ts:190 `attemptsByRequest.set(ctx.requestId, attempts);` - no delete anywhere in the file. PROBE 19 (executed): the trail for request 'r0' is still retrievable after 5 later requests.",
+      "failure_mode": "Unbounded memory growth in a long-running gateway: one retained array per request id, forever.",
+      "fix": "Bound the map (LRU) or move the trail to an external audit sink.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-25"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-30",
+      "severity": "minor",
+      "title": "The adapter has no retry, yet its 429 message advertises a retry-after hint that is never acted on",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 242,
+      "intent": "The error text says 'retry after 30s', implying the adapter honours the hint.",
+      "reality": "There is no retry loop anywhere in the adapter; the 429 is thrown immediately. The hint is informational only, and the gateway's response to it is to trip the circuit (F3-13).",
+      "evidence": "qwen-adapter.ts:242-249 builds the hint; rg 'retry' in qwen-adapter.ts returns only that message and the test that asserts it (qwen-adapter.test.ts:156-176).",
+      "failure_mode": "The log tells an operator the call will be retried after 30s when it will not be, and the provider is removed from routing instead.",
+      "fix": "Either implement the retry (honouring retry-after) or reword the message so it does not promise behaviour that does not exist.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-30"
+      ]
+    },
+    {
+      "surface": "F1",
+      "id": "F1-12",
+      "severity": "minor",
+      "title": "Deployment story in the docs is incomplete: env vars, PORT, health check and rollback are undocumented in the README",
+      "file": "README.md",
+      "line": 111,
+      "intent": "09 9.4/9.7: the deployment allocation, health check and tested rollback are part of the release record; the README Deployment section is the owner-facing deployment story.",
+      "reality": "render.yaml carries NODE_VERSION, EDUGENESIS_HOSTED, Render-supplied PORT, healthCheckPath /api/health and autoDeployTrigger checksPass; the README Deployment section mentions none of the env vars, the port contract, the health path or rollback.",
+      "evidence": "render.yaml:32-40 startCommand/healthCheckPath/envVars; README.md:111-126 discusses the free tier, --hosted and 403 writes only; 9.7 requires a rollback plan tested before every rollout and no rollback procedure appears in README or render.yaml.",
+      "failure_mode": "An owner deploying from the README alone cannot know the health-check path or how to roll back; the deployment story is incomplete.",
+      "fix": "Document the env vars, the Render-supplied PORT, the /api/health check and the rollback procedure (Render rollback / previous successful deploy) in the README Deployment section.",
+      "closable": "code",
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F1:F1-12"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-21",
+      "severity": "minor",
+      "title": "The emitted risk tier is hardcoded to 1 regardless of the request's safety tier",
+      "file": "packages/onekey/src/gateway.ts",
+      "line": 575,
+      "intent": "Doc 09 line 1044 (R16-04) requires pre-delivery risk tiering; ARC-I2 validates risk_tier; ARC-I3 requires source lineage at risk tier 2 and above.",
+      "reality": "buildEmission sets risk_tier: 1 for every request, and reading_level: {band:'unspecified'}, while req.safetyTier may be 'critical'. The comment 'THREE THINGS ARE COMPUTED, NEVER HARDCODED' lists three other fields, but the risk tier is a hardcoded constant right next to them.",
+      "evidence": "gateway.ts:575 `risk_tier: 1,` and gateway.ts:577 `reading_level: { band: 'unspecified' },`. accessibility/src/arc-invariants.ts:122-148 validates risk_tier only for range and for lineage presence at tier >= 2, so a constant 1 always satisfies the validator.",
+      "failure_mode": "A critical-safety-tier answer is emitted as the lowest risk tier, so the ARC lineage requirement for tier 2+ never triggers and downstream risk-based routing cannot see the real tier.",
+      "fix": "Derive risk_tier from req.safetyTier and validate the mapping against Doc 6 §3.1.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-21"
+      ]
+    },
+    {
+      "surface": "F0",
+      "id": "F0-08",
+      "severity": "minor",
+      "title": "A guardian consent token cannot be revoked before it expires",
+      "file": "packages/identity/src/enrolment.ts",
+      "line": 200,
+      "intent": "The file's own rule 2: a token is bound to one learner, expires, and is single-use.",
+      "reality": "There is no revoke path. The token lives for its 24-hour TTL unless it is used or expires, and the only way to neutralise it early is to let it be used.",
+      "evidence": "packages/identity/src/enrolment.ts:187-198 — the EnrolmentService interface exposes issue, enrol, passkey, auditTrail and isProvisional; no revoke",
+      "failure_mode": "A token captured in transit stays usable for up to a day after a guardian changes their mind.",
+      "fix": "Add revokeGuardianConsentToken and treat a revoked token id as spent.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F0:F0-08"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-24",
+      "severity": "minor",
+      "title": "latencyMs is hardcoded to 0 in the network adapter",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 276,
+      "intent": "CompletionResult.latencyMs is 'Provider-reported latency in ms'; Doc 09 line 1320 lists 'model latency' as a monitored metric.",
+      "reality": "The Qwen adapter always returns latencyMs: 0 regardless of the real round-trip time.",
+      "evidence": "qwen-adapter.ts:276 `latencyMs: 0,` inside the returned CompletionResult; no timing variable exists in complete().",
+      "failure_mode": "The 'model latency' metric and any latency SLO computed from CompletionResult read a constant zero, hiding real provider latency regressions.",
+      "fix": "Measure the elapsed time around the fetch and report it.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-24"
+      ]
+    },
+    {
+      "surface": "F3",
+      "id": "F3-32",
+      "severity": "minor",
+      "title": "The registry snapshots capabilities at registration and the policy engine enforces the stale snapshot",
+      "file": "packages/onekey/src/registry.ts",
+      "line": 65,
+      "intent": "'Capabilities are snapshotted at registration so the registry stays inspectable even if an adapter is mid-restart.'",
+      "reality": "The safety-tier rule (policy.ts:144) and the data-class rule use entry.capabilities (the snapshot) while effectiveMaxDataClass additionally consults the live adapter.maxDataClass. A provider whose clearance is narrowed at runtime keeps the old clearedSafetyTiers for routing.",
+      "evidence": "registry.ts:63-65 `const capabilities = adapter.capabilities();`; policy.ts:144 `entry.capabilities.clearedSafetyTiers.includes(req.safetyTier)`; policy.ts:96-100 reads the live adapter only for maxDataClass.",
+      "failure_mode": "A provider whose clearance is revoked mid-flight remains eligible for the safety tier it was cleared for, and the kill switch is the only remaining control - which is per-process (F3-11).",
+      "fix": "Re-read capabilities for the hard rules, or re-snapshot the entry when the adapter's capabilities change.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F3:F3-32"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-12",
+      "severity": "minor",
+      "title": "Payload timestamps accepted as any parseable date string, not strictly normalized ISO-8601; canonical preimage hashes the provided string form",
+      "file": "packages/ledger/src/ledger-store.ts",
+      "line": 200,
+      "intent": "Ledger entries should carry unambiguous, reproducible timestamps; canonicalization should prevent representational ambiguity in audited fields.",
+      "reality": "`assertTimestamp` only checks non-empty and `Date.parse(at)` parseability (200-207), accepting many non-ISO forms (e.g. locale-dependent or variant formats that `Date.parse` accepts). The stored/hashed `at` is the original string (235-251), not a normalized ISO form.",
+      "evidence": "ledger-store.ts:200-207 uses `Date.parse`; 235 sets `const timestamp = at ?? now()` and passes into preimage. Different string representations of the same instant would hash differently and both be accepted if parseable.",
+      "failure_mode": "Inconsistent timestamp encodings reduce interoperability and can complicate reproducible comparisons/audits; while not a hash collision, it permits ambiguous temporal representations in the public chain.",
+      "fix": "Require strict ISO-8601 format (and optionally normalize to `toISOString()` for generated/accepted values) before hashing/storing.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-12"
+      ]
+    },
+    {
+      "surface": "F5",
+      "id": "F5-09",
+      "severity": "minor",
+      "title": "60% reinvestment excludes out-of-period allocations from compliance math, which can misstate compliance for period funding",
+      "file": "packages/ledger/src/reinvestment.ts",
+      "line": 117,
+      "intent": "Compliance should reflect whether reinvestment obligations for the eligible base in the period are met, with auditable inclusion/exclusion rules.",
+      "reality": "Entries outside the period (before or after) are excluded entirely before classification (124-136), including `reinvestment_allocation` entries (138-177). Thus an allocation that occurs after `period.to` but funds the same period's obligation is not counted, and the report can mark the period non-compliant even if sufficient reinvestment was later recorded.",
+      "evidence": "reinvestment.ts:124-136 exclude by timestamp for all entry types; 154-177 only in-period allocations contribute to `allocatedByCategory`. reinvestment.test.ts fixture includes seq 8 allocation after period excluded (47,84-85). No linkage field (e.g. obligation period) is considered.",
+      "failure_mode": "Period-bounded compliance results depend on allocation timing rather than obligation fulfillment, producing false negatives/positives relative to business intent unless periods and posting rules are perfectly aligned.",
+      "fix": "Define and implement allocation attribution explicitly (e.g. allocation period/obligation reference fields) or compute compliance over funding period with allocation matching rules; document current timestamp-only semantics prominently in report output.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F5:F5-09"
+      ]
+    }
+  ],
+  "surface_summaries": [
+    {
+      "surface": "F0",
+      "summary": "Solo's own first-hand review of the live tree, independent of the three swarm surfaces, and every finding re-verified against the code rather than accepted from a report. The dominant theme: the slice is a LIBRARY plus a GATE SUITE. It contains no learner runtime, no durable store and no audit trail that outlives the process, and the documentation claimed otherwise in three places (an ADR, a package README and the Render Blueprint). The crypto and the core invariants are genuinely sound — scrypt with a salted verifier and timingSafeEqual, real RBAC/ABAC rules that read the enrolment attributes, and a token implementation that matches presented claims against issued claims rather than trusting the caller.",
+      "counts": {
+        "blocker": 3,
+        "major": 4,
+        "minor": 3
+      }
+    },
+    {
+      "surface": "F1",
+      "summary": "F1 traced all 16 Phase 0/1/5 exit-criteria rows and the Phase 1/5 work items against the frozen snapshot. Six criteria are genuinely proven by a named executable check; six are implemented but their register evidence is wrong, partial or too weak; three are honestly owner-blocked; one (P1-4) is mislabelled. Two blockers: the shipped evidence chain is self-contradictory (a PASS attestation binds a report that is red on disk, digest mismatch), and the PWA renders the dark theme by default, contradicting the recorded P1-4 met and Accepted ADR-0011. The recurring defect class is evidence that proves a different behaviour than the criterion text: P1-1 cites a test file with no enrolment test, P0-4 cites a file with no tokens, P5-4 cites a test that skips half the criterion, and P0-2/P0-5 cite checks that cannot fail on the exact defect. Eleven of sixteen ADR owner rows contradict the ADR prose, and ADR-0013 records a repository/node:sqlite seam that does not exist. Every gap found is closable in code; none requires an owner decision.",
+      "counts": {
+        "blocker": 2,
+        "major": 7,
+        "minor": 5
+      }
+    },
+    {
+      "surface": "F3",
+      "summary": "The OneKey package is a real, thoughtfully commented implementation - the fallback chain, the typed error taxonomy, the attempt trail and the policy hard rules are genuinely there - but several load-bearing promises are only prose. PROVEN by execution against a copy of the snapshot: the egress boundary has zero production callers and the one network adapter ships raw grounded context (safeguarding/disability notes) to the provider; a live provider empty answer reaches the learner as an empty lesson; a zero-usage answer throws an untyped Error out of the learner path; the Tier 0 last-resort serves an unrelated lesson while claiming it covers this topic; and the policy engine routes on the CLIENT-declared data class, ignoring the server-side policy. The credit-exhaustion guarantee is real only when a caller wires a Tier 0 provider, the hard cap does not bound real provider spend, the kill switch and circuit breaker are per-process, and the failover drill [0,1,2,3,4] report is a Set union over three different requests that hides tier 0 being visited twice and skipped once. Nothing outside apps/cli/src/selftest.ts consumes the package, so no learner-facing application exists yet to expose or mask these paths.",
+      "counts": {
+        "blocker": 5,
+        "major": 15,
+        "minor": 16
+      }
+    },
+    {
+      "surface": "F5",
+      "summary": "packages/ledger implements an in-memory hash-chained event log with deterministic hashing, PII name/value guards, private-store redaction, 60% reinvestment math, and sponsor aggregation, but not a durable SQLite-backed ledger. Core integrity controls are partial: append-only is API-level only (mutable `all()` exposure), verification is opt-in, and there is no persistence, WAL, or concurrency serialization. Money handling is mostly integer-safe in computations/reads yet append accepts negative money-key values and sponsor metrics silently default on key drift. No-PII and 60% claims are bounded by implementation semantics (pattern-based PII scan, timestamp-window attribution, no semantic dedupe) rather than absolute guarantees.",
+      "counts": {
+        "blocker": 0,
+        "major": 6,
+        "minor": 7
+      }
+    }
+  ]
+}

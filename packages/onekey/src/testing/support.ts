@@ -129,6 +129,14 @@ export interface MockAdapterOptions {
   clearedSafetyTiers?: SafetyTier[];
   maxContextTokens?: number;
   text?: string;
+  /**
+   * The usage the provider reports. Defaults to a healthy 12/24.
+   *
+   * WHY it is configurable: a provider that reports ZERO usage is a real
+   * failure mode (a truncated or mocked response), and the gateway must not
+   * crash on it. The double has to be able to produce it.
+   */
+  usage?: { inputTokens: number; outputTokens: number };
   /** The provenance the provider reports for its answer. */
   sourceLineage?: SourceLineage[];
   /** When set, complete() rejects with this error. */
@@ -179,7 +187,7 @@ export function createMockAdapter(opts: MockAdapterOptions): MockAdapterHandle {
         text: opts.text ?? `mock completion from ${opts.id}`,
         providerId: opts.id,
         modelId,
-        usage: { inputTokens: 12, outputTokens: 24 },
+        usage: opts.usage ?? { inputTokens: 12, outputTokens: 24 },
         latencyMs: 7,
         sourceLineage: opts.sourceLineage ?? [],
       };

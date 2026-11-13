@@ -38,10 +38,11 @@ later ADR, not edited in place.
 | ADR-0010 | Sponsor firewall enforcement | Accepted | Governance Lead | Proposal §11 |
 | ADR-0011 | The learner PWA defaults to the LIGHT theme | Accepted | Chief Inclusion & Accessibility Officer | Proposal §11 |
 | ADR-0012 | No real learner data in technical demonstrations | Accepted | Child Safeguarding Officer | Proposal §11 |
-| [ADR-0013](ADR-0013-typescript-on-node-with-node-sqlite.md) | TypeScript on Node 24 with `node:sqlite` behind a repository interface | Accepted | Chief AI & Model Orchestrator | This directory |
-| [ADR-0014](ADR-0014-zero-runtime-dependencies.md) | Zero runtime dependencies | Accepted | Security Officer | This directory |
-| [ADR-0015](ADR-0015-node-test-as-the-test-runner.md) | `node:test` as the test runner | Accepted | OpenCode Lead | This directory |
-| [ADR-0016](ADR-0016-versioned-json-settings-and-the-settings-ui.md) | Versioned JSON settings inside the project, edited by a local Settings UI served by `eg serve` | Accepted | Chief AI & Model Orchestrator | This directory |
+| [ADR-0013](ADR-0013-typescript-on-node-with-node-sqlite.md) | TypeScript on Node 24 with `node:sqlite` behind a repository interface | Superseded by ADR-0017 | Chief Systems Architect | This directory |
+| [ADR-0014](ADR-0014-zero-runtime-dependencies.md) | Zero runtime dependencies | Accepted | Chief Systems Architect | This directory |
+| [ADR-0015](ADR-0015-node-test-as-the-test-runner.md) | `node:test` as the test runner | Accepted | Chief Systems Architect | This directory |
+| [ADR-0016](ADR-0016-versioned-json-settings-and-the-settings-ui.md) | Versioned JSON settings inside the project, edited by a local Settings UI served by `eg serve` | Accepted | Chief Systems Architect, with the Security Officer accountable for the secret handling rules | This directory |
+| [ADR-0017](ADR-0017-in-memory-storage-and-the-deferred-sqlite-adapter.md) | Storage is in-memory behind a repository seam in Slice 0; the `node:sqlite` adapter is deferred to Slice 1 | Accepted | Chief Systems Architect | This directory |
 
 ## ADR-0001 to ADR-0012
 
@@ -53,9 +54,15 @@ governing citations are mirrored above, and their prose remains the authority.
 They are not duplicated here because a decision record that exists in two
 places is a decision record that will drift.
 
-## ADR-0013 to ADR-0016
+## ADR-0013 to ADR-0017
 
-These four record the foundation choices of this repository: the runtime, the
-dependency policy, the test runner and the settings surface. Together they are
-what makes the product law — *this folder runs identically on any machine it is
-copied to* — true rather than aspirational.
+These five record the foundation choices of this repository: the runtime, the
+dependency policy, the test runner, the settings surface and the storage seam.
+Together they are what makes the product law — *this folder runs identically on any
+machine it is copied to* — true rather than aspirational.
+
+ADR-0013 is **superseded** by ADR-0017. The decision it recorded — persistence
+through a `node:sqlite` adapter behind a repository interface — was not implemented
+in Slice 0: no source file imports `node:sqlite`, and every store in the build is
+in-memory. The decision text in ADR-0013 is preserved unchanged; ADR-0017 records
+what is actually true and what is deferred.

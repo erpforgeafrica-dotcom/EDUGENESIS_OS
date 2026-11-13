@@ -7,7 +7,8 @@ frozen and is NOT modified by this package.
 
 - Source: `src/`
 - Tests: `src/**/*.test.ts` (compiled to `dist/**/*.test.js`)
-- Zero runtime dependencies: `node:crypto` and `node:sqlite` only, nothing else.
+- Zero runtime dependencies: `node:crypto` only, nothing else. `node:sqlite` is **not** used in
+  this build — every store here is in-memory behind a repository seam. See ADR-0017.
 - This package MUST NOT import a provider SDK (provider access lives behind `packages/onekey`).
 - This package MUST NOT contain a raw hex colour or a hardcoded absolute path.
 

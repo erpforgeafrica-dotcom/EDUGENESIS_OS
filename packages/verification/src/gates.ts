@@ -17,6 +17,8 @@ import { pathPortabilityGate } from './gates/path-portability-gate.js';
 import { hexTokenGate } from './gates/hex-token-gate.js';
 import { contractsBaselineGate } from './gates/contracts-baseline-gate.js';
 import { exitCriteriaGate } from './gates/exit-criteria-gate.js';
+import { pwaLightDefaultGate } from './gates/pwa-light-default-gate.js';
+import { adrGovernanceGate } from './gates/adr-governance-gate.js';
 
 /**
  * Every gate, in the order the report prints them.
@@ -35,6 +37,8 @@ export const GATE_REGISTRY: readonly Gate[] = [
   hexTokenGate,
   contractsBaselineGate,
   exitCriteriaGate,
+  pwaLightDefaultGate,
+  adrGovernanceGate,
 ];
 
 /**

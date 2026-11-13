@@ -8,10 +8,10 @@
 # A free instance is a demonstration and governance surface, never a system of
 # record. Durable learner state lives on the learner's device (Tier 0).
 #
-# No database is declared here on purpose. Genesis Slice 0 persists through a
-# repository interface backed by SQLite; declaring an unused Render Postgres
-# would claim infrastructure the code does not use. The database is added when
-# that interface is backed by Postgres (ADR-0013).
+# No database is declared here on purpose. Genesis Slice 0 persists NOTHING:
+# every store is in-memory behind a repository seam (ADR-0017), so declaring an
+# unused Render Postgres would claim infrastructure the code does not use. The
+# database arrives with the slice that implements the durable adapter.
 
 services:
   - type: web

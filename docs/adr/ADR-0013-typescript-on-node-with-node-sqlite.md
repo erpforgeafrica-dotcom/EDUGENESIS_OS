@@ -1,8 +1,9 @@
 # ADR-0013 — TypeScript on Node 24 with `node:sqlite` behind a repository interface
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0017
 - **Owner:** Chief Systems Architect
 - **Date:** 2026-11-12
+- **Superseded by:** ADR-0017 — *Storage is in-memory behind a repository seam in Slice 0; the `node:sqlite` adapter is deferred to Slice 1* (2026-11-13). The decision below was **not implemented** in Slice 0: no source file imports `node:sqlite`, and every store in the build is in-memory. The decision text is preserved unchanged, because a decision record that is edited in place cannot be audited.
 - **Governed by:** Product law — the project must run identically on any Windows PC it is copied to (GLOBAL.md §9, portability law).
 
 ## Context

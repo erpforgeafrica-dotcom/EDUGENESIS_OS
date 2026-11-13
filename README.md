@@ -57,7 +57,7 @@ apps/
 tools/           Bootstrap, SBOM, secrets scan, contrast, portability, guardian coverage,
                  provider re-point, checksums, attestation
 settings/        Versioned, schema-validated settings — never a secret
-docs/adr/        ADR-0001..0016 (0001–0012 from the proposal, 0013–0016 build-local)
+docs/adr/        ADR-0001..0017 (0001–0012 from the proposal, 0013–0017 build-local)
 docs/            Exit-criteria register, contract amendments, officer roster
 artifacts/       Generated evidence: sbom.cdx.json, verify-report.json,
                  checksums.sha256, attestation.json
@@ -132,7 +132,38 @@ Every scanner that polices the tree also proves it can fail:
 
 ---
 
+## What this slice is — and what it is not
+
+Genesis Slice 0 is a **library of contracts and invariants plus the gate suite that proves
+them**. It is not a running learner product, and it does not describe itself as one:
+
+- **There is no learner runtime.** The shipped web app is the Settings UI and the PWA shell.
+  The served API exposes `/api/health` and `/api/settings` and nothing else. The OneKey
+  gateway, the Accessibility Guardian, the ledger, the consent service and the enrolment
+  service are reachable from the library and from the test suite — and from nowhere else.
+  The slice that first serves a learner wires them to a route.
+- **There is no durability.** Every store is in-memory behind a repository seam, so the
+  public ledger, the private store and the enrolment and consent audit trails are lost when
+  the process exits. See ADR-0017. Nothing here may be described as auditable across
+  restarts.
+- **The enrolment path is implemented but not yet wired.** `packages/identity` provides the
+  guardian-consent-token enrolment with its audit trail, and the passkey seam that refuses
+  with a typed error. No runtime route calls either yet.
+- **The passkey ceremony is deferred.** It needs a browser and an authenticator; the seam
+  and the refusal are in place (Slice 0 decision D-05).
+
 ## Deployment
+
+### Running it on a host
+
+| Fact | Where it comes from |
+|---|---|
+| Port | `settings/settings.json` → `server.port` (default `8787`). In **hosted mode only**, `PORT` from the environment wins — that is what `render.yaml` relies on. `eg serve --port <n>` overrides both. |
+| Host | `server.host` — `127.0.0.1` by default. |
+| Health | `GET /api/health` — the same path `render.yaml` declares as `healthCheckPath`. |
+| Read-only when hosted | In hosted mode every `/api/` write is refused with `403`, and a loopback peer is refused outright. |
+| Rollback | The service deploys from `main` with `autoDeployTrigger: checksPass`. To roll back, redeploy the previous known-good commit. There is no migration to reverse, because Slice 0 persists nothing. |
+| Secrets | API keys live in the gitignored local settings file and are write-only over HTTP; they are never logged and never returned by the API. |
 
 The platform is **Render**, described in git by `render.yaml` (ADR-0009, proposal §9.4). The Blueprint
 declares **one** free web service, `edugenesis-web`, which runs `node apps/cli/dist/serve.js --hosted`.

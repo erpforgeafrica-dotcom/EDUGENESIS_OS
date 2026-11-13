@@ -27,8 +27,13 @@
             "ADR-0016",
             "Accepted"
           ]
+        },
+        {
+          "kind": "gate",
+          "target": "adr-governance"
         }
-      ]
+      ],
+      "note": "The file check alone could not detect a MISSING owner, so it was not sufficient evidence for this criterion; the adr-governance gate was added and is now cited as well. The gate parses the index, requires every row to carry a recognised status and a non-placeholder owner, requires every owner's role to exist in the appointment register, and cross-checks each ADR record in this directory against its index row for status and owner. It found the index naming three different owners than the records themselves for ADR-0013 to ADR-0016, and an accountable role (Chief Systems Architect) with no row in the register at all."
     },
     {
       "id": "P0-3",
@@ -80,7 +85,7 @@
       "source": "09 §12.2 exit criterion 6",
       "status": "owner-blocked",
       "owner": "Founder & CEO",
-      "reason": "Three roles are named in the approved architecture document and are recorded in docs/OFFICERS.md (Chief AI & Model Orchestrator: Marcus Thorne; Chief Inclusion & Accessibility Officer: Noni / Amara Diop; Chief Learning Scientist: Nelly / Dr. Elena Rostova). The remaining ten roles have no named person, and a build cannot invent an appointment.",
+      "reason": "Three roles are named in the approved architecture document and are recorded in docs/OFFICERS.md (Chief AI & Model Orchestrator: Marcus Thorne; Chief Inclusion & Accessibility Officer: Noni / Amara Diop; Chief Learning Scientist: Nelly / Dr. Elena Rostova). Chief Systems Architect, the accountable role named by ADR-0013 to ADR-0017, had no row in the register at all and now reads VACANT. The remaining eleven roles have no named person, and a build cannot invent an appointment.",
       "unblock": "Founder & CEO appoints each vacant role in docs/OFFICERS.md; the gate re-reads the register and flips when no row reads VACANT."
     },
     {
@@ -132,19 +137,15 @@
       "status": "met",
       "evidence": [
         {
-          "kind": "file",
-          "target": "apps/cli/public/manifest.webmanifest",
-          "contains": [
-            "theme_color",
-            "background_color",
-            "display"
-          ]
+          "kind": "gate",
+          "target": "pwa-light-default"
         },
         {
           "kind": "tool",
           "target": "verify-contrast.mjs"
         }
-      ]
+      ],
+      "note": "The gate computes the theme the document actually renders from the document and the token stylesheet, then checks that the rendered canvas is the light canvas and that <meta name=\"color-scheme\"> and the manifest's theme_color and background_color all agree with it. Before this gate existed the row was proved only by the manifest and the contrast tool, neither of which proves what the page renders: the stylesheet's base :root block defined the DARK canvas and the light tokens were reachable only through an opt-in [data-theme=\"light\"] attribute the document never set, so the page rendered dark with light browser form controls painted over it. The row was MISLABELLED as met and has now been repaired."
     },
     {
       "id": "P5-1",

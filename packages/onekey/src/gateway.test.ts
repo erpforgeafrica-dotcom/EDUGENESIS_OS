@@ -12,6 +12,7 @@ import { createOneKeyGateway } from './gateway.js';
 import { createLocalEchoProvider } from './providers/local-echo.js';
 import { createTierZeroProvider } from './providers/tier-zero.js';
 import { createBlockingGuardian, createContext, createMockAdapter, createPolicy, createRequest, createSource } from './testing/support.js';
+import { createKillSwitch } from './kill-switch.js';
 import type { OneKeyGatewayImpl } from './gateway.js';
 
 /** The real interception point a learner's request runs. */
@@ -64,6 +65,44 @@ test('gateway: on provider failure it walks the fallback chain down the tiers', 
   assert.deepEqual(outcomes, ['0:no-offline-content', '1:failed', '2:served']);
 });
 
+test('gateway: a provider that answers with no text is a failure, not a lesson', async () => {
+  const g = gateway();
+  const empty = createMockAdapter({ id: 'p1', tier: 1, text: '' });
+  const healthy = createMockAdapter({ id: 'p2', tier: 2, modelId: 'm2' });
+  g.register(empty.adapter);
+  g.register(healthy.adapter);
+
+  const result = await g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext());
+
+  assert.equal(result.providerId, 'p2', 'an empty answer must never be delivered to the learner');
+  assert.ok(result.text.length > 0, 'the learner must receive real content');
+  assert.deepEqual(
+    g.attemptsFor('req-test').map((a) => `${a.tier}:${a.outcome}`),
+    ['0:no-offline-content', '1:failed', '2:served'],
+    'the empty answer must be recorded as a FAILED attempt, never as a served one',
+  );
+});
+
+test('gateway: a provider that reports no usage never throws an untyped error out of complete()', async () => {
+  const g = gateway();
+  const noUsage = createMockAdapter({ id: 'p1', tier: 1, usage: { inputTokens: 0, outputTokens: 0 } });
+  const healthy = createMockAdapter({ id: 'p2', tier: 2, modelId: 'm2' });
+  g.register(noUsage.adapter);
+  g.register(healthy.adapter);
+
+  // Before the fix the budget ledger refused a zero-unit charge with a plain
+  // Error, which escaped complete() and bypassed the whole fallback ladder.
+  const result = await g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext());
+
+  assert.equal(result.providerId, 'p2', 'the request must fall through to the next tier');
+  assert.ok(result.text.length > 0, 'the learner must receive real content');
+  assert.deepEqual(
+    g.attemptsFor('req-test').map((a) => `${a.tier}:${a.outcome}`),
+    ['0:no-offline-content', '1:failed', '2:served'],
+    'the uncostable answer must be recorded as a FAILED attempt',
+  );
+});
+
 test('gateway: with every paid tier failing, tier 0 serves the learner — after the models were really tried', async () => {
   const g = gateway();
   const t1 = createMockAdapter({ id: 'p1', tier: 1, failWith: new ProviderUnavailableError('p1', 'boom') });
@@ -110,6 +149,30 @@ test('gateway: with every paid tier failing and no offline tier, the failure is 
       assert.deepEqual(tiers, [0, 1, 2, 3, 4], 'the whole ladder must be recorded');
       return true;
     },
+  );
+});
+
+test('gateway: a kill reason that carries a credential is redacted everywhere it is recorded', async () => {
+  const ks = createKillSwitch();
+  // A synthetic, non-functional key shape. It is long enough for the
+  // redaction rule to match and short enough that the secrets scan does not
+  // treat the fixture as a real credential.
+  const secret = 'sk-LIVESECRET-do-not-use-000000';
+  ks.killSwitch('p1', `the provider key ${secret} was rotated during the incident`);
+  const g = createOneKeyGateway({ killSwitch: ks, policyVersion: 'policy-test-1' });
+  g.register(createMockAdapter({ id: 'p1', tier: 1 }).adapter);
+  g.register(createMockAdapter({ id: 'p2', tier: 2, modelId: 'm2' }).adapter);
+
+  const result = await g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext());
+
+  assert.ok(result.text.length > 0, 'the learner must still be served');
+  const trail = JSON.stringify(g.attemptsFor('req-test'));
+  assert.ok(!trail.includes(secret), 'the attempt trail must not carry the credential from the kill reason');
+  const delivered = JSON.stringify(result);
+  assert.ok(!delivered.includes(secret), 'the delivered result must not carry the credential from the kill reason');
+  assert.ok(
+    JSON.stringify(result.meta).includes('redacted') || !JSON.stringify(result.meta).includes('LIVESECRET'),
+    'the recorded policy trace must not contain the raw key fragment',
   );
 });
 

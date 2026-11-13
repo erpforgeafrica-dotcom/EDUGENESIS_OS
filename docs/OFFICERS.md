@@ -8,6 +8,7 @@ whether a person has been appointed to it.
 |---|---|---|---|---|
 | Founder & CEO | — | VACANT — Founder & CEO | Board of Trustees | — |
 | Chief AI & Model Orchestrator | Marcus Thorne | APPOINTED | Founder & CEO | 2026-11-12 |
+| Chief Systems Architect | — | VACANT — Founder & CEO | Founder & CEO | — |
 | Chief Inclusion & Accessibility Officer | Noni / Amara Diop | APPOINTED | Founder & CEO | 2026-11-12 |
 | Security Officer | — | VACANT — Founder & CEO | Founder & CEO | — |
 | Finance Lead | — | VACANT — Founder & CEO | Founder & CEO | — |

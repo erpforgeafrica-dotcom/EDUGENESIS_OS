@@ -27,6 +27,8 @@ import type { Gate, GateContext, GateResult } from '../types.js';
 import { consentGate } from './consent-gate.js';
 import { contractGate } from './contract-gate.js';
 import { failoverGate } from './failover-gate.js';
+import { pwaLightDefaultGate } from './pwa-light-default-gate.js';
+import { adrGovernanceGate } from './adr-governance-gate.js';
 
 const GATE_ID = 'exit-criteria';
 const REGISTER_FILE = 'docs/exit-criteria.json';
@@ -63,6 +65,8 @@ const GATE_RESOLVERS = {
   'accessibility-contract': contractGate,
   'consent-withdrawal': consentGate,
   'failover-drill': failoverGate,
+  'pwa-light-default': pwaLightDefaultGate,
+  'adr-governance': adrGovernanceGate,
 } as const;
 
 /** Parse and validate the register. Throws a TypeError on any defect. */

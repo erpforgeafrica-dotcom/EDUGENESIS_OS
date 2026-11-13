@@ -250,7 +250,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
             candidate.tier,
             candidate.providerId,
             'skipped',
-            `the provider was killed: ${killSwitch.reasonFor(candidate.providerId) ?? 'no reason recorded'}`,
+            `the provider was killed: ${redactSecret(killSwitch.reasonFor(candidate.providerId) ?? 'no reason recorded')}`,
           );
           continue;
         }
@@ -290,9 +290,29 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
           continue;
         }
 
+        // An answer with no text in it is a FAILED provider, not a lesson.
+        // Delivering it would hand the learner a blank screen and record the
+        // attempt as "served" — a failure wearing a success.
+        if (typeof result.text !== 'string' || result.text.trim().length === 0) {
+          breaker.recordFailure(candidate.providerId, 'the provider returned an empty answer');
+          record(candidate.tier, candidate.providerId, 'failed', 'the provider returned an empty answer');
+          continue;
+        }
+
         // Charge the ledger. A charge that cannot be made is a failure, not a
         // silent overspend: the request falls through to the next tier.
         const units = requiredUnits(ctx.budget, result.usage.inputTokens, result.usage.outputTokens);
+        if (units <= 0) {
+          // The provider reported no measurable usage, so the request cannot be
+          // costed. The budget refuses a zero-unit charge by design — a charge
+          // must be a positive number of units — and letting that refusal
+          // escape would throw an untyped error out of `complete()` and bypass
+          // the whole fallback ladder. It is a provider failure: record it and
+          // walk to the next tier.
+          breaker.recordFailure(candidate.providerId, 'the provider reported no usage');
+          record(candidate.tier, candidate.providerId, 'failed', 'the provider reported no usage');
+          continue;
+        }
         try {
           ctx.budget.consume(units, {
             providerId: result.providerId,
@@ -309,7 +329,17 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
             );
             continue;
           }
-          throw err;
+          // Any other refusal from the ledger is still "the charge could not
+          // be made". It must never escape `complete()`: an untyped error
+          // thrown here would bypass the fallback ladder and reach the
+          // learner as a raw failure.
+          record(
+            candidate.tier,
+            candidate.providerId,
+            'failed',
+            `the answer could not be charged: ${describeError(err)}`,
+          );
+          continue;
         }
 
         breaker.recordSuccess(candidate.providerId);

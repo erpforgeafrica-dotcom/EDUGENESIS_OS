@@ -18,6 +18,8 @@ import { assessDrill, assessReport } from './failover-gate.js';
 import { noProviderLeakGate } from './no-provider-leak-gate.js';
 import { hexTokenGate } from './hex-token-gate.js';
 import { contractsBaselineGate, parseAmendments } from './contracts-baseline-gate.js';
+import { pwaLightDefaultGate } from './pwa-light-default-gate.js';
+import { adrGovernanceGate } from './adr-governance-gate.js';
 
 /** Create a throwaway project root with one file at `relPath`. */
 function treeWith(relPath: string, content: string): string {
@@ -59,6 +61,194 @@ function treeWithTokens(relPath: string, content: string): string {
   return root;
 }
 
+/**
+ * A throwaway tree that renders a PWA, so the theme gate has something real to
+ * measure. The canvas colours are the fragment-built literals declared above,
+ * so this file never contains a raw colour literal of its own.
+ */
+function treeWithPwa(opts: {
+  dataTheme?: string | null;
+  colorScheme: string;
+  manifestColour: string;
+}): string {
+  const root = mkdtempSync(join(tmpdir(), 'edugenesis-pwa-'));
+  const tokenPath = join(root, 'assets', 'edugenesis-tokens.css');
+  mkdirSync(join(tokenPath, '..'), { recursive: true });
+  writeFileSync(
+    tokenPath,
+    `:root {\n  --eg-canvas: ${COLOUR_SOURCE};\n  --eg-canvas-light: ${COLOUR_TOKEN};\n}\n` +
+      `[data-theme="light"] {\n  --eg-canvas: var(--eg-canvas-light);\n}\n`,
+    'utf8',
+  );
+  const htmlPath = join(root, 'apps', 'cli', 'public', 'index.html');
+  mkdirSync(join(htmlPath, '..'), { recursive: true });
+  const themeAttr = opts.dataTheme ? ` data-theme="${opts.dataTheme}"` : '';
+  writeFileSync(
+    htmlPath,
+    `<!doctype html>\n<html lang="en"${themeAttr}>\n<head>\n` +
+      `<meta name="color-scheme" content="${opts.colorScheme}" />\n</head>\n<body></body>\n</html>\n`,
+    'utf8',
+  );
+  const manifestPath = join(root, 'apps', 'cli', 'public', 'manifest.webmanifest');
+  writeFileSync(
+    manifestPath,
+    `${JSON.stringify({ theme_color: opts.manifestColour, background_color: opts.manifestColour }, null, 2)}\n`,
+    'utf8',
+  );
+  return root;
+}
+
+test('theme gate: a PWA that renders the dark theme by default FAILS', async () => {
+  const root = treeWithPwa({ dataTheme: null, colorScheme: 'light', manifestColour: COLOUR_TOKEN });
+  try {
+    const result = await pwaLightDefaultGate.run({ root });
+    assert.equal(result.passed, false, 'a PWA that renders dark by default must fail the gate');
+    assert.ok(
+      result.evidence.some((line) => line.includes('renders the DARK canvas')),
+      'the failure must name the defect',
+    );
+  } finally {
+    removeTree(root);
+  }
+});
+
+test('theme gate: a color-scheme that disagrees with the rendered theme FAILS', async () => {
+  const root = treeWithPwa({ dataTheme: 'light', colorScheme: 'dark', manifestColour: COLOUR_TOKEN });
+  try {
+    const result = await pwaLightDefaultGate.run({ root });
+    assert.equal(result.passed, false, 'a mismatched color-scheme must fail the gate');
+    assert.ok(
+      result.evidence.some((line) => line.includes('form controls')),
+      'the failure must name the mismatched declaration',
+    );
+  } finally {
+    removeTree(root);
+  }
+});
+
+test('theme gate: a manifest colour that drifts from the rendered canvas FAILS', async () => {
+  const root = treeWithPwa({ dataTheme: 'light', colorScheme: 'light', manifestColour: COLOUR_FOREIGN });
+  try {
+    const result = await pwaLightDefaultGate.run({ root });
+    assert.equal(result.passed, false, 'a manifest colour that drifts from the canvas must fail the gate');
+    assert.ok(
+      result.evidence.some((line) => line.includes('manifest')),
+      'the failure must name the manifest',
+    );
+  } finally {
+    removeTree(root);
+  }
+});
+
+test('theme gate: a consistent light PWA PASSES', async () => {
+  const root = treeWithPwa({ dataTheme: 'light', colorScheme: 'light', manifestColour: COLOUR_TOKEN });
+  try {
+    const result = await pwaLightDefaultGate.run({ root });
+    assert.equal(result.passed, true, result.detail);
+  } finally {
+    removeTree(root);
+  }
+});
+
+/**
+ * A throwaway tree with an ADR index, an ADR record and an appointment
+ * register, so the ADR-governance gate has something real to compare.
+ */
+function treeWithAdrs(opts: { indexOwner: string; recordOwner: string; recordStatus: string }): string {
+  const root = mkdtempSync(join(tmpdir(), 'edugenesis-adr-'));
+  const indexPath = join(root, 'docs', 'adr', 'README.md');
+  mkdirSync(join(indexPath, '..'), { recursive: true });
+  writeFileSync(
+    indexPath,
+    '| ADR | Title | Status | Owner | Record |\n|---|---|---|---|---|\n' +
+      `| [ADR-0001](ADR-0001-example.md) | An example decision | Accepted | ${opts.indexOwner} | Proposal |\n`,
+    'utf8',
+  );
+  const recordPath = join(root, 'docs', 'adr', 'ADR-0001-example.md');
+  writeFileSync(
+    recordPath,
+    `# ADR-0001 — An example decision\n\n- **Status:** ${opts.recordStatus}\n- **Owner:** ${opts.recordOwner}\n`,
+    'utf8',
+  );
+  const officersPath = join(root, 'docs', 'OFFICERS.md');
+  mkdirSync(join(officersPath, '..'), { recursive: true });
+  writeFileSync(
+    officersPath,
+    '| Role | Appointed person | Status |\n|---|---|---|\n' +
+      '| Chief AI & Model Orchestrator | A Person | APPOINTED |\n' +
+      '| Security Officer | not appointed | VACANT |\n',
+    'utf8',
+  );
+  return root;
+}
+
+test('ADR gate: an index owner that contradicts the ADR record FAILS', async () => {
+  const root = treeWithAdrs({
+    indexOwner: 'Security Officer',
+    recordOwner: 'Chief AI & Model Orchestrator',
+    recordStatus: 'Accepted',
+  });
+  try {
+    const result = await adrGovernanceGate.run({ root });
+    assert.equal(result.passed, false, 'an index that contradicts the record must fail the gate');
+    assert.ok(
+      result.evidence.some((line) => line.includes('the index names owner')),
+      'the failure must name the contradiction',
+    );
+  } finally {
+    removeTree(root);
+  }
+});
+
+test('ADR gate: an owner that is not a registered role FAILS', async () => {
+  const root = treeWithAdrs({
+    indexOwner: 'Chief Systems Architect',
+    recordOwner: 'Chief Systems Architect',
+    recordStatus: 'Accepted',
+  });
+  try {
+    const result = await adrGovernanceGate.run({ root });
+    assert.equal(result.passed, false, 'an unregistered owner role must fail the gate');
+    assert.ok(
+      result.evidence.some((line) => line.includes('not a role in the appointment register')),
+      'the failure must name the unregistered role',
+    );
+  } finally {
+    removeTree(root);
+  }
+});
+
+test('ADR gate: a record whose status contradicts the index FAILS', async () => {
+  const root = treeWithAdrs({
+    indexOwner: 'Chief AI & Model Orchestrator',
+    recordOwner: 'Chief AI & Model Orchestrator',
+    recordStatus: 'Superseded by ADR-0002',
+  });
+  try {
+    const result = await adrGovernanceGate.run({ root });
+    assert.equal(result.passed, false, 'a status contradiction must fail the gate');
+    assert.ok(
+      result.evidence.some((line) => line.includes('the index says status')),
+      'the failure must name the status contradiction',
+    );
+  } finally {
+    removeTree(root);
+  }
+});
+
+test('ADR gate: a consistent index, record and register PASSES', async () => {
+  const root = treeWithAdrs({
+    indexOwner: 'Chief AI & Model Orchestrator',
+    recordOwner: 'Chief AI & Model Orchestrator',
+    recordStatus: 'Accepted',
+  });
+  try {
+    const result = await adrGovernanceGate.run({ root });
+    assert.equal(result.passed, true, result.detail);
+  } finally {
+    removeTree(root);
+  }
+});
 /** Run a git command in a throwaway repository. */
 function gitIn(root: string, args: readonly string[]): string {
   const result = spawnSync('git', ['-C', root, ...args], {
