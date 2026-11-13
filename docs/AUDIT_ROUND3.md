@@ -13,9 +13,12 @@ it does — and does the running system actually do the thing the proposal sells
 
 Eight surfaces were audited in parallel by independent reviewers, each on a frozen snapshot
 (`eg-audit-snapshot`, 180 files) so the findings could not drift while they were being read.
-Three swarm surfaces completed, one was completed by Solo directly, and **four were lost to
-infrastructure restarts** (see §6 — this is a disclosed gap in the evidence, not a clean bill
-of health).
+**Five surfaces completed** — F1 traceability, F3 OneKey, F5 ledger, F8 security, and F0,
+Solo's own first-hand review of the live tree — and **four did not**: F2 accessibility, F4
+identity, F6 verification-and-tools and F7 runtime reality. The first wave was lost to
+repeated OpenCode server restarts; the re-dispatched wave was then stopped by the account's
+**free-usage ceiling** on the reviewer models. This is a disclosed gap in the evidence, not a
+clean bill of health.
 
 | Surface | Scope | Result |
 |---|---|---|
@@ -104,6 +107,29 @@ a live canary, `npm run build` exit 0, `npm run test:only` **425/425 META-GATE P
 
 These are recorded, not hidden. Full detail in `docs/GAP-REGISTER.md`.
 
+### 4.1 From the security surface (F8) — the sharpest findings of the audit
+
+The security surface was reviewed last, and it found real gaps. Three of them are
+**corrections to repairs this session already made** — recorded here rather than buried,
+because a fix that only moves the problem is not a fix:
+
+| # | Severity | Finding | Where |
+|---|---|---|---|
+| S1 | major | **The consent service performs no authorisation.** `grant()` and `withdraw()` accept any `learnerId`, any scope, and a caller-supplied timestamp and actor. Nothing checks that the caller may act for that learner | `packages/identity/src/consent.ts:252` |
+| S2 | major | **A guardian consent token is minted against ANY existing principal and the guardian's role is never checked**, so a learner account can act as the guardian | `packages/identity/src/enrolment.ts:258` |
+| S3 | major | **The age band is a caller-asserted attribute that the ABAC policy trusts**, and enrolment never calls the age-assurance service | `packages/identity/src/enrolment.ts:361` |
+| S4 | major | **The PII guard misses composite and homoglyph key names**, so a learner's name can be written to the permanent public ledger | `packages/ledger/src/pii-guard.ts:52` |
+| S5 | major | **`assertSafeBaseUrl` constrains the scheme but not the destination** — any HTTPS host, including a link-local metadata service, is accepted, so a tampered base URL still exfiltrates the bearer credential. *This narrows R13; it does not close it* | `packages/onekey/src/providers/qwen-adapter.ts:144` |
+| S6 | major | **The egress boundary lives in one adapter, not in the gateway** — every other registered adapter receives the raw request, nested context included. *This narrows R8; it does not close it* | `packages/onekey/src/providers/qwen-adapter.ts:230` |
+| S7 | major | **The Settings API has no CSRF/Origin protection**, so any web page the operator visits can rewrite the local settings file | `apps/cli/src/serve.ts:202` |
+| S8 | minor | **The secrets scanner never scans git history and skips the artifacts directory**, and the published checksum manifest carries a digest of the plaintext API-key file | `tools/secrets-scan.mjs:121` |
+| S9 | minor | **`projectGroundedContext`'s locator check misses drive-relative and scheme-only path forms** | `packages/onekey/src/egress.ts:208` |
+| S10 | minor | **The kill switch is process-local** — a restart resurrects a provider killed for a safety, residency or licence failure | `packages/onekey/src/kill-switch.ts:31` |
+| S11 | minor | **The hosted settings server is unauthenticated and internet-reachable**, disclosing the API-key names and lengths and absolute filesystem paths | `apps/cli/src/serve.ts:92` |
+| S12 | major | **No store is durable** — the consent, enrolment and ledger audit trails are in-memory arrays, so a restart erases the evidence and no third party can verify it | `packages/identity/src/consent.ts:164` |
+
+### 4.2 From the OneKey surface
+
 **Blockers still open (all in `packages/onekey`, all closable in code):**
 
 - **No adapter is required to run the conformance suite.** The suite exists and the
@@ -154,12 +180,16 @@ These are not code defects and cannot be closed by a build:
 ## 6. What is NOT verified
 
 - **Four of the eight audit surfaces never completed** (F2 accessibility, F4 identity, F6
-  verification-and-tools, F7 runtime reality, F8 security). Their reviewer sessions were
-  killed by repeated OpenCode server restarts during the audit, not by a defect in the
-  build. **The accessibility, identity, gate-soundness, runtime and security surfaces are
-  therefore NOT audited to completion**, and this document must not be read as clearing them.
-- The 5 lost surfaces were partially covered by the repairs above, which were first-hand
+  verification-and-tools, F7 runtime reality). The first wave of reviewers was killed by
+  repeated OpenCode server restarts; the re-dispatched wave was stopped by the account's
+  **free-usage ceiling** on the reviewer models, not by anything in the build. **The
+  accessibility, identity, gate-soundness and runtime surfaces are therefore NOT audited to
+  completion**, and this document must not be read as clearing them. The security surface
+  (F8) was the last to run and produced 12 findings (§4.1) before the same ceiling stopped it.
+- The 4 lost surfaces were partially covered by the repairs above, which were first-hand
   verified against the live tree — but coverage of those surfaces is partial, not complete.
+- **The security findings of §4.1 are themselves a partial view.** F8 was stopped mid-surface
+  by the usage ceiling, so the security surface was reviewed less deeply than the others.
 - No deployment was performed. No Render workspace was named in the conversation, so no
   state-changing Render command was run.
 - No vendor SLA, price, quota or certification is asserted anywhere in this audit.

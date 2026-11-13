@@ -1,9 +1,9 @@
 # EduGenesis OS — Forensic Gap Register
 
-- Registers merged: **4/8** — MISSING: F2, F4, F6, F7, F8
-- Raw findings: 73 → merged: 73 (deduped by file+title)
-- Severity: **10 blocker / 31 major / 32 minor**
-- Proven: 73 · Unverified: 0 · Owner-blocked: 0
+- Registers merged: **5/8** — MISSING: F2, F4, F6, F7
+- Raw findings: 85 → merged: 85 (deduped by file+title)
+- Severity: **10 blocker / 39 major / 36 minor**
+- Proven: 85 · Unverified: 0 · Owner-blocked: 0
 
 | # | Sev | Surface | File:Line | Finding | Corroborated by |
 |---|---|---|---|---|---|
@@ -36,50 +36,62 @@
 | 27 | MAJOR | F3 | packages/onekey/src/providers/tier-zero.ts:58 | The Tier 0 learner message does not satisfy §6.6 step 6 and frames Tier 0 as a degraded fallback | — |
 | 28 | MAJOR | F5 | packages/ledger/src/ledger-store.ts:256 | Chain integrity is not enforced on read/write; tampering only detected when caller explicitly verifies | — |
 | 29 | MAJOR | F5 | packages/ledger/src/sponsor-report.ts:209 | Sponsor report silently defaults missing/mismatched producer keys to zero/false, hiding contract drift | — |
-| 30 | MAJOR | F3 | packages/onekey/src/gateway.ts:508 | meta.policyReason is not redacted: a raw key in a kill reason reaches the delivered result | — |
-| 31 | MAJOR | F3 | packages/onekey/src/providers/qwen-adapter.ts:236 | §6.6 step 2 (revoke/rotate the credential on 401/403, never retry it) is not implemented | — |
-| 32 | MAJOR | F5 | packages/ledger/src/ledger-store.ts:163 | Negative monetary values can be appended for money-key fields; append path does not enforce non-negative amounts | — |
-| 33 | MAJOR | F0 | artifacts/attestation.json:31 | The committed attestation names a different commit than the tree it ships with | — |
-| 34 | MAJOR | F1 | .github/workflows/ci.yml:24 | P0-5 recorded met, but there is no accessibility CI job and no red build | — |
-| 35 | MAJOR | F1 | docs/adr/README.md:30 | ADR owner column contradicts the ADR prose for 11 of 16 records; P0-2's check cannot detect it | — |
-| 36 | MAJOR | F1 | docs/exit-criteria.json:75 | P1-1's register evidence cites identity.test.js, which contains no enrolment test | — |
-| 37 | MAJOR | F1 | packages/onekey/src/registry.ts:14 | Phase 5 work items unimplemented: 13-item model card + lifecycle, signed Tier 0 bundle pipeline, adapter regions allowlist, Tier 2 adapter | — |
-| 38 | MAJOR | F3 | packages/onekey/src/gateway.ts:456 | The nine-element compliance emission is computed and then thrown away | — |
-| 39 | MAJOR | F5 | packages/ledger/src/ledger-store.ts:216 | Ledger is in-memory only, not SQLite/append-only durable store as hunted; no WAL/journal, crash/truncation semantics absent | — |
-| 40 | MAJOR | F1 | docs/adr/ADR-0013-typescript-on-node-with-node-sqlite.md:36 | ADR-0013 records a repository interface + node:sqlite adapter; neither exists in the code | — |
-| 41 | MAJOR | F5 | packages/ledger/src/ledger-store.ts:221 | No concurrency serialization or seq uniqueness enforcement; concurrent appends can fork the hash chain | — |
-| 42 | MINOR | F0 | packages/identity/src/enrolment.ts:299 | Token claim matching compares scopes by position, so a client that reorders scopes is refused | — |
-| 43 | MINOR | F1 | packages/contracts/src/index.ts:116 | The nine-element emission's concrete fields differ from Doc 7 5.1/5.2 (reading_level nesting, sensory_profile and interaction_mode shape) | — |
-| 44 | MINOR | F1 | tools/verify-coverage.mjs:116 | P1-3's coverage gate enumerates six hard-coded gateway paths, so a new learner-facing path would not be counted | — |
-| 45 | MINOR | F3 | packages/onekey/src/gateway.ts:40 | The ladder is six rungs, not five, and the package's own docstring says five | — |
-| 46 | MINOR | F3 | packages/onekey/src/index.ts:29 | The package's public surface re-exports the concrete Qwen adapter, and the registry guard exempts exactly the file that does it | — |
-| 47 | MINOR | F3 | packages/onekey/src/policy.ts:200 | Locale coverage is only a tie-break, never an eligibility rule - and Tier 0 treats it as a hard filter | — |
-| 48 | MINOR | F3 | packages/onekey/src/providers/local-echo.ts:81 | The local-echo input-token estimate ignores the request context, under-charging the ledger | — |
-| 49 | MINOR | F3 | packages/onekey/src/redact.ts:35 | Redaction is string-only and is skipped on some of the same package's error paths | — |
-| 50 | MINOR | F3 | packages/onekey/src/testing/support.ts:137 | Dead options and exports: refuseOverBudget, timeoutMs, GatewayOptions.policyEngine, tryProjectEgressPayload | — |
-| 51 | MINOR | F5 | packages/ledger/src/ledger-store.test.ts:270 | Test suite does not cover several adversarial/contract-risk cases (negative money at append, unicode-homoglyph/ZWSP field evasions beyond normalization assumptions, sponsor-report key drift failures) | — |
-| 52 | MINOR | F5 | packages/ledger/src/pii-guard.ts:247 | PII guard value scanning cannot detect names/free-text PII under innocuous keys or obfuscated/non-pattern values | — |
-| 53 | MINOR | F5 | packages/ledger/src/private-store.ts:149 | Private-store separation and privacy are enforced by in-memory convention/interface, not durable isolation/encryption controls | — |
-| 54 | MINOR | F5 | packages/ledger/src/sponsor-report.ts:255 | Sponsor report does not fail when ledger chain is broken; it publishes a report with chainOk=false | — |
-| 55 | MINOR | F1 | .github/workflows/ci.yml:24 | CI does not implement the 9.2 GL-01..GL-08 pipeline the Phase 0 work item promises | — |
-| 56 | MINOR | F3 | packages/onekey/src/gateway.ts:168 | The gateway can be constructed with a policy engine that holds a different breaker and kill switch than the gateway's own | — |
-| 57 | MINOR | F3 | packages/onekey/src/providers/qwen-adapter.ts:315 | Provider statusText is returned to the audit trail without redaction | — |
-| 58 | MINOR | F5 | packages/ledger/src/reinvestment.ts:141 | Double-count detection for semantically duplicated funding/allocation records is absent; engine trusts ledger entries as unique facts | — |
-| 59 | MINOR | F0 | packages/identity/src/enrolment.ts:359 | The enrolmentMethod attribute is written and never read | — |
-| 60 | MINOR | F1 | docs/exit-criteria.json:25 | P0-2's evidence is a string-contains check that cannot detect a missing owner or an 'unassigned' status | — |
-| 61 | MINOR | F3 | packages/onekey/src/gateway.ts:591 | The ARC-I4 uncertainty note is unreachable: no adapter in the package reports confidence | — |
-| 62 | MINOR | F5 | packages/ledger/src/ledger-store.ts:256 | `all()` exposes live mutable entry objects, permitting in-process mutation/deletion outside append-only API semantics | — |
-| 63 | MINOR | F3 | packages/onekey/src/circuit-breaker.ts:75 | The half-open circuit does not admit exactly one probe, and the promotion happens on read | — |
-| 64 | MINOR | F3 | packages/onekey/src/failover.ts:57 | The failover drill accepts an injected gateway while claiming 'The drill is offline' | — |
-| 65 | MINOR | F3 | packages/onekey/src/gateway.ts:170 | The per-request attempt trail is never evicted | — |
-| 66 | MINOR | F3 | packages/onekey/src/providers/qwen-adapter.ts:242 | The adapter has no retry, yet its 429 message advertises a retry-after hint that is never acted on | — |
-| 67 | MINOR | F1 | README.md:111 | Deployment story in the docs is incomplete: env vars, PORT, health check and rollback are undocumented in the README | — |
-| 68 | MINOR | F3 | packages/onekey/src/gateway.ts:575 | The emitted risk tier is hardcoded to 1 regardless of the request's safety tier | — |
-| 69 | MINOR | F0 | packages/identity/src/enrolment.ts:200 | A guardian consent token cannot be revoked before it expires | — |
-| 70 | MINOR | F3 | packages/onekey/src/providers/qwen-adapter.ts:276 | latencyMs is hardcoded to 0 in the network adapter | — |
-| 71 | MINOR | F3 | packages/onekey/src/registry.ts:65 | The registry snapshots capabilities at registration and the policy engine enforces the stale snapshot | — |
-| 72 | MINOR | F5 | packages/ledger/src/ledger-store.ts:200 | Payload timestamps accepted as any parseable date string, not strictly normalized ISO-8601; canonical preimage hashes the provided string form | — |
-| 73 | MINOR | F5 | packages/ledger/src/reinvestment.ts:117 | 60% reinvestment excludes out-of-period allocations from compliance math, which can misstate compliance for period funding | — |
+| 30 | MAJOR | F8 | packages/identity/src/consent.ts:164 | No store is durable: the consent, enrolment and ledger audit trails are in-memory arrays, so a restart erases the evidence and no third party can verify it | — |
+| 31 | MAJOR | F8 | packages/identity/src/consent.ts:252 | Consent service performs no authorization: grant()/withdraw() accept any learnerId, any scope, and a caller-supplied timestamp and actor | — |
+| 32 | MAJOR | F8 | packages/identity/src/enrolment.ts:258 | Guardian consent token is minted against ANY existing principal; the guardian's role is never checked, so a learner account can act as the guardian | — |
+| 33 | MAJOR | F8 | packages/identity/src/enrolment.ts:361 | Age band is a caller-asserted attribute that the ABAC policy trusts; enrolment never calls age assurance | — |
+| 34 | MAJOR | F8 | packages/ledger/src/pii-guard.ts:52 | PII guard misses composite and homoglyph key names, so a learner's name can be written to the permanent public ledger | — |
+| 35 | MAJOR | F8 | packages/onekey/src/providers/qwen-adapter.ts:144 | assertSafeBaseUrl constrains the scheme but not the destination: any HTTPS host (including link-local metadata) is accepted, so a tampered base URL exfiltrates the bearer credential | — |
+| 36 | MAJOR | F3 | packages/onekey/src/gateway.ts:508 | meta.policyReason is not redacted: a raw key in a kill reason reaches the delivered result | — |
+| 37 | MAJOR | F3 | packages/onekey/src/providers/qwen-adapter.ts:236 | §6.6 step 2 (revoke/rotate the credential on 401/403, never retry it) is not implemented | — |
+| 38 | MAJOR | F5 | packages/ledger/src/ledger-store.ts:163 | Negative monetary values can be appended for money-key fields; append path does not enforce non-negative amounts | — |
+| 39 | MAJOR | F8 | apps/cli/src/serve.ts:202 | Settings API has no CSRF/Origin protection: any web page the operator visits can rewrite the local settings file | — |
+| 40 | MAJOR | F0 | artifacts/attestation.json:31 | The committed attestation names a different commit than the tree it ships with | — |
+| 41 | MAJOR | F1 | .github/workflows/ci.yml:24 | P0-5 recorded met, but there is no accessibility CI job and no red build | — |
+| 42 | MAJOR | F1 | docs/adr/README.md:30 | ADR owner column contradicts the ADR prose for 11 of 16 records; P0-2's check cannot detect it | — |
+| 43 | MAJOR | F1 | docs/exit-criteria.json:75 | P1-1's register evidence cites identity.test.js, which contains no enrolment test | — |
+| 44 | MAJOR | F1 | packages/onekey/src/registry.ts:14 | Phase 5 work items unimplemented: 13-item model card + lifecycle, signed Tier 0 bundle pipeline, adapter regions allowlist, Tier 2 adapter | — |
+| 45 | MAJOR | F3 | packages/onekey/src/gateway.ts:456 | The nine-element compliance emission is computed and then thrown away | — |
+| 46 | MAJOR | F8 | packages/onekey/src/providers/qwen-adapter.ts:230 | The egress boundary lives in one adapter, not in the gateway: every other registered adapter receives the raw request including nested context | — |
+| 47 | MAJOR | F5 | packages/ledger/src/ledger-store.ts:216 | Ledger is in-memory only, not SQLite/append-only durable store as hunted; no WAL/journal, crash/truncation semantics absent | — |
+| 48 | MAJOR | F1 | docs/adr/ADR-0013-typescript-on-node-with-node-sqlite.md:36 | ADR-0013 records a repository interface + node:sqlite adapter; neither exists in the code | — |
+| 49 | MAJOR | F5 | packages/ledger/src/ledger-store.ts:221 | No concurrency serialization or seq uniqueness enforcement; concurrent appends can fork the hash chain | — |
+| 50 | MINOR | F0 | packages/identity/src/enrolment.ts:299 | Token claim matching compares scopes by position, so a client that reorders scopes is refused | — |
+| 51 | MINOR | F1 | packages/contracts/src/index.ts:116 | The nine-element emission's concrete fields differ from Doc 7 5.1/5.2 (reading_level nesting, sensory_profile and interaction_mode shape) | — |
+| 52 | MINOR | F1 | tools/verify-coverage.mjs:116 | P1-3's coverage gate enumerates six hard-coded gateway paths, so a new learner-facing path would not be counted | — |
+| 53 | MINOR | F3 | packages/onekey/src/gateway.ts:40 | The ladder is six rungs, not five, and the package's own docstring says five | — |
+| 54 | MINOR | F3 | packages/onekey/src/index.ts:29 | The package's public surface re-exports the concrete Qwen adapter, and the registry guard exempts exactly the file that does it | — |
+| 55 | MINOR | F3 | packages/onekey/src/policy.ts:200 | Locale coverage is only a tie-break, never an eligibility rule - and Tier 0 treats it as a hard filter | — |
+| 56 | MINOR | F3 | packages/onekey/src/providers/local-echo.ts:81 | The local-echo input-token estimate ignores the request context, under-charging the ledger | — |
+| 57 | MINOR | F3 | packages/onekey/src/redact.ts:35 | Redaction is string-only and is skipped on some of the same package's error paths | — |
+| 58 | MINOR | F3 | packages/onekey/src/testing/support.ts:137 | Dead options and exports: refuseOverBudget, timeoutMs, GatewayOptions.policyEngine, tryProjectEgressPayload | — |
+| 59 | MINOR | F5 | packages/ledger/src/ledger-store.test.ts:270 | Test suite does not cover several adversarial/contract-risk cases (negative money at append, unicode-homoglyph/ZWSP field evasions beyond normalization assumptions, sponsor-report key drift failures) | — |
+| 60 | MINOR | F5 | packages/ledger/src/pii-guard.ts:247 | PII guard value scanning cannot detect names/free-text PII under innocuous keys or obfuscated/non-pattern values | — |
+| 61 | MINOR | F5 | packages/ledger/src/private-store.ts:149 | Private-store separation and privacy are enforced by in-memory convention/interface, not durable isolation/encryption controls | — |
+| 62 | MINOR | F5 | packages/ledger/src/sponsor-report.ts:255 | Sponsor report does not fail when ledger chain is broken; it publishes a report with chainOk=false | — |
+| 63 | MINOR | F8 | apps/cli/src/serve.ts:92 | The hosted settings server is unauthenticated and internet-reachable, disclosing the API-key names and lengths and absolute filesystem paths | — |
+| 64 | MINOR | F8 | packages/onekey/src/kill-switch.ts:31 | The kill switch is process-local: a restart resurrects a provider killed for a safety, residency or licence failure | — |
+| 65 | MINOR | F1 | .github/workflows/ci.yml:24 | CI does not implement the 9.2 GL-01..GL-08 pipeline the Phase 0 work item promises | — |
+| 66 | MINOR | F3 | packages/onekey/src/gateway.ts:168 | The gateway can be constructed with a policy engine that holds a different breaker and kill switch than the gateway's own | — |
+| 67 | MINOR | F3 | packages/onekey/src/providers/qwen-adapter.ts:315 | Provider statusText is returned to the audit trail without redaction | — |
+| 68 | MINOR | F5 | packages/ledger/src/reinvestment.ts:141 | Double-count detection for semantically duplicated funding/allocation records is absent; engine trusts ledger entries as unique facts | — |
+| 69 | MINOR | F8 | packages/onekey/src/egress.ts:208 | projectGroundedContext's locator check misses drive-relative and scheme-only path forms | — |
+| 70 | MINOR | F8 | tools/secrets-scan.mjs:121 | The secrets scanner never scans git history and skips the artifacts directory, and the published checksum manifest carries a digest of the plaintext API-key file | — |
+| 71 | MINOR | F0 | packages/identity/src/enrolment.ts:359 | The enrolmentMethod attribute is written and never read | — |
+| 72 | MINOR | F1 | docs/exit-criteria.json:25 | P0-2's evidence is a string-contains check that cannot detect a missing owner or an 'unassigned' status | — |
+| 73 | MINOR | F3 | packages/onekey/src/gateway.ts:591 | The ARC-I4 uncertainty note is unreachable: no adapter in the package reports confidence | — |
+| 74 | MINOR | F5 | packages/ledger/src/ledger-store.ts:256 | `all()` exposes live mutable entry objects, permitting in-process mutation/deletion outside append-only API semantics | — |
+| 75 | MINOR | F3 | packages/onekey/src/circuit-breaker.ts:75 | The half-open circuit does not admit exactly one probe, and the promotion happens on read | — |
+| 76 | MINOR | F3 | packages/onekey/src/failover.ts:57 | The failover drill accepts an injected gateway while claiming 'The drill is offline' | — |
+| 77 | MINOR | F3 | packages/onekey/src/gateway.ts:170 | The per-request attempt trail is never evicted | — |
+| 78 | MINOR | F3 | packages/onekey/src/providers/qwen-adapter.ts:242 | The adapter has no retry, yet its 429 message advertises a retry-after hint that is never acted on | — |
+| 79 | MINOR | F1 | README.md:111 | Deployment story in the docs is incomplete: env vars, PORT, health check and rollback are undocumented in the README | — |
+| 80 | MINOR | F3 | packages/onekey/src/gateway.ts:575 | The emitted risk tier is hardcoded to 1 regardless of the request's safety tier | — |
+| 81 | MINOR | F0 | packages/identity/src/enrolment.ts:200 | A guardian consent token cannot be revoked before it expires | — |
+| 82 | MINOR | F3 | packages/onekey/src/providers/qwen-adapter.ts:276 | latencyMs is hardcoded to 0 in the network adapter | — |
+| 83 | MINOR | F3 | packages/onekey/src/registry.ts:65 | The registry snapshots capabilities at registration and the policy engine enforces the stale snapshot | — |
+| 84 | MINOR | F5 | packages/ledger/src/ledger-store.ts:200 | Payload timestamps accepted as any parseable date string, not strictly normalized ISO-8601; canonical preimage hashes the provided string form | — |
+| 85 | MINOR | F5 | packages/ledger/src/reinvestment.ts:117 | 60% reinvestment excludes out-of-period allocations from compliance math, which can misstate compliance for period funding | — |
 
 ## Surface summaries
 
@@ -94,3 +106,6 @@ The OneKey package is a real, thoughtfully commented implementation - the fallba
 
 ### F5
 packages/ledger implements an in-memory hash-chained event log with deterministic hashing, PII name/value guards, private-store redaction, 60% reinvestment math, and sponsor aggregation, but not a durable SQLite-backed ledger. Core integrity controls are partial: append-only is API-level only (mutable `all()` exposure), verification is opt-in, and there is no persistence, WAL, or concurrency serialization. Money handling is mostly integer-safe in computations/reads yet append accepts negative money-key values and sponsor metrics silently default on key drift. No-PII and 60% claims are bounded by implementation semantics (pattern-based PII scan, timestamp-window attribution, no semantic dedupe) rather than absolute guarantees.
+
+### F8
+IN PROGRESS - probes pending.

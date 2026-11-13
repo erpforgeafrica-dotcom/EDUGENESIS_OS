@@ -3,24 +3,24 @@
     "F0",
     "F1",
     "F3",
-    "F5"
+    "F5",
+    "F8"
   ],
-  "surfaces_loaded": 4,
+  "surfaces_loaded": 5,
   "surfaces_missing": [
     "F2",
     "F4",
     "F6",
-    "F7",
-    "F8"
+    "F7"
   ],
-  "raw_finding_count": 73,
-  "merged_finding_count": 73,
+  "raw_finding_count": 85,
+  "merged_finding_count": 85,
   "counts": {
     "blocker": 10,
-    "major": 31,
-    "minor": 32
+    "major": 39,
+    "minor": 36
   },
-  "proven_count": 73,
+  "proven_count": 85,
   "unverified_count": 0,
   "owner_blocked_count": 0,
   "findings": [
@@ -605,6 +605,126 @@
       ]
     },
     {
+      "surface": "F8",
+      "id": "F8-04",
+      "severity": "major",
+      "title": "No store is durable: the consent, enrolment and ledger audit trails are in-memory arrays, so a restart erases the evidence and no third party can verify it",
+      "file": "packages/identity/src/consent.ts",
+      "line": 164,
+      "intent": "Brief item (l) and the exit criterion in enrolment.ts: 'the path taken is written to the enrolment audit log'. Doc 1 v1.2 governance requires auditable safeguarding records.",
+      "reality": "consent.ts keeps `auditByLearner: Map<string, ConsentAuditEvent[]>` in memory; enrolment.ts keeps `const audit: EnrolmentAuditEvent[] = []`; ledger-store.ts keeps `const entries: LedgerEntry[] = []`. None is hash-chained (the ledger's hash chain covers entry payloads, not the consent/enrolment logs), none is persisted, none is signed, and there is no exported verification routine for the consent or enrolment trails. The live tree's ADR-0017 confirms the deferral of the sqlite adapter.",
+      "evidence": "consent.ts:164-165 `const stateByLearner = new Map<...>(); const auditByLearner = new Map<string, ConsentAuditEvent[]>();`  /  enrolment.ts:226 `const audit: EnrolmentAuditEvent[] = [];`  /  ledger-store.ts:219 `const entries: LedgerEntry[] = [];`",
+      "failure_mode": "A safeguarding incident is investigated after a restart: the consent withdrawal, the guardian consent and the enrolment path are gone. An insider who can restart the process can erase evidence with no residue. The trail cannot be handed to an auditor for independent verification because there is nothing to hand over.",
+      "fix": "Persist the consent and enrolment audit trails to the (deferred) durable store with a per-record hash chain and an export/verify function; until then, state plainly in the exit criteria that the audit trail is process-local and NOT independently verifiable.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-04"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-03",
+      "severity": "major",
+      "title": "Consent service performs no authorization: grant()/withdraw() accept any learnerId, any scope, and a caller-supplied timestamp and actor",
+      "file": "packages/identity/src/consent.ts",
+      "line": 252,
+      "intent": "Doc 2 §4.2: consent governs who may see a learner. The audit event carries an 'actor' of learner|guardian|system and a timestamp 'at', which implies the actor is the real actor.",
+      "reality": "`grant(grant)` records actor='guardian' purely because `grant.guardianId` is truthy, and 'learner' otherwise. There is no check that the caller is that learner, nor that the guardian is linked to that learner, nor that a learner-only scope carries learnerAssent. `grant.at` is caller-supplied and is written verbatim into the audit trail and history. `withdraw()` takes no actor parameter at all: the actor is fixed once at service construction (`opts.actor ?? 'learner'`), so every withdrawal is attributed to the same hard-coded actor regardless of who performed it.",
+      "evidence": "consent.ts:252-266 `const grantActor: 'learner' | 'guardian' = grant.guardianId ? 'guardian' : 'learner';` ... `state.history.push({ at: grant.at, granted: true, actor: grantActor });`  /  consent.ts:268-270 `function withdraw(learnerId, scope) { return performWithdrawal(learnerId, scope, actor, now().toISOString()); }` with `const actor = opts.actor ?? 'learner';` at :162",
+      "failure_mode": "A caller can grant 'work_visible_to_employers' for any learner and have the audit trail say a guardian granted it; can backdate the grant; and can withdraw another learner's consent while the trail attributes the withdrawal to 'learner'. The consent record is therefore not evidence of anything.",
+      "fix": "Make the actor an explicit, authenticated parameter of grant()/withdraw() (principal id + role), verify a guardian is in the learner's linkedLearnerIds before accepting a guardian grant, require learnerAssent for scopes that need it, and take the timestamp from the injected clock rather than the caller.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-03"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-01",
+      "severity": "major",
+      "title": "Guardian consent token is minted against ANY existing principal; the guardian's role is never checked, so a learner account can act as the guardian",
+      "file": "packages/identity/src/enrolment.ts",
+      "line": 258,
+      "intent": "Doc 2 §4.2 / enrolment.ts header: 'a guardian is issued a consent token bound to ONE learner'; the guardian must be a guardian.",
+      "reality": "issueGuardianConsentToken only checks `identity.get(input.guardianId)` returns a principal (existence). It never checks `principal.roles` contains 'guardian'. It then calls identity.issueCredential(guardianId), which mints a brand-new valid credential for that principal and returns its secret. enrolWithGuardianConsent then authenticates that principal with the freshly minted secret, so the 'guardian authority' is proven only by a credential the same caller just created.",
+      "evidence": "enrolment.ts:259-284 — `const guardian = identity.get(input.guardianId); if (!guardian) { throw ... }` ... `const credential = identity.issueCredential(input.guardianId);` ... `return { token, secret: credential.secret };`  /  identity.ts:209-229 issueCredential requires only that the subject exists.",
+      "failure_mode": "Any caller can enrol a learner under a non-guardian principal (e.g. the learner's own account) and have the audit trail record a guardian consent that no human guardian gave.",
+      "fix": "In issueGuardianConsentToken require `guardian.roles.includes('guardian')` (and, ideally, that the guardian is not the learner); do not mint the guardian credential inside the token issuer — the guardian must present a credential it already holds.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-01"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-02",
+      "severity": "major",
+      "title": "Age band is a caller-asserted attribute that the ABAC policy trusts; enrolment never calls age assurance",
+      "file": "packages/identity/src/enrolment.ts",
+      "line": 361,
+      "intent": "age-assurance.ts: 'Only a trusted attestation, a verified date of birth or a declared age CORROBORATED by a passed identity check may resolve a band. A self-declared age on its own proves nothing, and the service says so by returning null.' policy.ts:174 'A volunteer working with minors must themselves be an adult or a 16_17.'",
+      "reality": "The enrolment path takes `input.ageBand` from the caller and writes it straight onto the principal; the age-assurance service is never consulted. identity.register() likewise accepts an optional `ageBand` with no evidence. policy.ts's isScreenedAdult() reads exactly that unverified field.",
+      "evidence": "enrolment.ts:161 `readonly ageBand?: Principal['ageBand'];` and :361 `...(input.ageBand !== undefined ? { ageBand: input.ageBand } : {})`  /  identity.ts:91 `readonly ageBand?: Principal['ageBand'];` and :201-203 stores it verbatim  /  policy.ts:174-176 `return principal.ageBand === 'adult' || principal.ageBand === '16_17';`",
+      "failure_mode": "A caller enrols a 10-year-old with ageBand 'adult'. The principal then satisfies isScreenedAdult, so the volunteer rule `volunteer.support` (scope volunteer.learner.support) is allowed for a minor — exactly the safeguarding outcome the ABAC rule exists to prevent. Likewise a minor can be recorded as 'adult' and be exempted from guardian-required handling downstream.",
+      "fix": "Age band must be set only from an AgeAssuranceService decision (attestedBand / verifiedDateOfBirth / idCheckOutcome==='pass'). Register/enrol should accept an ageBand only when accompanied by the assurance evidence, or should call the assurance service themselves; policy conditions should read a separate 'screenedAdult' attribute that only the assurance flow can set.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-02"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-05",
+      "severity": "major",
+      "title": "PII guard misses composite and homoglyph key names, so a learner's name can be written to the permanent public ledger",
+      "file": "packages/ledger/src/pii-guard.ts",
+      "line": 52,
+      "intent": "pii-guard.ts header: 'the ledger is published. Every byte in it is visible to the world, forever, and cannot be retracted'; 'NO PERSONAL DATA, EVER'.",
+      "reality": "The name rule is exact-after-normalisation: `normalizeFieldName` lowercases and strips every non-[a-z0-9] character, then the result must be exactly one of the forbidden tokens. `learner_first_name` normalises to `learnerfirstname`, which is not in the list (only `firstname`/`fullname`/`learnername` are). A homoglyph key (`n\\u0430me` with a Cyrillic a) normalises to `nme` and is also not in the list. The value rule only detects email-shaped, phone-shaped and 8+ digit strings — a person's NAME in a free-text value is not detected at all.",
+      "evidence": "pii-guard.ts:140-152 `normalizeFieldName(name) { return name.toLowerCase().replace(/[^a-z0-9]/g, ''); }` and `isForbiddenFieldName` = set membership; VALUE_DETECTION_RULES (:205-210) list only V1 email, V2 long digits, V3 phone.",
+      "failure_mode": "ledger.append('reconciliation_proof', { learner_first_name: 'Amina' }) or appendCorrection(store, { correctsSeq: 1, reason: 'Learner Amina Ochieng missed the session' }) passes the guard and is written to a published, irrevocable, hash-chained chain. The learner's name is now public forever and the chain cannot be rewritten without breaking verification.",
+      "fix": "Extend the name rule to substring/token matching over the normalised name (any name containing 'name','firstname','learner','pupil','student','child' etc.), add a value rule for person-name shapes in free text, and treat appendCorrection's `reason` as a free-text field that must be scanned.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-05"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-06",
+      "severity": "major",
+      "title": "assertSafeBaseUrl constrains the scheme but not the destination: any HTTPS host (including link-local metadata) is accepted, so a tampered base URL exfiltrates the bearer credential",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 144,
+      "intent": "The function's own docstring: 'a misconfigured or tampered base URL would carry a live credential to a plaintext endpoint, a link-local metadata service, or a local file — and the credential would go with it.'",
+      "reality": "The rule is: https (or http on loopback) and no userinfo. There is NO host allowlist and no private/link-local address rejection. `https://169.254.169.254/latest/meta-data/` passes (https + non-loopback is allowed), as does `https://attacker.example/`. The loopback test is exact-string ('localhost','127.0.0.1','::1','[::1]'), so `http://127.0.0.2` is refused but `http://localhost` is allowed regardless of what the hosts file resolves it to.",
+      "evidence": "qwen-adapter.ts:144-163 — `if (protocol !== 'https:' && !(protocol === 'http:' && loopback)) throw`; `if (parsed.username !== '' || parsed.password !== '') throw`; no hostname allowlist and no IP-range check. `:293` `response = await fetchImpl(`${baseUrl}/chat/completions`, init);` with `Authorization: Bearer ${apiKey}` (:285).",
+      "failure_mode": "A base URL changed to https://attacker.example sends the provider credential, the learner prompt and the grounded context to the attacker. A base URL of https://169.254.169.254 turns the adapter into an SSRF probe against the cloud metadata service with a bearer token attached.",
+      "fix": "Add a positive host allowlist (the approved provider hosts) checked after DNS resolution, reject any resolved address in private/link-local/loopback ranges unless explicitly allowed, and keep the scheme check as a second layer.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-06"
+      ]
+    },
+    {
       "surface": "F3",
       "id": "F3-10",
       "severity": "major",
@@ -662,6 +782,26 @@
       "corroboration_count": 0,
       "all_ids": [
         "F5:F5-05"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-08",
+      "severity": "major",
+      "title": "Settings API has no CSRF/Origin protection: any web page the operator visits can rewrite the local settings file",
+      "file": "apps/cli/src/serve.ts",
+      "line": 202,
+      "intent": "serve.ts: 'Binds to 127.0.0.1 by default' and authorizePeer() 'Only loopback clients may reach the local settings server' — the loopback check is the access control.",
+      "reality": "The peer check sees the browser's own loopback source address, so it passes. The handler never inspects Origin/Referer, never requires a CSRF token, and never requires a Content-Type — readBody() JSON.parse()s whatever arrives, so a simple cross-origin POST with Content-Type: text/plain and a JSON body is accepted. applyPatch() then writes settings/settings.local.json, including features.telemetry, features.publicAnchoring and providers.apiKeys.",
+      "evidence": "serve.ts:207-214 authorizePeer(request.socket.remoteAddress, hosted) only  /  :170-182 readBody() does `JSON.parse(raw)` with no content-type check  /  :264-298 POST/PUT applies the patch and calls writeSettingsFile(writeTarget, applied.settings) with no origin/token check.",
+      "failure_mode": "A malicious page loaded in the operator's browser silently flips features.publicAnchoring to true (publishing the ledger Merkle root to a public anchor, which the settings schema says 'requires Board sign-off') or features.telemetry to true, or plants an attacker-controlled provider API key in the local settings — a governance and integrity breach driven from the open web.",
+      "fix": "Require a random per-process CSRF token on every write (issued in the served HTML and checked on POST/PUT), and/or require Content-Type: application/json plus a same-origin Origin check; reject requests whose Origin is present and not loopback.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-08"
       ]
     },
     {
@@ -782,6 +922,26 @@
       "corroboration_count": 0,
       "all_ids": [
         "F3:F3-18"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-07",
+      "severity": "major",
+      "title": "The egress boundary lives in one adapter, not in the gateway: every other registered adapter receives the raw request including nested context",
+      "file": "packages/onekey/src/providers/qwen-adapter.ts",
+      "line": 230,
+      "intent": "egress.ts header: 'This module is the one place that decides what may leave the process.'",
+      "reality": "projectEgressPayload()/projectGroundedContext() are called inside createQwenAdapter only. The gateway calls `entry.adapter.complete(req, ctx)` with the ORIGINAL request, so `req.context` (nested objects with full SourceLineage: locator, licence, retrieval time, tier) and any other request field reach every non-Qwen adapter unprojected. The registry accepts any ProviderAdapter with no requirement that it project.",
+      "evidence": "gateway.ts:274 `result = await entry.adapter.complete(req, ctx);`  /  qwen-adapter.ts:230-231 `projected = projectEgressPayload({ ...req, context: undefined }, { maxDataClass }); grounded = projectGroundedContext(req.context ?? []);`  /  registry.ts:62-76 register() stores any adapter with no egress assertion.",
+      "failure_mode": "The second provider adapter (Tier 2/3), a locally registered mock, or any future adapter sends nested context, source lineage and arbitrary request fields to its vendor with no allowlist, no data-class check and no locator check.",
+      "fix": "Project once in the gateway (or in a shared adapter wrapper) and pass only the projected payload to every adapter; make ProviderAdapter's complete() accept the projected shape so projection cannot be skipped.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-07"
       ]
     },
     {
@@ -1105,6 +1265,46 @@
       ]
     },
     {
+      "surface": "F8",
+      "id": "F8-12",
+      "severity": "minor",
+      "title": "The hosted settings server is unauthenticated and internet-reachable, disclosing the API-key names and lengths and absolute filesystem paths",
+      "file": "apps/cli/src/serve.ts",
+      "line": 92,
+      "intent": "serve.ts: hosted mode 'is a read-only demonstration, never a remote settings editor'.",
+      "reality": "authorizePeer() returns allowed for EVERY peer when hosted=true, and the host binds 0.0.0.0. GET /api/settings returns the masked settings plus describeApiKeys(), which reports the name, the 'set' boolean and the LENGTH of every provider key; /api/health returns the absolute path of the settings file and the Node version. There is no authentication, no token and no rate limit.",
+      "evidence": "serve.ts:92-99 `if (hosted) return { allowed: true };`  /  :194 `const host = flagString(args,'host') ?? (hosted ? '0.0.0.0' : loaded.settings.server.host);`  /  :122 `setByPath(masked, 'providers.apiKeys', describeApiKeys(settings));`  /  settings-store.ts:402-410 describeApiKeys returns { set, length }.",
+      "failure_mode": "Key names and exact key lengths are public, which materially narrows brute force and tells an attacker exactly which provider is configured; the deployment's filesystem layout and runtime version are disclosed.",
+      "fix": "Require an auth token for hosted mode, drop key lengths from describeApiKeys, and stop returning absolute paths over HTTP.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-12"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-11",
+      "severity": "minor",
+      "title": "The kill switch is process-local: a restart resurrects a provider killed for a safety, residency or licence failure",
+      "file": "packages/onekey/src/kill-switch.ts",
+      "line": 31,
+      "intent": "kill-switch.ts: 'a killed provider is a governance decision (safety incident, data-residency breach, licence problem). It takes effect immediately and outranks every routing preference.'",
+      "reality": "The killed set is a `new Map<string, string>()` in memory. It is not persisted, not shared between instances and not reconstructed at startup, so the governance decision evaporates on restart. The KillSwitch interface also exposes revive() with no actor, no authorisation and no second-person rule.",
+      "evidence": "kill-switch.ts:31 `const killed = new Map<string, string>();` and :39-41 revive() deletes unconditionally  /  gateway.ts:248 checks killSwitch.isKilled() per request only.",
+      "failure_mode": "A provider is killed after a data-residency breach. The service is restarted (deploy, crash, machine reboot) and the provider is routed to again with no record that it was ever killed — and the kill trail itself is lost with it.",
+      "fix": "Persist the kill list (and its reason and timestamp) in the durable store, load it at startup, and require an authorised actor + reason for both kill and revive.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-11"
+      ]
+    },
+    {
       "surface": "F1",
       "id": "F1-10",
       "severity": "minor",
@@ -1182,6 +1382,46 @@
       "corroboration_count": 0,
       "all_ids": [
         "F5:F5-10"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-10",
+      "severity": "minor",
+      "title": "projectGroundedContext's locator check misses drive-relative and scheme-only path forms",
+      "file": "packages/onekey/src/egress.ts",
+      "line": 208,
+      "intent": "egress.ts: 'The locator is a CONTENT identifier (curriculum:algebra/linear-eq), never a filesystem path and never a URL.'",
+      "reality": "locatorIsUnsafe rejects `^[A-Za-z]:[\\\\/]` (drive + separator), a leading '/' or '\\\\', any '://', a leading 'file:' and control characters. It does NOT reject the drive-RELATIVE form 'C:secrets' (no separator after the colon), nor a scheme-only URL such as 'https:example.com/x' (single colon, no '//'), nor a UNC-ish '\\\\\\\\host\\\\share' written with a non-leading separator. The projector therefore still emits a locator that names the build machine's filesystem.",
+      "evidence": "egress.ts:208-220 `if (/^[A-Za-z]:[\\\\/]/.test(locator)) return true; if (locator.startsWith('/') || locator.startsWith('\\\\')) return true; if (locator.includes('://')) return true; if (/^file:/i.test(locator)) return true;`",
+      "failure_mode": "A build-machine path fragment ('C:Users\\\\pc\\\\...') or an internal scheme-qualified host is transmitted to the third-party provider in every grounded message, disclosing the operator's directory layout.",
+      "fix": "Use a positive allowlist for locator shapes (e.g. only `scheme:` tokens from a known set, no separators) instead of a blocklist of path prefixes.",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-10"
+      ]
+    },
+    {
+      "surface": "F8",
+      "id": "F8-09",
+      "severity": "minor",
+      "title": "The secrets scanner never scans git history and skips the artifacts directory, and the published checksum manifest carries a digest of the plaintext API-key file",
+      "file": "tools/secrets-scan.mjs",
+      "line": 121,
+      "intent": "secrets-scan.mjs header: 'Scans the tree that a commit would publish for likely secrets.'",
+      "reality": "publishedFiles() uses `git ls-files --cached --others --exclude-standard`, which lists the current index and working tree only — history is never inspected, so a deleted-but-committed secret is never found. SKIP_DIRECTORIES excludes 'artifacts', so the published attestation, SBOM, verify report and checksum manifest are never scanned. Separately, tools/checksums.mjs walks the whole 'settings' directory, so artifacts/checksums.sha256 (a TRACKED, published file) contains the SHA-256 of settings/settings.local.json — the plaintext API-key file.",
+      "evidence": "secrets-scan.mjs:121-134 git ls-files only  /  :31-40 SKIP_DIRECTORIES includes 'artifacts'  /  checksums.mjs:54 INCLUDE_ROOTS includes 'settings' and :91-100 walks it — the live artifacts/checksums.sha256 contains the line for settings/settings.local.json.",
+      "failure_mode": "A leaked key is committed, deleted in a later commit, and the scanner reports PASS because history is out of scope. Separately, the published manifest is an offline oracle for the contents of the secret file: anyone who can guess the key can confirm it by hashing candidate files.",
+      "fix": "Scan git history (git rev-list --objects --all | git cat-file) or document the exclusion; do not exclude the artifacts directory; and exclude settings/*.local.json from the checksum manifest (and from the attestation's subject list).",
+      "closable": null,
+      "status": "PROVEN",
+      "corroborating_surfaces": [],
+      "corroboration_count": 0,
+      "all_ids": [
+        "F8:F8-09"
       ]
     },
     {
@@ -1520,6 +1760,15 @@
         "blocker": 0,
         "major": 6,
         "minor": 7
+      }
+    },
+    {
+      "surface": "F8",
+      "summary": "IN PROGRESS - probes pending.",
+      "counts": {
+        "blocker": 0,
+        "major": 9,
+        "minor": 3
       }
     }
   ]
