@@ -4,33 +4,33 @@
   "statement": "The EduGenesis OS verification gates passed on this tree with zero blocker failures, and every file in the checksum manifest matched its recorded digest at attestation time.",
   "result": "PASS",
   "counts": {
-    "gates": 14,
-    "passed": 14,
+    "gates": 16,
+    "passed": 16,
     "blockersFailed": 0,
     "warnings": 0,
-    "filesVerified": 177
+    "filesVerified": 183
   },
   "subjects": [
     {
       "name": "artifacts/verify-report.json",
-      "sha256": "de4ce2033c89eeca45f0a006065632b4eb34547e3d4620b20bc45121c7f0dde7",
-      "bytes": 3270
+      "sha256": "9d71c2ca35c7d7b6145e35cc3041ac34708c5fd80a8cb27f7e11e31ddd4f4f06",
+      "bytes": 3735
     },
     {
       "name": "artifacts/sbom.cdx.json",
-      "sha256": "1812123f2543b3bf912513f5a21d1ea7c71315a93acb57a0cbb55af8b74bf510",
+      "sha256": "dddc716d3f72e7a29907818b29f01d8197c03be78bd1bf42c4eec9379d1c03f2",
       "bytes": 7285
     },
     {
       "name": "artifacts/checksums.sha256",
-      "sha256": "9e638fd1cda77bccbbe68b4f05037a54cbf87570813f8166c6d8a72812d93ffb",
-      "bytes": 17742
+      "sha256": "75ac05cf83297d6a2edd8f9f12838bde596b4b8a33cc18838a67fbe749bb2212",
+      "bytes": 18387
     }
   ],
   "source": {
-    "gitHead": "7889041b3946f5c9f94083f9956fb0a0deafed9d",
+    "gitHead": "7eb9dce1267821a9ce01785e7a6f01fd5bce4787",
     "gitDirty": true,
-    "timestamp": "2026-11-13T01:55:11.000Z"
+    "timestamp": "2026-11-13T14:16:50.000Z"
   },
   "toolchain": {
     "node": "v24.19.0",
