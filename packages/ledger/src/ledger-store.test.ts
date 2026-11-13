@@ -336,3 +336,21 @@ test('the value scan can be switched off for a migration, but the field rule nev
     },
   );
 });
+
+test('ledger: a NEGATIVE money amount is refused', () => {
+  // A negative amount is a sign, not an amount. Every money field in this
+  // ledger records something that WAS spent, allocated or received. A refund
+  // must be its own entry type, so that the public chain never needs a
+  // negative number to express it.
+  const store = createLedgerStore({ now: (): string => '2026-01-05T00:00:00.000Z' });
+
+  assert.throws(
+    () => {
+      store.append('sponsor_pledge', { amount_cents: -1 }, '2026-01-05T00:00:00.000Z');
+    },
+    (error: unknown) => {
+      assert.match((error as Error).message, /negative/i);
+      return true;
+    },
+  );
+});

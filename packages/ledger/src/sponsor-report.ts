@@ -131,6 +131,60 @@ export interface SponsorReport {
 }
 
 /** Read an integer field from a ledger payload. */
+/**
+ * Thrown when the report cannot be produced honestly.
+ *
+ * WHY IT EXISTS: this report is what a SPONSOR reads. Every figure in it must
+ * mean what it says. A report that quietly reports zero because a producer
+ * renamed a key is worse than no report: it is a clean number that means
+ * nothing, presented as accountability.
+ */
+export class SponsorReportError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SponsorReportError';
+  }
+}
+
+/**
+ * Read a number the report DEPENDS on, or refuse.
+ *
+ * WHY NOT A DEFAULT: every one of these keys carries a figure the sponsor
+ * reads — tasks, demand, fallbacks, offline serving. Defaulting a missing one
+ * to zero does not make the report conservative; it makes it wrong in the
+ * direction that looks best. The report names the entry and the key instead.
+ */
+function requireInt(
+  payload: Record<string, string | number | boolean | null>,
+  field: string,
+  seq: number,
+): number {
+  const value = readInt(payload, field);
+  if (value === undefined) {
+    throw new SponsorReportError(
+      `ledger entry ${String(seq)} does not carry "${field}", so the report would state a figure it cannot know. ` +
+        `The producer and the report must agree on the key name.`,
+    );
+  }
+  return value;
+}
+
+/** Read a boolean the report DEPENDS on, or refuse. See requireInt. */
+function requireBool(
+  payload: Record<string, string | number | boolean | null>,
+  field: string,
+  seq: number,
+): boolean {
+  const value = readBool(payload, field);
+  if (value === undefined) {
+    throw new SponsorReportError(
+      `ledger entry ${String(seq)} does not carry "${field}", so the report would state a figure it cannot know. ` +
+        `The producer and the report must agree on the key name.`,
+    );
+  }
+  return value;
+}
+
 function readInt(payload: Record<string, string | number | boolean | null>, field: string): number | undefined {
   const value = payload[field];
   if (typeof value === 'number' && Number.isInteger(value)) return value;
@@ -206,22 +260,27 @@ export function buildSponsorReport(
 
   for (const entry of periodEntries) {
     if (entry.type === 'credit_consumed') {
-      const units = readInt(entry.payload, 'units') ?? 0;
+      // The keys below are a CROSS-PACKAGE convention: another package writes
+      // these entries, and this report is what a sponsor reads. A missing key
+      // is therefore CONTRACT DRIFT, and it is refused rather than defaulted.
+      const units = requireInt(entry.payload, 'units', entry.seq);
+      const requested = requireInt(entry.payload, 'requested_units', entry.seq);
+      const tier = requireInt(entry.payload, 'fallback_tier', entry.seq);
+      const offline = requireBool(entry.payload, 'served_offline', entry.seq);
       tasks += units;
       consumedUnits += units;
-      requestedTasks += readInt(entry.payload, 'requested_units') ?? units;
+      requestedTasks += requested;
       const cost = readInt(entry.payload, 'cost_cents');
       if (cost !== undefined) costs.push(cost);
       const latency = readInt(entry.payload, 'latency_ms');
       if (latency !== undefined) latencies.push(latency);
-      const tier = readInt(entry.payload, 'fallback_tier') ?? 0;
       byTier[String(tier)] = (byTier[String(tier)] ?? 0) + units;
       if (tier > 0) fallbackTasks += units;
-      if (readBool(entry.payload, 'served_offline') === true) offlineTasks += units;
+      if (offline) offlineTasks += units;
       continue;
     }
     if (entry.type === 'credit_received') {
-      receivedUnits += readInt(entry.payload, 'units') ?? 0;
+      receivedUnits += requireInt(entry.payload, 'units', entry.seq);
     }
   }
 
@@ -253,6 +312,15 @@ export function buildSponsorReport(
   });
 
   const verification = ledger.verify();
+  if (!verification.ok) {
+    // A report computed over a broken chain is not accountability, it is a
+    // decoration. The chain is verified before any figure is published.
+    throw new SponsorReportError(
+      `the ledger chain is broken at sequence ${String(verification.brokenAtSeq ?? 'unknown')}` +
+        `${verification.detail === undefined ? '' : `: ${verification.detail}`} — ` +
+        `the report refuses to publish over a broken chain.`,
+    );
+  }
 
   const report: SponsorReport = {
     schemaVersion: SPONSOR_REPORT_SCHEMA_VERSION,

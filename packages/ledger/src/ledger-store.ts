@@ -175,11 +175,24 @@ function canonicalisePayload(payload: Record<string, unknown>): LedgerPayload {
           `Payload field "${key}" is not a finite number; a non-finite value cannot be hashed reproducibly.`,
         );
       }
-      if (MONEY_KEY_PATTERN.test(key) && !Number.isInteger(value)) {
-        throw new LedgerPayloadError(
-          `Payload field "${key}" carries money and must be an integer number of minor units (cents). ` +
-            `Floating point money is forbidden because it cannot be reconciled exactly.`,
-        );
+      if (MONEY_KEY_PATTERN.test(key)) {
+        if (!Number.isInteger(value)) {
+          throw new LedgerPayloadError(
+            `Payload field "${key}" carries money and must be an integer number of minor units (cents). ` +
+              `Floating point money is forbidden because it cannot be reconciled exactly.`,
+          );
+        }
+        if (value < 0) {
+          // A negative amount is a sign, not an amount. Every money field in
+          // this ledger records something that WAS spent, allocated or
+          // received, and each of those is non-negative. A refund or a
+          // reversal must be its own entry type, so that the public chain
+          // never needs a negative number to express it.
+          throw new LedgerPayloadError(
+            `Payload field "${key}" carries money and must not be negative (got ${String(value)}). ` +
+              `A refund or a reversal must be recorded as its own entry type, not as a negative amount.`,
+          );
+        }
       }
       out[key] = value;
       continue;

@@ -31,7 +31,14 @@ function fixture(): { ledger: ReturnType<typeof createLedgerStore>; priv: Return
   );
   ledger.append(
     'credit_consumed',
-    { units: 100, requested_units: 120, cost_cents: 4_200, latency_ms: 800, fallback_tier: 2 },
+    {
+      units: 100,
+      requested_units: 120,
+      cost_cents: 4_200,
+      latency_ms: 800,
+      fallback_tier: 2,
+      served_offline: false,
+    },
     '2026-03-20T00:00:00.000Z',
   );
   ledger.append(
@@ -41,7 +48,14 @@ function fixture(): { ledger: ReturnType<typeof createLedgerStore>; priv: Return
   );
   ledger.append(
     'credit_consumed',
-    { units: 25, requested_units: 25, cost_cents: 500, latency_ms: 1_200, fallback_tier: 1 },
+    {
+      units: 25,
+      requested_units: 25,
+      cost_cents: 500,
+      latency_ms: 1_200,
+      fallback_tier: 1,
+      served_offline: false,
+    },
     '2026-03-22T00:00:00.000Z',
   );
   ledger.append('reinvestment_allocation', { amount_cents: 900_000, category: 'devices' }, '2026-03-31T00:00:00.000Z');
@@ -175,6 +189,47 @@ test('a cohort below the minimum size is suppressed from every aggregate', () =>
   const serialised = JSON.stringify(report);
   assert.equal(serialised.includes('Nakuru'), false);
   assert.equal(serialised.includes('geometry'), false);
+});
+
+test('sponsor report: a credit entry that is missing a key the report depends on is REFUSED', () => {
+  // The leak this closes: the report used to default a missing key to zero or
+  // false, so a producer that renamed a key produced a CLEAN number that
+  // meant nothing — and a sponsor reads that number as accountability.
+  const ledger = createLedgerStore({ now: (): string => '2026-01-01T00:00:00.000Z' });
+  const priv = createPrivateStore();
+  ledger.append(
+    'credit_consumed',
+    { units: 10, requested_units: 10, cost_cents: 100, latency_ms: 50 },
+    '2026-03-20T00:00:00.000Z',
+  );
+
+  assert.throws(
+    () => buildSponsorReport(ledger, priv, { generatedAt: '2026-04-01T00:00:00.000Z' }),
+    /fallback_tier/,
+    'the report must refuse rather than publish a figure it cannot know',
+  );
+});
+
+test('sponsor report: a report over a BROKEN chain is REFUSED', () => {
+  const ledger = createLedgerStore({ now: (): string => '2026-01-01T00:00:00.000Z' });
+  const priv = createPrivateStore();
+  ledger.append(
+    'credit_consumed',
+    { units: 10, requested_units: 10, cost_cents: 100, latency_ms: 50, fallback_tier: 0, served_offline: false },
+    '2026-03-20T00:00:00.000Z',
+  );
+
+  // Tamper with the stored entry, so the chain no longer verifies.
+  const first = ledger.all()[0];
+  if (first) {
+    first.payload['units'] = 999;
+  }
+
+  assert.throws(
+    () => buildSponsorReport(ledger, priv, { generatedAt: '2026-04-01T00:00:00.000Z' }),
+    /broken/i,
+    'the report must refuse to publish over a broken chain',
+  );
 });
 
 test('the report is reproducible for the same inputs', () => {
