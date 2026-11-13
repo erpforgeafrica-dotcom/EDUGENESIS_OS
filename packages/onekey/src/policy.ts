@@ -4,6 +4,7 @@ import type {
   FallbackTier,
   RequestContext,
   RoutingDecision,
+  SafetyTier,
   TaskPolicy,
 } from '@edugenesis/contracts';
 import type { CircuitBreaker } from './circuit-breaker.js';
@@ -37,6 +38,43 @@ const DATA_CLASS_RANK: Record<DataClass, number> = {
 /** Ordering of data classes: a provider may receive a class it is cleared for. */
 export function dataClassRank(dataClass: DataClass): number {
   return DATA_CLASS_RANK[dataClass];
+}
+
+/** Ordering of safety tiers: a higher tier is a more restricted task. */
+const SAFETY_TIER_RANK: Record<SafetyTier, number> = {
+  low: 0,
+  medium: 1,
+  high: 2,
+  critical: 3,
+};
+
+/** Ordering of safety tiers, so the stricter of two declarations can be taken. */
+export function safetyTierRank(tier: SafetyTier): number {
+  return SAFETY_TIER_RANK[tier];
+}
+
+/**
+ * The classification the routing ACTUALLY uses.
+ *
+ * WHY THE STRICTER OF THE TWO: the request declares its own data class and
+ * safety tier, but a caller is never trusted to UNDER-declare them — a client
+ * that claimed `public` would otherwise reach a provider cleared for more than
+ * the server-side policy allows. The effective classification is therefore the
+ * STRICTER of the request's claim and the policy's: a request may only ever
+ * make the routing stricter, never looser. Before this, `policy.dataClass` and
+ * `policy.safetyTier` were dead inputs — the routing read only the request's
+ * own claim.
+ */
+export function effectiveClassification(
+  policy: TaskPolicy,
+  req: CompletionRequest,
+): { dataClass: DataClass; safetyTier: SafetyTier } {
+  return {
+    dataClass:
+      dataClassRank(req.dataClass) > dataClassRank(policy.dataClass) ? req.dataClass : policy.dataClass,
+    safetyTier:
+      safetyTierRank(req.safetyTier) > safetyTierRank(policy.safetyTier) ? req.safetyTier : policy.safetyTier,
+  };
 }
 
 /**
@@ -112,6 +150,11 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
     const locale = req.locale ?? policy.locale;
     const preferredModality = policy.preferredModality;
 
+    // ---- The authority for classification is the POLICY, not the request ---
+    const effective = effectiveClassification(policy, req);
+    const effectiveDataClass = effective.dataClass;
+    const effectiveSafetyTier = effective.safetyTier;
+
     for (const entry of registry.entries()) {
       const providerId = entry.providerId;
       const tier = entry.tier;
@@ -131,23 +174,23 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
       // provider (Doc 2 §27). This is checked first because it is the
       // strongest constraint: no other consideration may override it.
       const providerMax = effectiveMaxDataClass(entry);
-      if (dataClassRank(providerMax) < dataClassRank(req.dataClass)) {
+      if (dataClassRank(providerMax) < dataClassRank(effectiveDataClass)) {
         rejections.push({
           providerId,
           tier,
           rule: 'data-class',
-          detail: `request data class '${req.dataClass}' exceeds provider max '${providerMax}'`,
+          detail: `request data class '${effectiveDataClass}' exceeds provider max '${providerMax}'`,
         });
         continue;
       }
 
       // Rule 2 — safety tier clearance (Doc 6 §3.1).
-      if (!entry.capabilities.clearedSafetyTiers.includes(req.safetyTier)) {
+      if (!entry.capabilities.clearedSafetyTiers.includes(effectiveSafetyTier)) {
         rejections.push({
           providerId,
           tier,
           rule: 'safety-tier',
-          detail: `provider is not cleared for safety tier '${req.safetyTier}'`,
+          detail: `provider is not cleared for safety tier '${effectiveSafetyTier}'`,
         });
         continue;
       }
@@ -223,6 +266,8 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
       preferredModality,
       locale,
       req,
+      effectiveDataClass: effectiveClassification(policy, req).dataClass,
+      effectiveSafetyTier: effectiveClassification(policy, req).safetyTier,
       budgetRemaining: budget.remaining(),
       budgetCap: budget.hardCapUnits,
       circuitState: selected ? breaker.state(selected.entry.providerId) : 'closed',
@@ -258,6 +303,9 @@ interface ReasonInput {
   preferredModality: TaskPolicy['preferredModality'];
   locale: string | undefined;
   req: CompletionRequest;
+  /** The classification the routing actually used: the stricter of the request's own claim and the server-side policy's. */
+  effectiveDataClass: DataClass;
+  effectiveSafetyTier: SafetyTier;
   budgetRemaining: number;
   budgetCap: number;
   circuitState: string;
@@ -284,7 +332,7 @@ function buildReason(input: ReasonInput): string {
       );
     }
     parts.push(
-      `hard rules passed: data class '${input.req.dataClass}' within provider max '${input.providerMax ?? 'unknown'}', safety tier '${input.req.safetyTier}' cleared, circuit ${input.circuitState}, not killed, budget remaining ${input.budgetRemaining}/${input.budgetCap} units`,
+      `hard rules passed: data class '${input.effectiveDataClass}' within provider max '${input.providerMax ?? 'unknown'}', safety tier '${input.effectiveSafetyTier}' cleared, circuit ${input.circuitState}, not killed, budget remaining ${input.budgetRemaining}/${input.budgetCap} units`,
     );
   } else {
     parts.push(

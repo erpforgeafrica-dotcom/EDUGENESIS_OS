@@ -9,6 +9,7 @@ import type {
   SafetyTier,
 } from '@edugenesis/contracts';
 import { requiredUnits } from '../budget.js';
+import { EgressRejectedError, projectEgressPayload, projectGroundedContext } from '../egress.js';
 import { redactSecret } from '../redact.js';
 
 /**
@@ -128,10 +129,43 @@ const platformFetch: FetchLike = async (url, init) => {
   };
 };
 
+/**
+ * Validate the provider base URL before a credential is ever attached to it.
+ *
+ * WHY: the adapter sends an `Authorization: Bearer <key>` header to whatever
+ * host this names. Without a check, a misconfigured or tampered base URL
+ * would carry a live credential to a plaintext endpoint, a link-local
+ * metadata service, or a local file — and the credential would go with it.
+ *
+ * THE RULE: HTTPS, except on loopback (a locally hosted mock). No
+ * credentials in the URL. The check runs when the adapter is CONSTRUCTED, so
+ * a bad configuration is a startup failure rather than a runtime surprise.
+ */
+export function assertSafeBaseUrl(baseUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error(`the provider base URL is not a valid URL: ${baseUrl}`);
+  }
+  const protocol = parsed.protocol.toLowerCase();
+  const host = parsed.hostname.toLowerCase();
+  const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+  if (protocol !== 'https:' && !(protocol === 'http:' && loopback)) {
+    throw new Error(
+      `the provider base URL must be https, or http on loopback; "${protocol}" is not permitted`,
+    );
+  }
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw new Error('the provider base URL must not carry credentials');
+  }
+  return parsed.toString().replace(/\/+$/, '');
+}
+
 export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapter {
   const id = 'qwen';
   const modelId = opts.modelId ?? QWEN_DEFAULT_MODEL;
-  const baseUrl = (opts.baseUrl ?? QWEN_BASE_URL).replace(/\/+$/, '');
+  const baseUrl = assertSafeBaseUrl(opts.baseUrl ?? QWEN_BASE_URL);
   const maxDataClass = opts.maxDataClass ?? 'learner_scoped';
   const clearedSafetyTiers = opts.clearedSafetyTiers ?? ['low', 'medium'];
   const fetchImpl = opts.fetchImpl ?? platformFetch;
@@ -185,18 +219,56 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
       }
 
       try {
+        // ---- The egress boundary: decide what may leave the process ---------
+        // WHY HERE: this adapter is the only place a request becomes bytes on
+        // the wire, so it is the only place the boundary can be enforced. The
+        // projection is deny-by-default: a field added to the request contract
+        // is refused here until someone allows it and writes a test for it.
+        let projected: Record<string, unknown>;
+        let grounded: readonly { readonly locator: string; readonly text: string }[];
+        try {
+          projected = projectEgressPayload({ ...req, context: undefined }, { maxDataClass });
+          grounded = projectGroundedContext(req.context ?? []);
+        } catch (err) {
+          if (err instanceof EgressRejectedError) {
+            throw new ProviderUnavailableError(
+              id,
+              `the egress boundary refused the request: ${err.reason}`,
+            );
+          }
+          throw err;
+        }
+
+        // ---- Budget: refuse BEFORE the call, not after the bill -------------
+        // WHY: the check that follows the response only proves the pool was
+        // empty AFTER the provider had already been paid. The pool must be
+        // tested against the WORST case the request can cost, before the
+        // request leaves the process. A refusal here is not a denial to the
+        // learner: the gateway treats a budget refusal as a fall-through to
+        // the next tier, and Tier 0 still answers.
+        const cappedMaxOutput = Math.min(req.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS);
+        const promptChars =
+          String(projected['prompt'] ?? '').length +
+          String(projected['system'] ?? '').length +
+          grounded.reduce((sum, item) => sum + item.text.length, 0);
+        const estimatedInputTokens = Math.ceil(promptChars / 4);
+        const upperBound = requiredUnits(ctx.budget, estimatedInputTokens, cappedMaxOutput);
+        if (ctx.budget.remaining() < upperBound) {
+          throw new BudgetExceededError(ctx.budget.poolId, upperBound, ctx.budget.remaining());
+        }
+
         // ---- Request mapping (OpenAI-compatible chat completions) -----------
         const messages: QwenChatRequestBody['messages'] = [];
-        if (req.system) {
-          messages.push({ role: 'system', content: req.system });
+        if (projected['system'] !== undefined) {
+          messages.push({ role: 'system', content: String(projected['system']) });
         }
-        for (const grounded of req.context ?? []) {
+        for (const item of grounded) {
           messages.push({
             role: 'user',
-            content: `[${grounded.source.locator}] ${grounded.text}`,
+            content: `[${item.locator}] ${item.text}`,
           });
         }
-        messages.push({ role: 'user', content: req.prompt });
+        messages.push({ role: 'user', content: String(projected['prompt']) });
 
         const body: QwenChatRequestBody = {
           model: modelId,

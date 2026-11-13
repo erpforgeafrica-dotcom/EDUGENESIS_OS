@@ -176,6 +176,29 @@ test('gateway: a kill reason that carries a credential is redacted everywhere it
   );
 });
 
+test('gateway: a request that under-declares its data class cannot reach a provider cleared for less', async () => {
+  const g = gateway();
+  // The provider is cleared for `public` only.
+  const provider = createMockAdapter({ id: 'p1', tier: 1, maxDataClass: 'public' });
+  g.register(provider.adapter);
+
+  const result = await g.complete(
+    // The SERVER-SIDE policy classifies this task as learner_scoped; the
+    // request claims public. A caller is never trusted to under-declare.
+    createPolicy({ dataClass: 'learner_scoped' }),
+    createRequest({ prompt: LIVE_PROMPT, dataClass: 'public' }),
+    createContext(),
+  );
+
+  assert.equal(provider.calls(), 0, 'a provider cleared only for public must not be called for a learner_scoped task');
+  assert.ok(result.text.length > 0, 'the learner must still be served');
+  assert.equal(result.meta.servedOffline, true, 'the deterministic offline tier must answer');
+  assert.ok(
+    result.meta.policyReason.includes('learner_scoped'),
+    `the policy trace must record the effective data class, not the request's own claim: ${result.meta.policyReason}`,
+  );
+});
+
 test('gateway: with the budget at zero, the real learner path still returns a tier 0 lesson', async () => {
   const g = gateway();
   const paid = createMockAdapter({ id: 'p1', tier: 1 });

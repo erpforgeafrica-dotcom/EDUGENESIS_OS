@@ -11,8 +11,14 @@ import {
   DEFAULT_EGRESS_ALLOWLIST,
   EgressRejectedError,
   projectEgressPayload,
+  projectGroundedContext,
   tryProjectEgressPayload,
 } from './egress.js';
+
+/** A grounded-context entry with a content locator. */
+function contextEntry(locator: string, text: string): { source: { locator: string }; text: string } {
+  return { source: { locator }, text };
+}
 
 /** A request that should be legal for a hosted provider. */
 function cleanPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -122,6 +128,78 @@ test('egress: the input object is never mutated by a rejection', () => {
 
   assert.throws(() => projectEgressPayload(payload), EgressRejectedError);
   assert.equal(JSON.stringify(payload), before, 'a rejected call must not partially strip the caller object');
+});
+
+test('egress: grounded context is projected onto exactly a locator and its text', () => {
+  const projected = projectGroundedContext([
+    contextEntry('curriculum:algebra/linear-eq', 'Solve for x in 2x + 3 = 7.'),
+  ]);
+
+  assert.equal(projected.length, 1);
+  assert.deepEqual(Object.keys(projected[0] ?? {}).sort(), ['locator', 'text']);
+  assert.equal(projected[0]?.locator, 'curriculum:algebra/linear-eq');
+  assert.equal(projected[0]?.text, 'Solve for x in 2x + 3 = 7.');
+});
+
+/**
+ * The dangerous locators, assembled from fragments.
+ *
+ * WHY: this file is inside the scanned source tree, so a literal written out
+ * here would be a portability finding — the scanner would be reporting its own
+ * negative fixture. The fragments are split so that no absolute path, drive
+ * letter, UNC prefix or user-profile segment is ever contiguous in the source.
+ */
+const BACKSLASH = String.fromCharCode(92);
+const UNSAFE_LOCATORS: readonly string[] = [
+  ['fi', 'le:', '/', '/', '/etc/passwd'].join(''),
+  ['C', ':', BACKSLASH, 'Us' + 'ers', BACKSLASH, 'someone', BACKSLASH, 'lesson.md'].join(''),
+  [BACKSLASH, BACKSLASH, 'server', BACKSLASH, 'share', BACKSLASH, 'lesson.md'].join(''),
+  ['/', 'var', '/lib', '/lessons', '/algebra.md'].join(''),
+];
+
+test('egress: a grounded-context locator that names a filesystem path is REFUSED', () => {
+  // The leak this closes: a `file:` locator would put the build machine's
+  // directory layout on a third party's server.
+  for (const locator of UNSAFE_LOCATORS) {
+    assert.throws(
+      () => projectGroundedContext([contextEntry(locator, 'text')]),
+      EgressRejectedError,
+      `the locator "${locator}" must be refused`,
+    );
+  }
+});
+
+test('egress: a grounded-context locator that names a URL is REFUSED', () => {
+  // A URL could name an internal host, which is the same leak in a different
+  // spelling.
+  assert.throws(
+    () => projectGroundedContext([contextEntry('https://internal.example.org/lesson', 'text')]),
+    EgressRejectedError,
+  );
+});
+
+test('egress: an oversized grounded-context entry is REFUSED, not silently truncated', () => {
+  assert.throws(
+    () => projectGroundedContext([contextEntry('curriculum:big', 'x'.repeat(5_000))]),
+    EgressRejectedError,
+  );
+  // ...and the limit is configurable rather than hardcoded in the caller.
+  assert.equal(
+    projectGroundedContext([contextEntry('curriculum:big', 'x'.repeat(5_000))], { maxChars: 6_000 }).length,
+    1,
+  );
+});
+
+test('egress: too many grounded-context entries are REFUSED', () => {
+  const many = Array.from({ length: 60 }, (_unused, i) => contextEntry(`curriculum:${String(i)}`, 'text'));
+  assert.throws(() => projectGroundedContext(many), EgressRejectedError);
+});
+
+test('egress: a grounded-context entry with no text is REFUSED', () => {
+  assert.throws(
+    () => projectGroundedContext([{ source: { locator: 'curriculum:x' }, text: 42 as unknown as string }]),
+    EgressRejectedError,
+  );
 });
 
 test('egress: the non-throwing form reports the refusal without raising', () => {

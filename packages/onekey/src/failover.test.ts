@@ -2,7 +2,27 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AllTiersExhaustedError } from '@edugenesis/contracts';
 import { DEFERRED_RESPONSE_TEXT, runFailoverDrill, runFailoverScenario } from './failover.js';
-import { TIER_ZERO_FALLBACK_NOTICE } from './providers/tier-zero.js';
+import { TIER_ZERO_FALLBACK_NOTICE, TIER_ZERO_FALLBACK_UNRELATED_NOTICE, createTierZeroProvider } from './providers/tier-zero.js';
+import { createPolicy, createRequest } from './testing/support.js';
+
+test('tier 0: a fallback with no topical overlap does not claim the lesson covers the topic', async () => {
+  const provider = createTierZeroProvider();
+
+  const result = await provider.serveFallback(
+    createPolicy(),
+    createRequest({ prompt: 'Explain the water cycle' }),
+  );
+
+  assert.ok(result !== null, 'the learner must still receive a lesson — the promise is that a learner is never denied');
+  assert.ok(
+    !result.text.startsWith(TIER_ZERO_FALLBACK_NOTICE),
+    'a lesson that shares no word with the task must not claim to cover the topic',
+  );
+  assert.ok(
+    result.text.startsWith(TIER_ZERO_FALLBACK_UNRELATED_NOTICE),
+    'the honest notice must be used when there is no topical match',
+  );
+});
 
 test('failover drill: offline-rescue — every model fails and Tier 0 serves a learner', async () => {
   const drill = await runFailoverScenario({ scenario: 'offline-rescue' });

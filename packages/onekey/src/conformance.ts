@@ -218,17 +218,13 @@ export async function runAdapterConformance(
     record('health-returns-shape', false, `health() threw: ${describeError(err)}`);
   }
 
-  // ---- Rule 5: dispose() is callable -------------------------------------
-  if (typeof adapter.dispose !== 'function') {
-    record('dispose-callable', false, 'dispose is not a function');
-  } else {
-    try {
-      await adapter.dispose();
-      record('dispose-callable', true, 'dispose() resolved');
-    } catch (err) {
-      record('dispose-callable', false, `dispose() threw: ${describeError(err)}`);
-    }
-  }
+  // ---- Rule 5 is run LAST, after every behavioural rule --------------------
+  // WHY: dispose() releases the adapter's credential. Calling it here would
+  // destroy the adapter under test, and the LATER rules (over-budget, output
+  // ceiling) would then pass or fail on the resulting "no API key" refusal
+  // rather than on the adapter's behaviour — rule 7 in particular passed
+  // VACUOUSLY, because the adapter always threw. The destructive call is
+  // therefore made at the end of the suite, where it can affect nothing.
 
   // ---- Rule 6: an over-budget request is refused -------------------------
   const emptyBudget = createBudgetLedger('conformance-empty-pool', 1, 'token');
@@ -264,6 +260,18 @@ export async function runAdapterConformance(
   } catch (err) {
     // Refusing the request is an acceptable outcome (Doc 2 §7).
     record('max-output-tokens-respected', true, `the request was refused: ${describeError(err)}`);
+  }
+
+  // ---- Rule 5: dispose() is callable — run LAST --------------------------
+  if (typeof adapter.dispose !== 'function') {
+    record('dispose-callable', false, 'dispose is not a function');
+  } else {
+    try {
+      await adapter.dispose();
+      record('dispose-callable', true, 'dispose() resolved');
+    } catch (err) {
+      record('dispose-callable', false, `dispose() threw: ${describeError(err)}`);
+    }
   }
 
   return results;

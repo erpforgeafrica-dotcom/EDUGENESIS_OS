@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ProviderUnavailableError } from '@edugenesis/contracts';
+import { ProviderUnavailableError, BudgetExceededError } from '@edugenesis/contracts';
 import { createQwenAdapter, QWEN_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_MAINLAND_BASE_URL } from './qwen-adapter.js';
-import { createContext, createRequest } from '../testing/support.js';
+import { createContext, createRequest, createSource } from '../testing/support.js';
+import { createBudgetLedger } from '../budget.js';
 import type { FetchLike, FetchRequestInit } from './qwen-adapter.js';
 
 const FAKE_KEY = 'test-key-not-real';
@@ -205,6 +206,111 @@ test('qwen: dispose releases the credential and the adapter stops working', asyn
       return true;
     },
   );
+});
+
+test('qwen: a base URL that is not https is refused at construction, so no credential is ever attached to it', () => {
+  // The dangerous URLs are assembled from fragments: this file is inside the
+  // scanned source tree, so a literal written out here would be a finding.
+  const withCredentials = ['https://', 'user', ':', 'pw', '@', 'example', '.org'].join('');
+  for (const baseUrl of [
+    ['fi', 'le:', '/', '/', '/etc/passwd'].join(''),
+    ['http://', '169.254.169.254', '/latest/meta-data'].join(''),
+    withCredentials,
+  ]) {
+    assert.throws(
+      () => createQwenAdapter({ apiKey: FAKE_KEY, baseUrl }),
+      /https|credential|valid URL/i,
+      `the base URL must be refused: ${baseUrl}`,
+    );
+  }
+});
+
+test('qwen: the egress boundary refuses a filesystem locator, and nothing is sent', async () => {
+  const calls: RecordedCall[] = [];
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    fetchImpl: recordingFetch(calls, { status: 200, body: OPENAI_COMPATIBLE_RESPONSE }),
+  });
+
+  await assert.rejects(
+    () =>
+      adapter.complete(
+        createRequest({
+          prompt: 'Explain photosynthesis',
+          context: [{ source: createSource({ locator: 'file:///etc/passwd' }), text: 'root:x:0:0' }],
+        }),
+        createContext(),
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof ProviderUnavailableError, 'expected a typed ProviderUnavailableError');
+      assert.match(err.detail ?? '', /egress/i);
+      return true;
+    },
+  );
+  assert.equal(calls.length, 0, 'nothing may reach the provider when the boundary refuses');
+});
+
+test('qwen: a request whose data class may never leave is refused, and nothing is sent', async () => {
+  const calls: RecordedCall[] = [];
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    fetchImpl: recordingFetch(calls, { status: 200, body: OPENAI_COMPATIBLE_RESPONSE }),
+  });
+
+  await assert.rejects(
+    () => adapter.complete(createRequest({ prompt: 'Explain photosynthesis', dataClass: 'sensitive' }), createContext()),
+    (err: unknown) => {
+      assert.ok(err instanceof ProviderUnavailableError, 'expected a typed ProviderUnavailableError');
+      assert.match(err.detail ?? '', /egress/i);
+      return true;
+    },
+  );
+  assert.equal(calls.length, 0, 'a sensitive request must never reach the provider');
+});
+
+test('qwen: the grounded context that does travel carries only a locator and its text', async () => {
+  const calls: RecordedCall[] = [];
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    fetchImpl: recordingFetch(calls, { status: 200, body: OPENAI_COMPATIBLE_RESPONSE }),
+  });
+
+  await adapter.complete(
+    createRequest({
+      prompt: 'Explain photosynthesis',
+      context: [
+        { source: createSource({ locator: 'curriculum:science/photosynthesis' }), text: 'Light becomes chemical energy.' },
+      ],
+    }),
+    createContext(),
+  );
+
+  const rendered = JSON.stringify(JSON.parse(String(calls[0]?.init.body)));
+  assert.ok(rendered.includes('curriculum:science/photosynthesis'), 'the content locator must travel');
+  assert.ok(rendered.includes('Light becomes chemical energy.'), 'the grounded text must travel');
+  assert.equal(rendered.includes('sourceId'), false, 'the rest of the lineage record must not travel');
+  assert.equal(rendered.includes('licence'), false, 'the rest of the lineage record must not travel');
+});
+
+test('qwen: a request the pool cannot pay for is refused BEFORE the provider is called', async () => {
+  const calls: RecordedCall[] = [];
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    fetchImpl: recordingFetch(calls, { status: 200, body: OPENAI_COMPATIBLE_RESPONSE }),
+  });
+
+  await assert.rejects(
+    () =>
+      adapter.complete(
+        createRequest({ prompt: 'Explain photosynthesis', maxOutputTokens: 256 }),
+        createContext({ budget: createBudgetLedger('pool-test', 10, 'token') }),
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof BudgetExceededError, 'expected a BudgetExceededError');
+      return true;
+    },
+  );
+  assert.equal(calls.length, 0, 'the provider must not be called when the pool cannot pay for the worst case');
 });
 
 test('qwen: the two regional endpoints are distinct, both https, and both end the same way', () => {

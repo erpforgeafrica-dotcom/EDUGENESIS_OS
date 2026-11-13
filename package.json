@@ -13,9 +13,9 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "tsc -b packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
+    "build": "tsc -b --force packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
     "clean": "tsc -b --clean packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
-    "typecheck": "tsc -b --pretty false packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
+    "typecheck": "tsc -b --force --pretty false packages/contracts packages/accessibility packages/onekey packages/ledger packages/identity packages/verification apps/cli",
     "test": "npm run build && npm run test:only",
     "test:only": "node tools/assert-tests-ran.mjs --min 20 -- node --test --test-reporter=spec \"packages/*/dist/**/*.test.js\" \"apps/*/dist/**/*.test.js\"",
     "doctor": "node apps/cli/dist/doctor.js",

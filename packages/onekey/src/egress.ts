@@ -173,6 +173,118 @@ export function projectEgressPayload(
 }
 
 /**
+ * The shape a grounded-context entry may take once it has been projected.
+ *
+ * The locator is a CONTENT identifier (`curriculum:algebra/linear-eq`), never a
+ * filesystem path and never a URL: a `file://` locator would put the build
+ * machine's directory layout on a third party's server, and a URL could name an
+ * internal host. Only `locator` and `text` travel — the rest of the lineage
+ * record (the licence, the retrieval time, the tier) stays in the process.
+ */
+export interface EgressGroundedContextEntry {
+  readonly locator: string;
+  readonly text: string;
+}
+
+/** Limits on what a grounded context may carry. */
+export interface GroundedContextOptions {
+  /** Largest single entry, in characters. */
+  readonly maxChars?: number;
+  /** Largest number of entries that may travel. */
+  readonly maxEntries?: number;
+}
+
+const DEFAULT_MAX_CONTEXT_CHARS = 4_000;
+const DEFAULT_MAX_CONTEXT_ENTRIES = 50;
+
+/**
+ * True when a locator names a filesystem path or a URL rather than content.
+ *
+ * WHY EACH ONE: a drive letter and a leading separator are the two ways Windows
+ * and POSIX spell an absolute path; `://` is the shape of every URL, and an
+ * internal URL is an internal host; a control character can break out of a
+ * single-line field in whatever the receiver does with it.
+ */
+function locatorIsUnsafe(locator: string): boolean {
+  if (locator.length === 0 || locator.length > 200) return true;
+  if (/^[A-Za-z]:[\\/]/.test(locator)) return true;
+  if (locator.startsWith('/') || locator.startsWith('\\')) return true;
+  if (locator.includes('://')) return true;
+  // The `file:` scheme is refused on its own, whatever it is spelled with:
+  // it names the build machine's filesystem, and that is the leak the
+  // grounded-context projector exists to close.
+  if (/^file:/i.test(locator)) return true;
+  // eslint-disable-next-line no-control-regex -- the control characters ARE the thing being rejected
+  if (/[\u0000-\u001F\u007F]/.test(locator)) return true;
+  return false;
+}
+
+/**
+ * Project grounded context onto the shape that may leave the process.
+ *
+ * WHY THIS EXISTS: the module's own rule says a nested value is an unbounded
+ * surface — `{ context: [{ source, text }] }` can carry anything at any depth
+ * and no name check can see it — so grounded context needs its own projector
+ * before it may be sent. Until one existed, the only real provider adapter
+ * shipped the raw context to a third party, and the egress boundary was dead
+ * code on the only path that mattered.
+ *
+ * THE PROJECTION IS CLOSED: exactly two string fields leave. The locator is
+ * checked to be a content identifier, the text is bounded in length, and the
+ * entry count is bounded. Everything else about the lineage stays inside.
+ *
+ * IT FAILS CLOSED: an unsafe locator, an oversized entry, a non-string text or
+ * too many entries is REFUSED, not silently dropped. Silently dropping the
+ * grounding would change the model's answer without saying so.
+ */
+export function projectGroundedContext(
+  context: readonly { source: { locator: string }; text: string }[],
+  options: GroundedContextOptions = {},
+): EgressGroundedContextEntry[] {
+  const maxChars = options.maxChars ?? DEFAULT_MAX_CONTEXT_CHARS;
+  const maxEntries = options.maxEntries ?? DEFAULT_MAX_CONTEXT_ENTRIES;
+
+  if (!Array.isArray(context)) {
+    throw new EgressRejectedError(['context'], 'the grounded context must be an array');
+  }
+  if (context.length > maxEntries) {
+    throw new EgressRejectedError(
+      ['context'],
+      `the grounded context carries ${String(context.length)} entries; at most ${String(maxEntries)} may travel`,
+    );
+  }
+
+  const out: EgressGroundedContextEntry[] = [];
+  for (const entry of context) {
+    if (typeof entry !== 'object' || entry === null) {
+      throw new EgressRejectedError(['context'], 'a grounded-context entry must be an object');
+    }
+    const locator = entry.source?.locator;
+    if (typeof locator !== 'string' || locatorIsUnsafe(locator)) {
+      throw new EgressRejectedError(
+        ['context'],
+        'a grounded-context locator must be a content identifier, not a filesystem path or a URL',
+      );
+    }
+    const text = entry.text;
+    if (typeof text !== 'string') {
+      throw new EgressRejectedError(['context'], 'a grounded-context entry must carry text');
+    }
+    if (text.length > maxChars) {
+      throw new EgressRejectedError(
+        ['context'],
+        `a grounded-context entry is ${String(text.length)} characters; at most ${String(maxChars)} may travel`,
+      );
+    }
+    if (text.includes('\u0000')) {
+      throw new EgressRejectedError(['context'], 'a grounded-context entry carries a NUL character');
+    }
+    out.push({ locator, text });
+  }
+  return out;
+}
+
+/**
  * The non-throwing form, for a caller that must record the refusal rather than
  * abort a request.
  */

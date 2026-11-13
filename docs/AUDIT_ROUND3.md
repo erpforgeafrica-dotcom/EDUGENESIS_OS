@@ -78,6 +78,18 @@ Each repair is backed by a named executable check. No gate was weakened; two gat
 a live canary, `npm run build` exit 0, `npm run test:only` **425/425 META-GATE PASS**,
 `node tools/verify-all.mjs` **16/16 PASS, 0 blockers failed, 0 warnings**.
 
+### Second repair batch — the six `packages/onekey` blockers
+
+| # | Defect | Repair | Evidence |
+|---|---|---|---|
+| R8 | **The egress boundary was dead code.** The only real provider adapter never called `projectEgressPayload` and shipped raw grounded context — the locator and the text — to the third party. The contract had already said *"grounded context needs its own projector before it may be sent; until then it is refused"*; no such projector existed | `projectGroundedContext` was written and the adapter now projects the request **and** its context before a byte is built. A locator that names a filesystem path or a URL is refused; only `locator` and `text` travel; the rest of the lineage record stays inside the process | 10 new tests: the projector refuses drive-letter, UNC, POSIX-absolute and URL locators; the adapter refuses a filesystem locator and a `sensitive` data class **before anything is sent**; the context that does travel carries only a locator and its text |
+| R9 | **The hard cap did not bound real spend.** The budget was tested against the usage reported *after* the provider had answered — the money was already gone | The adapter now tests the pool against the worst case the request can cost, **before** the call. A refusal is not a denial: the gateway treats a budget refusal as a fall-through to the next tier and Tier 0 still answers | New test: a request the pool cannot pay for never reaches the provider |
+| R10 | **Routing trusted the client's own classification.** `req.dataClass` and `req.safetyTier` were used while `policy.dataClass` and `policy.safetyTier` were **dead inputs** — a client could claim `public` to reach a provider cleared for more | The effective classification is now the **stricter** of the request's claim and the server-side policy's. A request may only ever make the routing stricter. The policy trace records the effective values | New gateway test: a provider cleared only for `public` is not called for a `learner_scoped` task, the learner is still served, and the trace names `learner_scoped` |
+| R11 | **Tier 0's last resort lied about relevance.** It served the closest cached lesson while asserting *"covers this topic"* even when the lesson shared no word with the question | The notice is now score-aware. A lesson with no topical overlap says the library has no lesson on this topic and that this is the closest one it has | New test |
+| R12 | **The conformance suite destroyed the adapter it was testing.** It called `dispose()` before the behavioural rules, so the credential was gone and rule 7 passed **vacuously** on the resulting refusal | `dispose()` is now the **last** rule, where it can affect nothing | The suite's own rule order changed; the behavioural rules now measure the adapter |
+| R13 | **The provider base URL was unvalidated**, so a credential could be attached to a plaintext, `file:` or link-local metadata endpoint | `assertSafeBaseUrl` runs at construction: HTTPS, or HTTP on loopback; no credentials in the URL. A bad configuration is a startup failure | New test |
+| R14 | **The build could leave a STALE `dist` silently — and it did.** `tsc -b` decides a project is up to date by comparing timestamps. A source file edited while a build was running was skipped by every later build, because the compiled output was newer than the source. A test was present in the source, absent from the compiled output, and the suite passed without it | The published `build` and `typecheck` commands now run `tsc -b --force`, so the command the README publishes and CI runs always recompiles from the current sources. **Residual:** the staleness is detected by *absence of the defect*, not by a content check — a machine check that detects staleness by content rather than by timestamp is a Slice 1 item | Reproduced: the test count went 437 → 438 the moment the forced rebuild took effect |
+
 ---
 
 ## 4. Open findings — not repaired in this round
@@ -86,25 +98,24 @@ These are recorded, not hidden. Full detail in `docs/GAP-REGISTER.md`.
 
 **Blockers still open (all in `packages/onekey`, all closable in code):**
 
-- **The egress allowlist is dead code.** The only real provider adapter never calls it and
-  ships raw grounded context — safeguarding and disability notes, and a `file://` locator —
-  to the third party (`qwen-adapter.ts:193`).
-- **Routing trusts client-declared `dataClass` and `safetyTier`** and ignores the server-side
-  `TaskPolicy`'s own values (`policy.ts:133`).
-- **Tier 0's last resort serves an unrelated lesson** while asserting that it "covers this
-  topic" (`tier-zero.ts:228`).
-- **The hard cap does not bound real spend**: the provider is called and paid for, and only
-  then is the charge refused and the answer discarded (`gateway.ts:297`).
-- **The conformance suite destroys a live adapter's credential** with `dispose()` and then
-  fails its own budget rule because of it, so rule 7 passes vacuously (`conformance.ts:226`);
-  and no adapter is required to run the suite at all (`conformance.ts:95`).
+- **No adapter is required to run the conformance suite.** The suite exists and the
+  rules are objective, but nothing in the build makes a registered adapter pass it,
+  and the real Qwen adapter does not run it at all. A rule that nothing enforces is
+  a rule that measures nothing. *Owner: engineering — bind the suite to the
+  registry at start-up.*
+- **The kill switch and the circuit breaker are per-process.** A kill issued on one
+  gateway instance does not stop traffic on another, and a tripped circuit is
+  invisible to every other instance. For a product whose emergency-disablement
+  promise is governance-grade, that is a real gap. It needs a shared store — the
+  same repository seam ADR-0017 defers. *Owner: engineering, after the durable
+  adapter lands.*
 
-**Majors:** the kill switch and circuit breaker are per-process; a 429 trips the health
-circuit on a healthy provider; the deferred-to-human path records a deferral even when no
-Tier 4 handler exists; the sponsor report silently defaults missing producer keys to zero,
-hiding contract drift; negative monetary values can be appended; the ledger has no
-concurrency control and no verification on read or write; the 60 % engine cannot detect a
-semantic double count.
+**Majors still open:** a 429 trips the health circuit on a healthy provider; the
+deferred-to-human path records a deferral even when no Tier 4 handler exists; the
+sponsor report silently defaults missing producer keys to zero, hiding contract
+drift; negative monetary values can be appended to the ledger; the ledger has no
+concurrency control and no verification on read or write; the 60 % engine cannot
+detect a semantic double count.
 
 **Also open:** Phase 5 work items recorded as done but unimplemented (13-item model card and
 lifecycle, signed Tier 0 bundle pipeline, adapter regions allowlist, Tier 2 adapter — F1-09);

@@ -57,6 +57,19 @@ export const TIER_ZERO_MODEL = 'offline-curriculum';
  */
 export const TIER_ZERO_FALLBACK_NOTICE = 'Here is a lesson from your offline library that covers this topic.';
 
+/**
+ * The notice for a fallback whose best candidate shares NO word with the task.
+ *
+ * WHY TWO NOTICES: the original notice asserted topical coverage
+ * unconditionally, so a learner who asked about the water cycle could be
+ * served an algebra lesson that CLAIMED to cover their question. The claim is
+ * now made only when the relevance score says there is a topical match. The
+ * learner still receives a lesson — the product promise is that a learner is
+ * never denied — but the text no longer says something the build cannot know.
+ */
+export const TIER_ZERO_FALLBACK_UNRELATED_NOTICE =
+  'Our offline library has no lesson on this exact topic. Here is the closest lesson we have — it may not answer your question.';
+
 const DEFAULT_ENTRIES: TierZeroEntry[] = [
   {
     id: 'algebra/linear-eq',
@@ -239,7 +252,9 @@ export function createTierZeroProvider(opts: TierZeroOptions = {}): TierZeroProv
       }
 
       const result = toResult(best);
-      return { ...result, text: `${TIER_ZERO_FALLBACK_NOTICE}\n\n${result.text}` };
+      // The notice must not claim topical coverage the score does not support.
+      const notice = bestScore > 0 ? TIER_ZERO_FALLBACK_NOTICE : TIER_ZERO_FALLBACK_UNRELATED_NOTICE;
+      return { ...result, text: `${notice}\n\n${result.text}` };
     },
 
     bundles(): string[] {
