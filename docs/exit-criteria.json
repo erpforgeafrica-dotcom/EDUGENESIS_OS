@@ -73,10 +73,25 @@
       "status": "met",
       "evidence": [
         {
+          "kind": "file",
+          "target": ".github/workflows/ci.yml",
+          "contains": [
+            "accessibility:",
+            "negative-fixtures.test.js",
+            "The ARC-I1 negative fixtures must go red"
+          ]
+        },
+        {
           "kind": "gate",
           "target": "accessibility-contract"
+        },
+        {
+          "kind": "test",
+          "target": "packages/verification/dist/gates/negative-fixtures.test.js",
+          "minTests": 15
         }
-      ]
+      ],
+      "note": "The row was previously proved only by the accessibility-contract gate, which did not prove what the criterion asks: that a CI JOB exists and that the pipeline goes RED on an ARC-I1 violation. A dedicated `accessibility` CI job now exists. It runs the ARC-I1 negative fixtures - each builds the smallest tree that must fail and asserts the gate refuses it - so the job is red whenever the gate would let a violating emission through, and it then requires the accessibility-contract gate to be green on the real tree so the first step cannot be vacuous."
     },
     {
       "id": "P0-6",

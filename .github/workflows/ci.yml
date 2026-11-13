@@ -56,6 +56,35 @@ jobs:
       - name: Run the test suite
         run: npm run test:only
 
+  accessibility:
+    name: Accessibility (an ARC-I1 violation must fail the build)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      # WHY THIS IS ITS OWN JOB: the Phase 0 criterion P0-5 says an
+      # accessibility CI job exists that FAILS a build on an ARC-I1 violation,
+      # proven by an intentionally broken fixture and a red build. These
+      # fixtures build the smallest tree that must fail and assert that the
+      # accessibility gate refuses it — so this job is red whenever the gate
+      # would let a violating emission through. It is the proof that the
+      # pipeline goes red, not a claim that it does.
+      - name: The ARC-I1 negative fixtures must go red
+        run: node --test packages/verification/dist/gates/negative-fixtures.test.js
+      # ...and the gate must be GREEN on the real tree, or the job above is
+      # vacuous.
+      - name: The accessibility contract gate must pass on the real tree
+        run: node tools/verify-all.mjs
+
   secrets:
     name: Secrets scan
     runs-on: ubuntu-latest
