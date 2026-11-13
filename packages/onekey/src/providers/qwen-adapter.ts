@@ -71,6 +71,11 @@ export interface QwenAdapterOptions {
   apiKey?: string;
   /** OpenAI-compatible base URL. Defaults to the international endpoint. */
   baseUrl?: string;
+  /**
+   * Hosts the credential may be sent to. Defaults to the two Qwen hosts.
+   * A self-hosted or proxied provider must be named here explicitly.
+   */
+  allowedHosts?: readonly string[];
   /** Model id, e.g. `qwen-plus`, `qwen-turbo`, `qwen-max`. */
   modelId?: string;
   /** Fallback tier this provider belongs to. */
@@ -138,10 +143,36 @@ const platformFetch: FetchLike = async (url, init) => {
  * metadata service, or a local file — and the credential would go with it.
  *
  * THE RULE: HTTPS, except on loopback (a locally hosted mock). No
- * credentials in the URL. The check runs when the adapter is CONSTRUCTED, so
- * a bad configuration is a startup failure rather than a runtime surprise.
+ * credentials in the URL. AND the host must be on the allowlist: a valid
+ * HTTPS certificate proves the server is who it says it is, not that it is
+ * the provider the credential belongs to. A cloud metadata endpoint is
+ * HTTPS-reachable, so scheme validation alone never bounded this.
  */
-export function assertSafeBaseUrl(baseUrl: string): string {
+export interface BaseUrlPolicy {
+  /** Hosts a credential may be sent to. Loopback is always permitted. */
+  readonly allowedHosts?: readonly string[];
+}
+
+/** The hosts the Qwen credential belongs to. */
+const DEFAULT_ALLOWED_HOSTS: readonly string[] = [
+  'dashscope-intl.aliyuncs.com',
+  'dashscope.aliyuncs.com',
+];
+
+/**
+ * Hosts that are never a model provider, whatever the allowlist says.
+ * These answer with instance credentials, so a request to one is a breach,
+ * not a misconfiguration.
+ */
+const METADATA_HOSTS: ReadonlySet<string> = new Set([
+  '169.254.169.254',
+  '100.100.100.200',
+  'metadata.google.internal',
+  'metadata',
+  'fd00:ec2::254',
+]);
+
+export function assertSafeBaseUrl(baseUrl: string, policy: BaseUrlPolicy = {}): string {
   let parsed: URL;
   try {
     parsed = new URL(baseUrl);
@@ -159,13 +190,26 @@ export function assertSafeBaseUrl(baseUrl: string): string {
   if (parsed.username !== '' || parsed.password !== '') {
     throw new Error('the provider base URL must not carry credentials');
   }
+  if (METADATA_HOSTS.has(host)) {
+    throw new Error(`the provider base URL names a metadata endpoint: "${host}"`);
+  }
+  if (!loopback) {
+    const allowed = policy.allowedHosts ?? DEFAULT_ALLOWED_HOSTS;
+    if (!allowed.includes(host)) {
+      throw new Error(
+        `the provider host "${host}" is not in the allowlist (${allowed.join(', ')})`,
+      );
+    }
+  }
   return parsed.toString().replace(/\/+$/, '');
 }
 
 export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapter {
   const id = 'qwen';
   const modelId = opts.modelId ?? QWEN_DEFAULT_MODEL;
-  const baseUrl = assertSafeBaseUrl(opts.baseUrl ?? QWEN_BASE_URL);
+  const baseUrl = assertSafeBaseUrl(opts.baseUrl ?? QWEN_BASE_URL, {
+    ...(opts.allowedHosts ? { allowedHosts: opts.allowedHosts } : {}),
+  });
   const maxDataClass = opts.maxDataClass ?? 'learner_scoped';
   const clearedSafetyTiers = opts.clearedSafetyTiers ?? ['low', 'medium'];
   const fetchImpl = opts.fetchImpl ?? platformFetch;

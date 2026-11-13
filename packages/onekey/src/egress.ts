@@ -197,25 +197,77 @@ export interface GroundedContextOptions {
 const DEFAULT_MAX_CONTEXT_CHARS = 4_000;
 const DEFAULT_MAX_CONTEXT_ENTRIES = 50;
 
+/** URL schemes that never name a content identifier. */
+const UNSAFE_LOCATOR_SCHEMES: readonly string[] = [
+  'apex', 'blob', 'data', 'file', 'ftp', 'ftps', 'gopher', 'jar', 'javascript',
+  'nfs', 'sftp', 'smb', 'vbscript', 'ws', 'wss',
+];
+
+/**
+ * The unsafe SHAPES, checked against a locator and against each decoded form.
+ *
+ * Every rule below is a different spelling of the same leak — "this string
+ * names a file on the build machine" — and each one was reachable before this
+ * check existed:
+ *
+ *   letter-colon-separator   drive-absolute (either separator)
+ *   letter-colon-name        drive-RELATIVE: the old pattern required a
+ *                            separator, so this passed and named a file
+ *                            relative to the process's drive
+ *   leading separator        POSIX-absolute, Windows-rooted
+ *   double separator         UNC network path
+ *   tilde                    home-relative
+ *   dot-dot, dot             traversal, leading or embedded
+ *   scheme-colon             file:, data:, javascript: and friends
+ *   any://                   a URL with an authority
+ *   scheme:/                 a filesystem root named after a scheme
+ * Bare relative segments like `curriculum:algebra/linear-eq` stay permitted:
+ * they are the platform's content identifiers and name no host or drive.
+ */
+function isUnsafeLocatorShape(value: string): boolean {
+  if (/^[A-Za-z]:/.test(value)) return true;
+  if (value.startsWith('/') || value.startsWith('\\')) return true;
+  if (/^~($|[\\/])/.test(value)) return true;
+  if (/(^|[\\/])\.\.([\\/]|$)/.test(value)) return true;
+  if (/(^|[\\/])\.([\\/]|$)/.test(value)) return true;
+  if (value.includes('://')) return true;
+  // `scheme:/absolute` and `scheme:\absolute` name a filesystem root even
+  // though the string does not begin with a separator.
+  if (value.includes(':/') || value.includes(':\\')) return true;
+  const scheme = /^([A-Za-z][A-Za-z0-9+.-]*):/.exec(value);
+  if (scheme && UNSAFE_LOCATOR_SCHEMES.includes((scheme[1] ?? '').toLowerCase())) return true;
+  return false;
+}
+
 /**
  * True when a locator names a filesystem path or a URL rather than content.
  *
- * WHY EACH ONE: a drive letter and a leading separator are the two ways Windows
- * and POSIX spell an absolute path; `://` is the shape of every URL, and an
- * internal URL is an internal host; a control character can break out of a
- * single-line field in whatever the receiver does with it.
+ * THE CHECK IS ON THE VALUE, NOT THE SPELLING: it runs on the trimmed locator,
+ * then on every percent-decoded form up to two passes, because an encoded
+ * traversal is still a traversal to whoever decodes it downstream. A malformed
+ * escape is refused rather than passed through unexamined.
  */
 function locatorIsUnsafe(locator: string): boolean {
   if (locator.length === 0 || locator.length > 200) return true;
-  if (/^[A-Za-z]:[\\/]/.test(locator)) return true;
-  if (locator.startsWith('/') || locator.startsWith('\\')) return true;
-  if (locator.includes('://')) return true;
-  // The `file:` scheme is refused on its own, whatever it is spelled with:
-  // it names the build machine's filesystem, and that is the leak the
-  // grounded-context projector exists to close.
-  if (/^file:/i.test(locator)) return true;
+  const value = locator.trim();
+  if (value.length === 0) return true;
   // eslint-disable-next-line no-control-regex -- the control characters ARE the thing being rejected
-  if (/[\u0000-\u001F\u007F]/.test(locator)) return true;
+  if (/[\u0000-\u001F\u007F]/.test(value)) return true;
+  if (isUnsafeLocatorShape(value)) return true;
+  let decoded = value;
+  for (let pass = 0; pass < 2; pass += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(decoded);
+    } catch {
+      return true;
+    }
+    if (next === decoded) break;
+    decoded = next;
+    // eslint-disable-next-line no-control-regex -- the control characters ARE the thing being rejected
+    if (/[\u0000-\u001F\u007F]/.test(decoded)) return true;
+    if (isUnsafeLocatorShape(decoded)) return true;
+  }
   return false;
 }
 

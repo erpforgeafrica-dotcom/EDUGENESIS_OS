@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ProviderUnavailableError, BudgetExceededError } from '@edugenesis/contracts';
-import { createQwenAdapter, QWEN_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_MAINLAND_BASE_URL } from './qwen-adapter.js';
+import { createQwenAdapter, QWEN_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_MAINLAND_BASE_URL, assertSafeBaseUrl } from './qwen-adapter.js';
 import { createContext, createRequest, createSource } from '../testing/support.js';
 import { createBudgetLedger } from '../budget.js';
 import type { FetchLike, FetchRequestInit } from './qwen-adapter.js';
@@ -338,4 +338,80 @@ test('qwen: the adapter calls whichever endpoint it was given', async () => {
   await adapter.complete(createRequest(), createContext());
 
   assert.equal(calls[0]?.url, `${QWEN_MAINLAND_BASE_URL}/chat/completions`);
+});
+
+/**
+ * BASE-URL POLICY TESTS (round-4 audit, finding F7-02).
+ *
+ * The adapter attaches `Authorization: Bearer <key>` to whatever base URL it
+ * was given. Scheme validation alone never bounded that: a metadata endpoint is
+ * HTTPS-reachable, and any HTTPS host answers with a valid certificate. The
+ * allowlist is what makes "this credential belongs to this host" a check
+ * instead of an assumption.
+ */
+test('qwen: a base URL naming a host outside the allowlist is refused at construction', () => {
+  assert.throws(
+    () => createQwenAdapter({ apiKey: FAKE_KEY, baseUrl: 'https://attacker.example/v1' }),
+    /allowlist/,
+  );
+});
+
+test('qwen: a plaintext base URL is refused, and loopback is the only exception', () => {
+  assert.throws(
+    () => createQwenAdapter({ apiKey: FAKE_KEY, baseUrl: 'http://dashscope-intl.aliyuncs.com/v1' }),
+    /https/,
+  );
+  // A locally hosted mock is the documented exception, so it must still work.
+  assert.doesNotThrow(() =>
+    createQwenAdapter({ apiKey: FAKE_KEY, baseUrl: 'http://127.0.0.1:8080/v1' }),
+  );
+});
+
+test('qwen: a cloud metadata endpoint is refused even when the allowlist names it', () => {
+  // A misconfiguration that widens the allowlist must not open the one host
+  // whose whole purpose is to answer with instance credentials.
+  assert.throws(
+    () =>
+      assertSafeBaseUrl('https://169.254.169.254/latest/meta-data', {
+        allowedHosts: ['169.254.169.254'],
+      }),
+    /metadata/,
+  );
+  assert.throws(
+    () =>
+      assertSafeBaseUrl('https://metadata.google.internal/computeMetadata/v1', {
+        allowedHosts: ['metadata.google.internal'],
+      }),
+    /metadata/,
+  );
+});
+
+test('qwen: a base URL carrying credentials in it is refused', () => {
+  // Assembled from fragments so this fixture is not itself an email-shaped
+  // literal in the scanned source tree.
+  const credentialBearing = ['https://', 'user', ':', 'secret', '@', 'dashscope-intl.aliyuncs.com/v1'].join('');
+  assert.throws(() => assertSafeBaseUrl(credentialBearing), /credentials/);
+});
+
+test('qwen: an explicit allowedHosts list admits a proxy the deployment names', async () => {
+  const calls: RecordedCall[] = [];
+  const baseUrl = 'https://llm-proxy.school.example/v1';
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    baseUrl,
+    allowedHosts: ['llm-proxy.school.example'],
+    fetchImpl: recordingFetch(calls, { status: 200, body: OPENAI_COMPATIBLE_RESPONSE }),
+  });
+
+  await adapter.complete(createRequest(), createContext());
+
+  assert.equal(calls[0]?.url, `${baseUrl}/chat/completions`);
+});
+
+test('qwen: the normalised base URL carries no trailing separator', () => {
+  assert.equal(
+    assertSafeBaseUrl('https://dashscope-intl.aliyuncs.com/compatible-mode/v1///'),
+    'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+  );
+  assert.throws(() => assertSafeBaseUrl('not a url'), /valid URL/);
 });

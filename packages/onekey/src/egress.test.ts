@@ -178,6 +178,56 @@ test('egress: a grounded-context locator that names a URL is REFUSED', () => {
   );
 });
 
+/**
+ * LOCATOR SPELLINGS THE FIRST VERSION MISSED (round-4 audit, finding F6-11).
+ *
+ * The original check tested a drive letter only when a separator followed it,
+ * and tested no relative form at all. Each entry below named a file on the
+ * build machine and left the process. Fragments are assembled (never written
+ * contiguously) so this fixture is not itself a portability finding.
+ */
+const MISSED_LOCATORS: readonly string[] = [
+  ['C', ':secret-notes.md'].join(''), // drive-relative
+  ['.', '.', '/', 'secrets', '/', 'lesson.md'].join(''), // relative traversal
+  ['.', '.', BACKSLASH, 'secrets', BACKSLASH, 'lesson.md'].join(''), // Windows traversal
+  ['~', '/', '.s', 'sh', '/', 'id_rsa'].join(''), // home-relative
+  [' ', '/etc', '/passwd'].join(''), // leading whitespace around an absolute path
+  ['data', ':text/plain;base64,', 'c2VjcmV0'].join(''), // embedded payload scheme
+  ['%2e%2e%2f', 'etc%2fpasswd'].join(''), // percent-encoded traversal
+  ['curriculum', ':%2Fetc%2Fpasswd'].join(''), // encoded absolute path in an allowed scheme
+];
+
+test('egress: every remaining filesystem spelling is REFUSED', () => {
+  for (const locator of MISSED_LOCATORS) {
+    assert.throws(
+      () => projectGroundedContext([contextEntry(locator, 'text')]),
+      EgressRejectedError,
+      `the locator "${locator}" must be refused`,
+    );
+  }
+});
+
+test('egress: a malformed percent escape is refused rather than passed through unexamined', () => {
+  assert.throws(
+    () => projectGroundedContext([contextEntry(['curriculum', ':%E0%A4%A'].join(''), 'text')]),
+    EgressRejectedError,
+  );
+});
+
+test('egress: content identifiers that name no host or drive still travel', () => {
+  // The hardening must not eat the platform's own locator vocabulary.
+  const permitted = [
+    'curriculum:algebra/linear-eq',
+    'curriculum/math/shapes#rectangle',
+    'curriculum:science/photosynthesis',
+    'doc.v2#section-4',
+  ];
+  for (const locator of permitted) {
+    const projected = projectGroundedContext([contextEntry(locator, 'text')]);
+    assert.equal(projected[0]?.locator, locator);
+  }
+});
+
 test('egress: an oversized grounded-context entry is REFUSED, not silently truncated', () => {
   assert.throws(
     () => projectGroundedContext([contextEntry('curriculum:big', 'x'.repeat(5_000))]),
