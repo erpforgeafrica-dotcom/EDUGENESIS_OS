@@ -36,28 +36,28 @@
       "title": "no-pii-in-source",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no personal data found in 130 source file(s)"
+      "detail": "no personal data found in 132 source file(s)"
     },
     {
       "id": "no-provider-leak",
       "title": "no-provider-leak",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no provider reference outside packages/onekey in 101 source file(s)"
+      "detail": "no provider reference outside packages/onekey in 103 source file(s)"
     },
     {
       "id": "path-portability",
       "title": "path-portability",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no absolute path in 141 shipped file(s)"
+      "detail": "no absolute path in 143 shipped file(s)"
     },
     {
       "id": "design-token-governance",
       "title": "design-token-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no raw colour literal in 130 source file(s)"
+      "detail": "no raw colour literal in 132 source file(s)"
     },
     {
       "id": "contracts-baseline",
@@ -79,6 +79,20 @@
       "severity": "blocker",
       "result": "PASS",
       "detail": "the PWA renders the light theme by default and every declared colour agrees with it"
+    },
+    {
+      "id": "keyboard-focus",
+      "title": "keyboard-focus",
+      "severity": "blocker",
+      "result": "PASS",
+      "detail": "the focus indicator is tokenised, dual-ring, overridden on fills, and re-authored for forced colors"
+    },
+    {
+      "id": "form-semantics",
+      "title": "form-semantics",
+      "severity": "blocker",
+      "result": "PASS",
+      "detail": "every control is named, every hint is referenced, and status feedback is announced"
     },
     {
       "id": "adr-governance",
@@ -117,8 +131,8 @@
     }
   ],
   "counts": {
-    "gates": 16,
-    "passed": 16,
+    "gates": 18,
+    "passed": 18,
     "blockersFailed": 0,
     "warnings": 0
   }

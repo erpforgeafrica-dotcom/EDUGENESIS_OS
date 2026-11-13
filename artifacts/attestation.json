@@ -4,17 +4,17 @@
   "statement": "The EduGenesis OS verification gates passed on this tree with zero blocker failures, and every file in the checksum manifest matched its recorded digest at attestation time.",
   "result": "PASS",
   "counts": {
-    "gates": 16,
-    "passed": 16,
+    "gates": 18,
+    "passed": 18,
     "blockersFailed": 0,
     "warnings": 0,
-    "filesVerified": 179
+    "filesVerified": 181
   },
   "subjects": [
     {
       "name": "artifacts/verify-report.json",
-      "sha256": "26ef057fbb3ee00fcbe6c7b9fb9941b00ba68aefdf3247a8e403092eb708289e",
-      "bytes": 3748
+      "sha256": "c4baef6355b37b6be844258b63f908db59c8ce08a196d1518a7fa2c527346280",
+      "bytes": 4225
     },
     {
       "name": "artifacts/sbom.cdx.json",
@@ -23,8 +23,8 @@
     },
     {
       "name": "artifacts/checksums.sha256",
-      "sha256": "2fa96c7dd1f428d40f985e50fa1576bcb618412e5382ad0c7dc77ef37b1b1dfc",
-      "bytes": 17937
+      "sha256": "6274b448858af043801e8123ed123e7c98f7e16cc3de701e773d3b33236a894d",
+      "bytes": 18179
     }
   ],
   "toolchain": {
