@@ -39,14 +39,24 @@ interface Harness {
   clock: ReturnType<typeof fixedClock>;
 }
 
-function harness(): Harness {
+function harness(ageAssurance?: {
+  verifiedBand(subjectId: string): 'under_13' | '13_15' | '16_17' | 'adult' | undefined;
+}): Harness {
   const clock = fixedClock();
   const identity = createIdentityService();
-  const consent = createConsentService({ now: () => clock.now() });
+  // The enrolment flow proves the guardian→learner link with a single-use
+  // credential; this harness models the deployment that supplies that
+  // authority. The consent service's DEFAULT is to refuse guardian actions.
+  const consent = createConsentService({
+    now: () => clock.now(),
+    identity,
+    authorize: () => true,
+  });
   const enrolment = createEnrolmentService({
     identity,
     consent,
     now: () => clock.now(),
+    ...(ageAssurance ? { ageAssurance } : {}),
   });
   return { enrolment, identity, consent, clock };
 }
@@ -336,4 +346,96 @@ test('enrolment: a provisional learner may still learn, whatever their consent s
 
   assert.equal(h.consent.mayShare('learner-1', 'progress_visible_to_guardian'), false);
   assert.equal(h.consent.mayLearn('learner-1'), true, 'a provisional learner may still learn');
+});
+
+/**
+ * AUTHORITY AND AGE-ASSURANCE TESTS (round-4 audit, findings F8-01/F8-02).
+ *
+ * A guardian token is a guardian credential, and an age band is an
+ * authorisation attribute. Neither may be minted by whoever happens to call.
+ */
+test('enrolment: a learner principal cannot be issued a guardian consent token', () => {
+  const h = harness();
+  h.identity.register({ id: 'learner-9', roles: ['learner'] });
+
+  assert.throws(
+    () =>
+      h.enrolment.issueGuardianConsentToken({
+        guardianId: 'learner-9',
+        learnerId: 'learner-1',
+        scopes: ['progress_visible_to_guardian'],
+      }),
+    EnrolmentRefusedError,
+  );
+  assert.equal(h.enrolment.auditTrail('learner-1')[0]?.outcome, 'refused');
+});
+
+test('enrolment: an unknown principal cannot be issued a guardian consent token', () => {
+  const h = harness();
+  assert.throws(
+    () =>
+      h.enrolment.issueGuardianConsentToken({
+        guardianId: 'nobody',
+        learnerId: 'learner-1',
+        scopes: ['progress_visible_to_guardian'],
+      }),
+    EnrolmentRefusedError,
+  );
+});
+
+test('enrolment: a caller-asserted age band is recorded as unverified, never as a band', async () => {
+  const h = harness();
+  addGuardian(h);
+  const issued = h.enrolment.issueGuardianConsentToken({
+    guardianId: 'guardian-1',
+    learnerId: 'learner-1',
+    scopes: ['progress_visible_to_guardian'],
+  });
+
+  const result = await h.enrolment.enrolWithGuardianConsent({
+    token: issued.token,
+    secret: issued.secret,
+    ageBand: 'under_13',
+  });
+
+  assert.equal(result.principal.ageBand, undefined);
+  assert.equal(result.principal.attributes['ageBandUnverified'], true);
+});
+
+test('enrolment: a band attested by age assurance is written to the principal', async () => {
+  const h = harness({ verifiedBand: () => '13_15' });
+  addGuardian(h);
+  const issued = h.enrolment.issueGuardianConsentToken({
+    guardianId: 'guardian-1',
+    learnerId: 'learner-1',
+    scopes: ['progress_visible_to_guardian'],
+  });
+
+  const result = await h.enrolment.enrolWithGuardianConsent({
+    token: issued.token,
+    secret: issued.secret,
+  });
+
+  assert.equal(result.principal.ageBand, '13_15');
+  assert.equal(result.principal.attributes['ageBandUnverified'], undefined);
+});
+
+test('enrolment: a band that contradicts the verified band is refused', async () => {
+  const h = harness({ verifiedBand: () => '16_17' });
+  addGuardian(h);
+  const issued = h.enrolment.issueGuardianConsentToken({
+    guardianId: 'guardian-1',
+    learnerId: 'learner-1',
+    scopes: ['progress_visible_to_guardian'],
+  });
+
+  await assert.rejects(
+    h.enrolment.enrolWithGuardianConsent({
+      token: issued.token,
+      secret: issued.secret,
+      ageBand: 'under_13',
+    }),
+    EnrolmentRefusedError,
+  );
+  assert.equal(h.enrolment.auditTrail('learner-1').at(-1)?.outcome, 'refused');
 });

@@ -182,6 +182,22 @@ export interface EnrolmentServiceOptions {
   readonly consent: ConsentService;
   /** Clock injection. Defaults to the system clock. */
   readonly now?: () => Date;
+  /**
+   * The age-assurance service.
+   *
+   * WHY IT IS INJECTED AND NOT OPTIONAL IN SPIRIT: the round-3 audit found the
+   * age band was whatever the caller typed, and the ABAC policy trusted it. A
+   * band is evidence only when an assurance process attests it. When this is
+   * absent, NO band is written to the principal — a caller-supplied band is
+   * recorded as unverified and never becomes an authorisation attribute.
+   */
+  readonly ageAssurance?: AgeAssurance;
+}
+
+/** The age-assurance seam. The ceremony itself is a Slice 1 integration. */
+export interface AgeAssurance {
+  /** The band this service has verified for a subject, if any. */
+  verifiedBand(subjectId: string): Principal['ageBand'] | undefined;
 }
 
 export interface EnrolmentService {
@@ -258,10 +274,21 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
   function issueGuardianConsentToken(input: IssueGuardianConsentTokenInput): IssuedGuardianConsentToken {
     const guardian = identity.get(input.guardianId);
     if (!guardian) {
-      throw new Error(`Unknown guardian: ${input.guardianId}`);
+      refuse('the token issuer is not a registered principal', 'guardian_consent_token', input.learnerId, {
+        guardianId: input.guardianId,
+      });
+    }
+    // A token is a guardian credential. Handing one to a learner account is
+    // how a child would end up consenting for themselves.
+    if (!guardian.roles.includes('guardian')) {
+      refuse('the token issuer is not a guardian', 'guardian_consent_token', input.learnerId, {
+        guardianId: input.guardianId,
+      });
     }
     if (!input.learnerId || input.learnerId.length === 0) {
-      throw new Error('A consent token must name the learner it authorises.');
+      refuse('a consent token must name the learner it authorises', 'guardian_consent_token', input.learnerId, {
+        guardianId: input.guardianId,
+      });
     }
 
     // The secret is issued by the identity service, which keeps only a
@@ -346,6 +373,20 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
     }
 
     const roles: readonly Role[] = ['learner'];
+    // A band the caller asserts is not evidence. Only a band the assurance
+    // service attests is written as an authorisation attribute.
+    const verifiedBand = options.ageAssurance?.verifiedBand(subjectId);
+    if (
+      input.ageBand !== undefined &&
+      verifiedBand !== undefined &&
+      input.ageBand !== verifiedBand
+    ) {
+      refuse('the supplied age band does not match the verified band', method, subjectId, {
+        consentTokenId: token.tokenId,
+        guardianId: token.guardianId,
+      });
+    }
+    const ageBand = verifiedBand;
     let principal: Principal;
     try {
       principal = identity.register({
@@ -357,8 +398,12 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
           guardianConsent: true,
           enrolmentStatus: 'provisional',
           enrolmentMethod: method,
+          // An unverified band is recorded as a flag, never as a band.
+          ...(input.ageBand !== undefined && ageBand === undefined
+            ? { ageBandUnverified: true }
+            : {}),
         },
-        ...(input.ageBand !== undefined ? { ageBand: input.ageBand } : {}),
+        ...(ageBand !== undefined ? { ageBand } : {}),
       });
     } catch (error) {
       refuse(

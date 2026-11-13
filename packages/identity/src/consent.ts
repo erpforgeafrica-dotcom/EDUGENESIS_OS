@@ -37,6 +37,7 @@ import type {
   ConsentRecord,
   ConsentScope,
   ConsentService as ConsentServiceContract,
+  Principal,
 } from '@edugenesis/contracts';
 
 /** Every sharing surface the platform knows about. */
@@ -83,7 +84,17 @@ export const CONSENT_SCOPE_KINDS: Readonly<Record<ConsentScope, ConsentScopeKind
 
 /** An audit event. Carries no personal data beyond the opaque learner id. */
 export interface ConsentAuditEvent {
+  /** The time the caller CLAIMS the decision happened. */
   readonly at: string;
+  /**
+   * The time this service RECORDED the decision.
+   *
+   * WHY BOTH: `at` is supplied by the caller, so an audit trail built only from
+   * it can be backdated. The decision still carries the claimed time (a
+   * migration may legitimately record a past decision), but the trail also
+   * carries the moment the process witnessed it, which no caller can choose.
+   */
+  readonly recordedAt: string;
   readonly learnerId: string;
   readonly scope: ConsentScope;
   readonly event: 'grant' | 'withdrawal' | 'refusal' | 'cascade_lock';
@@ -94,11 +105,60 @@ export interface ConsentAuditEvent {
   readonly learnerAssent?: boolean;
 }
 
+/** The action an authorisation decision is about. */
+export type ConsentAction = 'grant' | 'withdraw';
+
+export interface ConsentAuthorisationRequest {
+  readonly action: ConsentAction;
+  readonly learnerId: string;
+  readonly scope: ConsentScope;
+  readonly actor: 'learner' | 'guardian' | 'system';
+  /** Present when a guardian is acting. */
+  readonly guardianId?: string;
+}
+
+/**
+ * Deployment-supplied authority check.
+ *
+ * WHY IT IS INJECTED: this package holds the consent STATE, not the
+ * relationships between people. Whether guardian G may act for learner L is a
+ * fact the identity/enrolment layer owns. The service therefore cannot invent
+ * it, and must not assume it.
+ */
+export type ConsentAuthorizer = (request: ConsentAuthorisationRequest) => boolean;
+
+/** A consent action that the authority rules refuse. */
+export class ConsentRefusedError extends Error {
+  readonly code = 'CONSENT_REFUSED';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'ConsentRefusedError';
+  }
+}
+
 export interface ConsentServiceOptions {
   /** Actor recorded for withdrawals. Defaults to 'learner'. */
   readonly actor?: 'learner' | 'guardian' | 'system';
+  /** The acting guardian's principal id, when `actor` is 'guardian'. */
+  readonly actorId?: string;
   /** Clock injection. Defaults to the system clock. */
   readonly now?: () => Date;
+  /**
+   * Authority check for guardian actions.
+   *
+   * SECURE DEFAULT: when this is absent, a GUARDIAN grant or withdrawal is
+   * REFUSED. A learner acting on their own consent is still permitted — that is
+   * the contract's model. A deployment that lets guardians act must say who may
+   * act for whom; silence is not consent.
+   */
+  readonly authorize?: ConsentAuthorizer;
+  /**
+   * Optional principal lookup, used to refuse a guardian id that is not a
+   * person at all (or is not a guardian). Supplying it turns a typo into a
+   * refusal instead of a recorded grant.
+   */
+  readonly identity?: { get(id: string): Principal | undefined };
 }
 
 export interface ConsentService extends ConsentServiceContract {
@@ -194,6 +254,7 @@ export function createConsentService(opts: ConsentServiceOptions = {}): ConsentS
     const trail = auditByLearner.get(learnerId) ?? [];
     trail.push({
       at,
+      recordedAt: now().toISOString(),
       learnerId,
       scope,
       event,
@@ -202,6 +263,40 @@ export function createConsentService(opts: ConsentServiceOptions = {}): ConsentS
       ...(extra?.learnerAssent === undefined ? {} : { learnerAssent: extra.learnerAssent }),
     });
     auditByLearner.set(learnerId, trail);
+  }
+
+  /**
+   * Refuse a guardian action unless a policy says this guardian may act for
+   * this learner on this scope.
+   *
+   * WHY REFUSING IS THE DEFAULT: a recorded guardian grant is evidence that a
+   * child's data may be shared. If the service cannot name who authorised it,
+   * the honest answer is "no", not "probably".
+   */
+  function requireGuardianAuthority(
+    learnerId: string,
+    scope: ConsentScope,
+    guardianId: string,
+    action: ConsentAction,
+  ): void {
+    if (!opts.authorize) {
+      throw new ConsentRefusedError(
+        `a guardian ${action} requires an authorisation policy; none was configured`,
+      );
+    }
+    const principal = opts.identity?.get(guardianId);
+    if (opts.identity && !principal) {
+      throw new ConsentRefusedError(`unknown guardian: ${guardianId}`);
+    }
+    if (principal && !principal.roles.includes('guardian')) {
+      throw new ConsentRefusedError(`principal ${guardianId} is not a guardian`);
+    }
+    const allowed = opts.authorize({ action, learnerId, scope, actor: 'guardian', guardianId });
+    if (!allowed) {
+      throw new ConsentRefusedError(
+        `guardian ${guardianId} may not ${action} consent for learner ${learnerId}`,
+      );
+    }
   }
 
   function snapshot(learnerId: string, scope: ConsentScope): ConsentRecord {
@@ -251,6 +346,11 @@ export function createConsentService(opts: ConsentServiceOptions = {}): ConsentS
 
   function grant(grant: ConsentGrant): ConsentRecord {
     const grantActor: 'learner' | 'guardian' = grant.guardianId ? 'guardian' : 'learner';
+    if (grantActor === 'guardian' && grant.guardianId) {
+      // Authorise BEFORE anything is recorded: a refused grant must leave no
+      // trace that could later be read as consent.
+      requireGuardianAuthority(grant.learnerId, grant.scope, grant.guardianId, 'grant');
+    }
     if (!grant.granted) {
       // An explicit refusal is recorded like a withdrawal and is never erased.
       return performWithdrawal(grant.learnerId, grant.scope, grantActor, grant.at, 'refusal');
@@ -266,6 +366,14 @@ export function createConsentService(opts: ConsentServiceOptions = {}): ConsentS
   }
 
   function withdraw(learnerId: string, scope: ConsentScope): ConsentRecord {
+    if (actor === 'guardian') {
+      if (!opts.actorId) {
+        throw new ConsentRefusedError(
+          'a guardian withdrawal must name the guardian in ConsentServiceOptions.actorId',
+        );
+      }
+      requireGuardianAuthority(learnerId, scope, opts.actorId, 'withdraw');
+    }
     return performWithdrawal(learnerId, scope, actor, now().toISOString());
   }
 

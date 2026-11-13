@@ -16,6 +16,7 @@ import { describe, test } from 'node:test';
 import {
   CONSENT_DEPENDENCIES,
   CONSENT_SCOPES,
+  ConsentRefusedError,
   createConsentService,
 } from './consent.js';
 import type { ConsentScope } from '@edugenesis/contracts';
@@ -57,7 +58,10 @@ describe('consent dependency graph', () => {
 
 describe('consent grants and withdrawals', () => {
   test('a grant records the scope with history', () => {
-    const service = createConsentService({ now: at('2026-01-01T00:00:00.000Z') });
+    const service = createConsentService({
+      now: at('2026-01-01T00:00:00.000Z'),
+      authorize: () => true,
+    });
 
     const record = service.grant({
       learnerId: LEARNER,
@@ -177,6 +181,8 @@ describe('consent grants and withdrawals', () => {
   test('the withdrawal is recorded in history with the actor', () => {
     const service = createConsentService({
       actor: 'guardian',
+      actorId: 'guardian-1',
+      authorize: () => true,
       now: at('2026-01-02T00:00:00.000Z'),
     });
     service.grant({
@@ -368,3 +374,93 @@ describe('consent — audit trail', () => {
     assert.ok(!locked.includes('analytics_aggregate'));
   });
 });
+
+/**
+ * AUTHORITY TESTS.
+ *
+ * The round-3 audit found the service performed no authorisation at all: any
+ * caller could record a guardian grant for any learner. These tests make that
+ * a refusal, and they exist so a future refactor cannot quietly restore it.
+ */
+describe('consent authority', () => {
+  const guardianGrant = (): Parameters<ReturnType<typeof createConsentService>['grant']>[0] => ({
+    learnerId: LEARNER,
+    scope: 'progress_visible_to_guardian',
+    granted: true,
+    at: '2026-01-01T00:00:00.000Z',
+    guardianId: 'guardian-1',
+  });
+
+  test('a guardian grant is refused when no authorisation policy is configured', () => {
+    const service = createConsentService({ now: at('2026-01-02T00:00:00.000Z') });
+    assert.throws(() => service.grant(guardianGrant()), ConsentRefusedError);
+    assert.equal(service.mayShare(LEARNER, 'progress_visible_to_guardian'), false);
+    assert.deepEqual(service.auditTrail(LEARNER), []);
+  });
+
+  test('a guardian grant is refused when the policy says no', () => {
+    const service = createConsentService({
+      now: at('2026-01-02T00:00:00.000Z'),
+      authorize: () => false,
+    });
+    assert.throws(() => service.grant(guardianGrant()), ConsentRefusedError);
+    assert.equal(service.mayShare(LEARNER, 'progress_visible_to_guardian'), false);
+  });
+
+  test('a principal that is not a guardian cannot be recorded as one', () => {
+    const service = createConsentService({
+      now: at('2026-01-02T00:00:00.000Z'),
+      authorize: () => true,
+      identity: {
+        get: (id) => ({ id, roles: ['learner'], attributes: {} }),
+      },
+    });
+    assert.throws(() => service.grant(guardianGrant()), ConsentRefusedError);
+    assert.equal(service.mayShare(LEARNER, 'progress_visible_to_guardian'), false);
+  });
+
+  test('an authorised guardian grant records the acting guardian', () => {
+    const seen: string[] = [];
+    const service = createConsentService({
+      now: at('2026-01-02T00:00:00.000Z'),
+      authorize: (request) => {
+        seen.push(`${request.action}:${request.guardianId}:${request.learnerId}`);
+        return true;
+      },
+      identity: {
+        get: (id) => ({ id, roles: ['guardian'], attributes: {} }),
+      },
+    });
+    const record = service.grant(guardianGrant());
+    assert.equal(record.granted, true);
+    assert.equal(record.history[0]?.actor, 'guardian');
+    assert.deepEqual(seen, [`grant:guardian-1:${LEARNER}`]);
+  });
+
+  test('a guardian withdrawal without actorId is refused', () => {
+    const service = createConsentService({
+      actor: 'guardian',
+      now: at('2026-01-02T00:00:00.000Z'),
+      authorize: () => true,
+    });
+    assert.throws(
+      () => service.withdraw(LEARNER, 'progress_visible_to_guardian'),
+      ConsentRefusedError,
+    );
+  });
+
+  test('the recorded time is the service clock, not the claimed time', () => {
+    const service = createConsentService({ now: at('2026-03-01T12:00:00.000Z') });
+    service.grant({
+      learnerId: LEARNER,
+      scope: 'analytics_aggregate',
+      granted: true,
+      at: '2020-01-01T00:00:00.000Z',
+    });
+    const [event] = service.auditTrail(LEARNER);
+    assert.ok(event);
+    assert.equal(event.at, '2020-01-01T00:00:00.000Z');
+    assert.equal(event.recordedAt, '2026-03-01T12:00:00.000Z');
+  });
+});
+
