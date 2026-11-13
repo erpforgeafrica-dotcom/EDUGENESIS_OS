@@ -225,7 +225,7 @@ is repaired. A gate is never relaxed to manufacture a pass.
 | A-12e | `path-portability` | **Gate defect** | `/[A-Za-z]:\\/` matched the last letter of English words in template strings (`settings:\n`, `schema:\n`, `machine:\n`) — three false blockers. | Boundary lookbehind: a drive letter must be a standalone token. Two regression tests added (escape sequence ignored; lowercase drive letter still caught). | **stricter** (regression tests) |
 
 **Residual risk documented, not hidden.** A string that begins a line with a single lowercase letter,
-a colon and a newline escape (`s:\n`) would still be read as a drive letter. No such string exists in
+a colon and a newline escape would still be read as a drive letter. No such string exists in
 the tree, and the positive lowercase test proves real lowercase paths are still caught.
 
 ---
@@ -314,7 +314,7 @@ grew from 102 files to 126, and the suite moved 347 → 414 tests.
 the workspace packages themselves.
 
 The `dependency-analyzer` MCP tool was invoked, but it resolves the **session working directory**
-(`C:\Users\pc`), not the build repo — it reported `exceljs`, `pg`, `xlsx`, `mammoth`, which are not this
+(the session's own user-profile directory), not the build repo — it reported `exceljs`, `pg`, `xlsx`, `mammoth`, which are not this
 project's dependencies. That report is therefore **not** evidence for this build and is not used as such.
 `npm audit` inside the build repo is the evidence of record.
 
@@ -446,3 +446,33 @@ decisions** are listed in `docs/AUDIT_ROUND3.md` §5.
 
 **The Santa round-3 verdict is still outstanding.** The rubric method is unchanged: two
 fresh, independent reviewers must both PASS. This audit does not substitute for it.
+
+## 14. Round-4 close-out - Batch F + D-5 (2026-11-13)
+
+Owner decisions taken this session: **F6-04 = "widen + scrub doc evidence"** and
+**D-5 = "a third state `unverified` fails the strict chain"**. Both were executed and
+verified:
+
+1. **Batch F (F6-04).** `scan.ts` detectors widened to both separator styles for the
+   drive-letter, UNC-share, user-profile and POSIX-home classes (new rules
+   `abs-unc-posix`, `abs-home-profile`); UNC host token must be two or more alphanumeric
+   characters (an escaped-newline string and the Windows device namespace are not hosts);
+   a forward-slash share host must be dot-free (protocol-relative URLs are not shares);
+   `.md`/`.csv` joined the scanned extensions; shipped documentation joined the scanned
+   scope via the new `listDocumentationFiles`. Eight new fixtures in `scan.test.ts`.
+2. **Doc evidence scrub.** The 25 literal path spellings the widened detectors would have
+   flagged in the audit docs and process log were rewritten into equivalent prose, owner
+   decision recorded in the audit doc. The detectors' own source comments were the first
+   catch (three spellings inside `scan.ts`/`scan.test.ts`) and were rewritten the same way
+   - the scanners must not contain the pattern they hunt.
+3. **D-5 (F6-03).** `gateStatus()` derives `pass | fail | unverified`; `summarise()` fails
+   the run on any unverified gate; `verify-all.mjs` writes `schemaVersion 2` with
+   `result: PASS | FAIL | INCOMPLETE` and a counted `unverified` field and exits non-zero
+   on it; `attest.mjs` refuses a chain naming an unverified gate. Three tests in
+   `gates.test.ts` (inverted warning test, F6-03 regression, `gateStatus` unit test).
+
+Verified: `npm run build` exit 0; **505/505 tests** (29 suites, 0 fail); full
+`npm run verify` exit 0 - 18/18 gates PASS, **0 unverified**, path gate
+**159 shipped file(s)** with no absolute path (source + config + docs), secrets scan
+0 findings over 179 files, manifest 181 files, attestation PASS. The residual doc probe
+over the real detector set reports **0 violations across 165 files**.

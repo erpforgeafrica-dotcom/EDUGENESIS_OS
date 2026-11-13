@@ -33,7 +33,12 @@ const HEX_PATTERN = /#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})(?![0-9A
 const FUNCTIONAL_COLOUR_PATTERN = new RegExp('\\b(?:rgba|hsla)' + '\\(', 'g');
 
 /**
- * A Windows drive-letter path — a letter, a colon and a backslash.
+ * A Windows drive-letter path — a letter, a colon and a separator.
+ *
+ * Both separators count. The round-4 audit caught the original
+ * backslash-only class: the forward-slash spelling of a drive-letter profile
+ * path walked straight through a gate that claimed to police absolute paths,
+ * so the forward-slash spelling is a real hole, not a stylistic variant.
  *
  * WHY the lookbehind: source code is full of template strings ending in
  * `word:\n` (an error label followed by a newline escape). Without the
@@ -42,16 +47,48 @@ const FUNCTIONAL_COLOUR_PATTERN = new RegExp('\\b(?:rgba|hsla)' + '\\(', 'g');
  * A real drive letter is a standalone token: it follows a quote, a space, an
  * `=`, a `(` — never another identifier character.
  */
-const DRIVE_LETTER_PATTERN = /(?<![A-Za-z0-9_])[A-Za-z]:\\/g;
-
-/** A UNC network path — two leading backslashes and a host name. */
-const UNC_PATTERN = /\\\\[A-Za-z0-9._$-]+\\/g;
+const DRIVE_LETTER_PATTERN = /(?<![A-Za-z0-9_])[A-Za-z]:[\\/]/g;
 
 /**
- * A literal user-profile segment. Assembled from fragments so this file does
- * not contain the pattern it is looking for.
+ * A UNC network path written the Windows way — two backslashes and a host.
+ *
+ * The host token must be at least two characters and start with an
+ * alphanumeric. WHY: `\\n\` is an escaped newline in prose and `\\.\` is the
+ * Windows device namespace; neither is a network share, and both appear inside
+ * legitimate documentation and JSON schema patterns. A real UNC host is never
+ * a single punctuation character.
  */
-const USER_PROFILE_PATTERN = new RegExp('\\\\' + 'Users' + '[\\\\/]', 'gi');
+const UNC_PATTERN = /\\\\[A-Za-z0-9_$][A-Za-z0-9._$-]+[\\/]/g;
+
+/**
+ * A UNC network path written with forward slashes — two leading slashes and
+ * a share host.
+ *
+ * The host must carry no dot, because the protocol-relative form of a URL
+ * (two slashes, a dotted domain, a slash) would turn every documentation link
+ * into a finding. A NetBIOS-style share host does not contain a dot.
+ */
+const UNC_POSIX_PATTERN = /(?<![:A-Za-z0-9_.\\/])\/\/[A-Za-z0-9_$-]+\/[A-Za-z0-9_$]/g;
+
+/**
+ * A literal user-profile segment, in either separator style. Assembled from
+ * fragments so this file does not contain the pattern it is looking for.
+ */
+const USER_PROFILE_PATTERN = new RegExp(
+  '(?<![A-Za-z0-9_])[\\\\/]' + 'Users' + '[\\\\/]',
+  'gi',
+);
+
+/**
+ * A POSIX home-directory segment, in either separator style. The audited
+ * hole was the forward-slash home spelling: a build-machine home path is
+ * exactly as unportable as a drive letter, and only the Windows spelling was
+ * policed.
+ */
+const HOME_PROFILE_PATTERN = new RegExp(
+  '(?<![A-Za-z0-9_])[\\\\/]' + 'home' + '[\\\\/]',
+  'gi',
+);
 
 /**
  * Documented allowlist for synthetic personal data.
@@ -373,6 +410,15 @@ export function findAbsolutePathViolations(files: readonly SourceFile[]): Violat
           detail: 'hardcoded UNC network path',
         });
       }
+      for (const _match of text.matchAll(UNC_POSIX_PATTERN)) {
+        out.push({
+          kind: 'absolute-path',
+          file: file.relPath,
+          line,
+          rule: 'abs-unc-posix',
+          detail: 'hardcoded UNC network path with forward slashes',
+        });
+      }
       for (const _match of text.matchAll(USER_PROFILE_PATTERN)) {
         out.push({
           kind: 'absolute-path',
@@ -380,6 +426,15 @@ export function findAbsolutePathViolations(files: readonly SourceFile[]): Violat
           line,
           rule: 'abs-user-profile',
           detail: 'hardcoded user-profile path segment',
+        });
+      }
+      for (const _match of text.matchAll(HOME_PROFILE_PATTERN)) {
+        out.push({
+          kind: 'absolute-path',
+          file: file.relPath,
+          line,
+          rule: 'abs-home-profile',
+          detail: 'hardcoded POSIX home-directory path segment',
         });
       }
     });

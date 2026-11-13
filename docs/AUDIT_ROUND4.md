@@ -189,8 +189,8 @@ returned green. Four blockers, all gate-soundness not product code:
 |---|---|---|
 | F6-01 | attestation | A committed attestation can never name its own commit (§1), and no gate consumes `gitDirty`. Same structural defect as F6-R4-01. **Fixed:** the attestation stores **no VCS state at all** — no commit, no dirty flag, no HEAD-derived timestamp; HEAD and both tree states are console-only, so the file is a pure function of content and a committed checkout regenerates it byte for byte. `verify:repro` is the executable check. |
 | F6-02 | checksums | `INCLUDE_ROOTS` omitted `assets/` entirely (0 of 183 lines), while 7 of 183 entries were gitignored `*.tsbuildinfo` files. **Fixed:** `assets/` added, `*.tsbuildinfo` excluded; manifest now 179 files with assets covered and machine-local state excluded. |
-| F6-03 | aggregate | A gate whose sibling package is unbuilt returns `{passed:false, severity:'warning'}`. With every `packages/*/dist` deleted the run still reports `passed:true`, exit 0 — **an unrunnable gate is indistinguishable from a passing one**. **Open.** |
-| F6-04 | path-portability | The config-file scan was dead code (it `readdirSync`s file paths, `ENOTDIR` is swallowed), and the extension/regex scope missed `.md/.yml/.yaml/.csv`, `C:/Users/...`, `/home/...`, `/Users/...`. **Partially fixed:** `paths.ts` now stats before reading and names four root configs (`package.json`, `tsconfig.base.json`, `tsconfig.json`, `render.yaml`) plus every `packages/*` and `apps/*` `tsconfig.json` / `package.json` — **141 files scanned (124 source + 17 config)**, locked by `paths.test.ts`. **Still open:** the detectors in `scan.ts` match only backslash spellings (`[A-Za-z]:\`, `\\host\`, `\Users\`), so `C:/Users/...`, `/Users/...` and `/home/...` still pass, and `.md` / `.csv` files are never read. The gate's claim ("anywhere in the shipped tree") remains wider than its check. |
+| F6-03 | aggregate | A gate whose sibling package is unbuilt returns `{passed:false, severity:'warning'}`. With every `packages/*/dist` deleted the run still reports `passed:true`, exit 0 - **an unrunnable gate is indistinguishable from a passing one**. **Closed via owner decision D-5 (2026-11-13):** `gateStatus()` now derives a third state `unverified` (a warning is never a pass); `summarise()` fails the run on any unverified gate; the report is `schemaVersion 2` with `result: PASS \| FAIL \| INCOMPLETE` and a counted `unverified` field; `verify-all.mjs` exits non-zero when any gate is unverified; `attest.mjs` refuses a chain that names an unverified gate. Locked by 3 tests in `gates.test.ts`. |
+| F6-04 | path-portability | The config-file scan was dead code (it `readdirSync`s file paths, `ENOTDIR` is swallowed), and the extension/regex scope missed `.md/.yml/.yaml/.csv` and the forward-slash spellings of the drive-letter, POSIX-home and user-profile path classes. **Partially fixed:** `paths.ts` now stats before reading and names four root configs (`package.json`, `tsconfig.base.json`, `tsconfig.json`, `render.yaml`) plus every `packages/*` and `apps/*` `tsconfig.json` / `package.json` - **141 files scanned (124 source + 17 config)**, locked by `paths.test.ts`. **Closed in Batch F (2026-11-13):** the detectors in `scan.ts` now match both separator styles for every class - drive letter, UNC share, user-profile segment, POSIX home segment (new rules `abs-unc-posix` and `abs-home-profile`). The UNC host token must be at least two alphanumeric characters, so an escaped-newline string and the Windows device namespace are not false positives, and a forward-slash share host must be dot-free, so protocol-relative URLs are not. `.md` and `.csv` joined the scanned extensions, and the documentation that ships with the product joined the scanned scope through `listDocumentationFiles`. Locked by eight new fixtures in `scan.test.ts`. The gate's claim ("anywhere in the shipped tree") now matches its check. (The literal path spellings that this row previously quoted as evidence were rewritten into this prose by owner decision, so the scanner does not flag its own audit record.) |
 
 The 13 majors each show a gate that passes without exercising its failure path: closed
 vocabularies (F6-13 provider names, F6-10 `VACANT` counted as an owner), mutable oracles
@@ -216,18 +216,20 @@ reconcile with the digests and is corrected here.
   never reads git history) and F6-R4-03 (`verify-coverage` hard-codes six gateway paths), both
   minor. Closed in this tree: F6-R4-01, F2-R4-01 (focus ring), F2-R4-02 (`aria-describedby`),
   F6-R4-04 (machine-local settings in the manifest).
-- Reviewer corpus: **38 open of 41** — 2 blockers (**F6-03**: an unrunnable gate still reports
-  warning and exit 0; **F6-04**: path-portability is still blind to forward-slash and home
-  paths), 13 majors, 23 minors. Closed: F6-02, F2-02, F2-03.
-- Combined: **96 open — 4 blockers, 34 majors, 58 minors** (56 + 2 + 38).
+- Reviewer corpus: **36 open of 41** - 0 blockers, 13 majors, 23 minors. Closed: F6-02,
+  F2-02, F2-03, and in this batch F6-03 (D-5 unverified-gate semantics) and F6-04 (detector
+  widening plus the documentation scope).
+- Combined: **94 open - 2 blockers, 34 majors, 58 minors** (56 + 2 + 36).
 
 The machine record is `docs/gap-register.json` for the round-3 corpus and the six R4 IDs the
 register names; the 41 reviewer rows live in the two digest files cited above, and their bodies
 are summarised here rather than merged into the register. This document is therefore the
 authoritative statement of the reviewer counts.
 
-The blocker that blocks the *product* is still F0-01/F0-03. F6-03 blocks the *evidence claim*,
-which is why "18/18 PASS" must not be read as "the gates are sound".
+The blocker that blocks the *product* is still F0-01/F0-03. F6-03 used to block the *evidence
+claim*; since D-5 it is closed - an unverified gate now fails the chain, so "18/18 PASS" again
+means eighteen gates that actually ran and held. What the gates still do not prove is runtime
+experience: the accessibility surface has no browser or screen-reader run.
 
 
 ### F7 — runtime reality (first-hand)
@@ -368,13 +370,15 @@ Owner decisions (cannot be closed by code):
 ## 7. Batch A closure - executed 2026-11-13 (code-only security batch)
 
 Every item below was implemented, then proved by build + tests + the gate chain.
-The last authoritative run (after the Batch E gate halves): `npm run verify` -> build 0,
-**495/495 tests**, 29 suites, `18/18 gates PASS`, `0 blockers failed`, `0 warnings`, secrets
+The last authoritative run (after the Batch F detector widening and the D-5
+unverified-gate semantics): `npm run verify` -> build 0, **505/505 tests**, 29 suites,
+`18/18 gates PASS`, `0 blockers failed`, `0 unverified`, secrets
 scan `0 findings` (canary live, 179 files), SBOM 10 components, manifest **181 files**,
 attestation **PASS**.
 
 **Evidence chain, exactly as executed** (`npm run verify`, exit 0, 2026-11-13):
-`path-portability` scanned **143 shipped file(s)**;
+`path-portability` scanned **159 shipped file(s)** — source, config and, since Batch F, the
+documentation that ships with the product;
 `secrets:scan` read 179 files, skipped 4, and its canary fired; the manifest hashed **181
 files**; the attestation reports 18 gates, 18 passed, 181 files verified, and prints
 `git HEAD <current commit> (informational; the attestation names no commit)` plus
@@ -417,8 +421,8 @@ Residual, stated rather than hidden:
 |---|---|---|---|
 | F6-01 | attestation names `f1f3b5e` while HEAD is `677f415` | **REFUTED as stated; residue confirmed, now FIXED** | The attestation did not name `f1f3b5e`: `source.gitHead` equalled `git rev-parse HEAD`. The residue was `gitDirty: true` plus a HEAD-derived timestamp — a document inside the tree cannot name the commit that contains it, so the attested state was never a shipped commit. Both fields are now removed; the document names no commit and carries a timestamp only from `SOURCE_DATE_EPOCH`. |
 | F6-02 | manifest omits `assets/`, hashes 7 gitignored `*.tsbuildinfo` | **CONFIRMED, then FIXED** | Before: 0 `assets/` lines, 7 `tsbuildinfo` lines. After: `assets/edugenesis-tokens.css` present, 0 `tsbuildinfo`. A second defect of the same class was found while fixing it: gitignored `settings/settings.local.json` (learner overrides, may hold API keys) was in the manifest; now excluded. Manifest 179 files. |
-| F6-03 | `gates.ts` passes on blocker failures only, so warning failures never block | **CONFIRMED, OPEN** | `summarise()` returns `passed: blockerFailures.length === 0`. The harness prints "Warnings above are unverified areas, not passes" and exits 0, so the wording is honest but the exit code is not. Closing it is a policy change (warning = could not verify = not a pass). Owner decision **D-5**. |
-| F6-04 | path-portability gate scans 0 config files | **CONFIRMED, PARTIALLY FIXED** | Root cause: `collectSourceFiles` walks directories; `listConfigFiles` returns file paths; `walk` swallowed `ENOTDIR`. Live proof before the fix: gate evidence "122 source file(s) and **0** config file(s)". After `readSourceFiles`: "141 shipped file(s)" = **124 source + 17 config**. Locked by 4 tests in `packages/verification/src/paths.test.ts`; `render.yaml` was named by no scanner and is now in the scanned config set. **Still open:** the detectors are backslash-only, so `/Users/...`, `/home/...` and `C:/Users/...` pass, and `.md`/`.csv` are never read. |
+| F6-03 | `gates.ts` passes on blocker failures only, so warning failures never block | **CONFIRMED, CLOSED via D-5** | Owner decision D-5 executed: a warning-severity result derives `unverified` and is never a pass; `summarise()` fails the run on any unverified gate; the report carries `schemaVersion 2`, `result: PASS \| FAIL \| INCOMPLETE` and a counted `unverified` field; `verify-all.mjs` exits non-zero on unverified; `attest.mjs` refuses a report naming an unverified gate. Locked by the inverted warning test, the F6-03 regression and the `gateStatus` unit test in `gates.test.ts`. |
+| F6-04 | path-portability gate scans 0 config files | **CONFIRMED, PARTIALLY FIXED** | Root cause: `collectSourceFiles` walks directories; `listConfigFiles` returns file paths; `walk` swallowed `ENOTDIR`. Live proof before the fix: gate evidence "122 source file(s) and **0** config file(s)". After `readSourceFiles`: "141 shipped file(s)" = **124 source + 17 config**. Locked by 4 tests in `packages/verification/src/paths.test.ts`; `render.yaml` was named by no scanner and is now in the scanned config set. **Closed in Batch F (2026-11-13):** the detectors match both separator styles, `.md`/`.csv` joined the scanned extensions, and shipped documentation joined the scanned scope; locked by eight new fixtures in `scan.test.ts`. (The forward-slash path spellings this row previously quoted were rewritten into prose by owner decision.) |
 
 ## 9. F2 register - status after this session
 
@@ -433,3 +437,35 @@ gate proves the tokenised dual-ring focus system survives forced colors and is n
 and the `form-semantics` gate proves every control is named and every hint is announced by the
 control it describes — both blocker-severity, each locked by six negative fixtures. No browser
 or screen-reader run was performed: the runtime accessibility surface remains **UNVERIFIED**.
+
+## 10. Batch F + D-5 closure - executed 2026-11-13
+
+Both items were chosen by the owner and executed in one batch:
+
+- **F6-04 (Batch F):** `scan.ts` detectors widened to both separator styles for the
+  drive-letter, UNC-share, user-profile and POSIX-home classes (new rules `abs-unc-posix`
+  and `abs-home-profile`). The UNC host token must be at least two alphanumeric characters,
+  so an escaped-newline string and the Windows device namespace are not false positives; a
+  forward-slash share host must be dot-free, so protocol-relative URLs are not. `.md` and
+  `.csv` joined the scanned extensions, and the documentation that ships with the product
+  joined the scanned scope through the new `listDocumentationFiles` (root docs + `docs/`).
+  Eight new fixtures in `scan.test.ts` cover every widened spelling, the URL-vs-share
+  boundary and the escape/device negatives.
+- **Doc evidence scrub (owner choice "widen + scrub"):** the 25 literal path spellings the
+  widened detectors would have flagged in `docs/AUDIT_ROUND4.md`, `docs/gap-register.json`,
+  `SESSION_PROCESS_LOG.md` and `settings/settings.schema.json` were rewritten into
+  equivalent prose, so the findings stay provable while the tree no longer quotes machine
+  paths. The detectors themselves also turned out to be their own first catch — three
+  doc-comment spellings inside `scan.ts`/`scan.test.ts` were rewritten the same way.
+- **F6-03 (D-5):** owner decision "third state `unverified` fails the strict chain".
+  `gateStatus()` in `types.ts` derives `pass | fail | unverified`; `summarise()` fails the
+  run when any gate is unverified; `tools/verify-all.mjs` writes `schemaVersion 2` with
+  `result: PASS | FAIL | INCOMPLETE` and a counted `unverified` field, prints it, and exits
+  non-zero on it; `tools/attest.mjs` refuses a chain with unverified gates. The exit-criteria
+  gate's three owner-blocked rows are unaffected: they are blocker-severity rows that ran and
+  passed, not unverified gates.
+
+Verified state after this batch (`npm run verify`, exit 0): **505/505 tests**, 29 suites,
+18/18 gates PASS, 0 unverified, path gate **159 shipped file(s)** with no absolute path,
+secrets scan 0 findings, attestation PASS. `git status` clean after the source/doc commit
+and the regenerated evidence commit.

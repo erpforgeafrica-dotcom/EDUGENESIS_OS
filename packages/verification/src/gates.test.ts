@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { summarise, runAllGates, GATE_REGISTRY } from './gates.js';
+import { gateStatus } from './types.js';
 import type { Gate, GateContext, GateResult } from './types.js';
 
 const ctx: GateContext = { root: process.cwd() };
@@ -36,12 +37,31 @@ test('a single blocker failure fails the overall run', () => {
   assert.equal(summary.blockerFailures[0]?.detail, 'boom');
 });
 
-test('a warning failure does not fail the overall run', () => {
+test('an unverified gate fails the overall run (owner decision D-5)', () => {
   const summary = summarise([result({ id: 'absent', passed: false, severity: 'warning' })]);
-  assert.equal(summary.passed, true);
+  assert.equal(summary.passed, false);
   assert.equal(summary.warningFailures.length, 1);
   assert.equal(summary.blockerFailures.length, 0);
+  assert.equal(summary.unverifiedCount, 1);
   assert.equal(summary.failedCount, 1);
+});
+
+test('a gate that could not run but claimed PASS is still unverified (F6-03)', () => {
+  // The exact defect the round-4 audit found: a gate with no subject returned
+  // `passed: true` with warning severity, the table printed PASS, and the chain
+  // went green. It must now be counted as unverified and fail the run.
+  const summary = summarise([result({ id: 'no-subject', passed: true, severity: 'warning' })]);
+  assert.equal(summary.passed, false);
+  assert.equal(summary.passedCount, 0);
+  assert.equal(summary.unverifiedCount, 1);
+  assert.equal(gateStatus({ passed: true, severity: 'warning' }), 'unverified');
+});
+
+test('gateStatus is the single derivation of the three states', () => {
+  assert.equal(gateStatus({ passed: true, severity: 'blocker' }), 'pass');
+  assert.equal(gateStatus({ passed: false, severity: 'blocker' }), 'fail');
+  assert.equal(gateStatus({ passed: false, severity: 'warning' }), 'unverified');
+  assert.equal(gateStatus({ passed: true, severity: 'warning' }), 'unverified');
 });
 
 test('runAllGates runs the supplied gates and preserves order', async () => {

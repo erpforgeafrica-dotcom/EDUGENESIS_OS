@@ -10,9 +10,21 @@
  *  - `blocker` — the build is not shippable until this is fixed.
  *  - `warning` — the gate could not be evaluated (usually a dependency that
  *    another swarm unit has not finished yet). Never a false PASS, never a
- *    false blocker.
+ *    false blocker — but never a pass either. A warning-severity result is
+ *    reported as UNVERIFIED, and the strict chain fails on it (owner decision
+ *    D-5): "18/18 PASS" must mean eighteen gates actually ran and held.
  */
 export type GateSeverity = 'blocker' | 'warning';
+
+/**
+ * The three outcomes a gate can produce.
+ *  - `pass`       — the gate ran and every assertion held.
+ *  - `fail`       — the gate ran, an assertion failed, and the gate is a
+ *                   blocker for this run.
+ *  - `unverified` — the gate could not evaluate its subject. It is never a
+ *                   pass, and the strict chain refuses to go green on it.
+ */
+export type GateStatus = 'pass' | 'fail' | 'unverified';
 
 /** The outcome of running one gate. */
 export interface GateResult {
@@ -26,6 +38,20 @@ export interface GateResult {
   detail: string;
   /** Supporting proof lines. Never contains secret or personal values. */
   evidence: string[];
+}
+
+/**
+ * Derive the three-state status of a result.
+ *
+ * WHY DERIVED, NOT STORED: a gate that could not run used to report
+ * `passed: true` with `severity: 'warning'`, so the table printed PASS and the
+ * chain printed green; the warning was cosmetic and could not block anything.
+ * One derivation, used by the summary, the report writer and the test suite,
+ * means the three surfaces can never disagree.
+ */
+export function gateStatus(result: Pick<GateResult, 'passed' | 'severity'>): GateStatus {
+  if (result.severity === 'warning') return 'unverified';
+  return result.passed ? 'pass' : 'fail';
 }
 
 /** Everything a gate needs to know about where it is running. */
@@ -48,11 +74,13 @@ export interface Gate {
 
 /** Aggregate outcome of a gate run. */
 export interface GateSummary {
-  /** False when at least one blocker failed. */
+  /** False when a blocker failed OR any gate could not be verified. */
   passed: boolean;
   total: number;
   passedCount: number;
   failedCount: number;
+  /** Gates that could not evaluate their subject — never a pass. */
+  unverifiedCount: number;
   blockerFailures: Array<{ id: string; detail: string }>;
   warningFailures: Array<{ id: string; detail: string }>;
 }

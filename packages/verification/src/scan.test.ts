@@ -8,7 +8,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { findPiiViolations, findHexViolations, findAbsolutePathViolations } from './scan.js';
-import { defaultProjectRoot, collectSourceFiles } from './paths.js';
+import {
+  defaultProjectRoot,
+  collectSourceFiles,
+  isScannableExtension,
+  listDocumentationFiles,
+  readSourceFiles,
+} from './paths.js';
 import type { SourceFile } from './types.js';
 
 /** Join fragments so no sensitive literal is ever contiguous in this source. */
@@ -163,6 +169,80 @@ test('path scanner still flags a lowercase drive letter in a string literal', ()
   const violations = findAbsolutePathViolations([file('packages/x/src/a.ts', [`const p = '${p}';`])]);
   assert.equal(violations.length, 1);
   assert.equal(violations[0]?.rule, 'abs-drive-letter');
+});
+
+/* -------------------------------------------------------------------------- */
+/* Widened detectors (round-4 finding F6-04)                                   */
+/* -------------------------------------------------------------------------- */
+
+test('path scanner flags a drive letter written with a forward slash', () => {
+  // The audited hole: the class was backslash-only, so this walked through.
+  const p = j('C', ':', '/', 'Projects', '/', 'eg');
+  const violations = findAbsolutePathViolations([file('packages/x/src/a.ts', [`const p = '${p}';`])]);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, 'abs-drive-letter');
+});
+
+test('path scanner flags a forward-slash user profile segment', () => {
+  const p = j('/', 'Users', '/', 'someone', '/', 'project');
+  const violations = findAbsolutePathViolations([file('packages/x/src/a.ts', [`const p = '${p}';`])]);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, 'abs-user-profile');
+});
+
+test('path scanner flags a POSIX home-directory segment', () => {
+  const p = j('/', 'home', '/', 'someone', '/', 'project');
+  const violations = findAbsolutePathViolations([file('packages/x/src/a.ts', [`const p = '${p}';`])]);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, 'abs-home-profile');
+});
+
+test('path scanner flags a forward-slash UNC share', () => {
+  const p = j('/', '/', 'server', '/', 'share');
+  const violations = findAbsolutePathViolations([file('packages/x/src/a.ts', [`const p = '${p}';`])]);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, 'abs-unc-posix');
+});
+
+test('path scanner ignores a protocol-relative URL but not a share-looking host', () => {
+  // A protocol-relative URL points at a dotted domain, and flagging it would
+  // make every doc link a finding; the same shape over a dot-free host is a
+  // share and must still be caught.
+  const url = j('/', '/', 'example.org', '/', 'x');
+  const share = j('/', '/', 'server', '/', 'share');
+  const violations = findAbsolutePathViolations([
+    file('packages/x/src/a.ts', [`const u = '${url}';`, `const s = '${share}';`]),
+  ]);
+  assert.equal(violations.length, 1);
+  assert.equal(violations[0]?.rule, 'abs-unc-posix');
+});
+
+test('path scanner ignores an escaped newline and the device namespace', () => {
+  // `\\n\` is prose about an escape sequence and `\\.\` is the Windows device
+  // namespace — neither carries a real host name of two or more characters.
+  const escaped = j('\\', '\\', 'n', '\\');
+  const device = j('\\', '\\', '.', '\\');
+  const violations = findAbsolutePathViolations([
+    file('packages/x/src/a.ts', [`const a = '${escaped}';`, `const b = '${device}';`]),
+  ]);
+  assert.deepEqual(violations, []);
+});
+
+test('the doc extension list now includes markdown and csv', () => {
+  // The audit found `.md`/`.csv` named nowhere, so a documented machine path
+  // was invisible. The set itself is asserted through the exported predicate.
+  assert.equal(isScannableExtension('docs/setup.md'), true);
+  assert.equal(isScannableExtension('data/roster.CSV'), true);
+  assert.equal(isScannableExtension('docs/setup.txt'), false);
+});
+
+test('the documentation scope reads the root docs and the docs folder', () => {
+  const root = defaultProjectRoot();
+  const docs = listDocumentationFiles(root);
+  assert.ok(docs.some((p) => p.startsWith('docs/') && p.endsWith('.md')));
+  assert.ok(docs.every((p) => isScannableExtension(p)));
+  // The scanned scope never comes back empty for this project.
+  assert.ok(readSourceFiles(root, docs).length >= docs.length - 1);
 });
 
 test('the scanners find nothing wrong with their own source tree', () => {

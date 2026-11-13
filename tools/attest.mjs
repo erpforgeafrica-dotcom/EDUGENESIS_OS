@@ -94,6 +94,15 @@ const counts = report.counts ?? {};
 if (counts.blockersFailed !== 0) {
   refuse(`the verification report records ${String(counts.blockersFailed)} failed blocker(s). A red build is never attested.`);
 }
+// Defence in depth for owner decision D-5: a report claiming PASS while naming
+// unverified gates is internally inconsistent, and a gate that could not run is
+// not evidence of anything.
+if ((counts.unverified ?? 0) !== 0) {
+  refuse(`the verification report records ${String(counts.unverified)} unverified gate(s). An unverified build is never attested.`);
+}
+if (report.gates.some((gate) => gate && gate.result === 'UNVERIFIED')) {
+  refuse('the verification report lists a gate whose result is UNVERIFIED, so the chain is incomplete.');
+}
 if (!Array.isArray(report.gates) || report.gates.length === 0) {
   refuse('the verification report contains no gates, so it proves nothing.');
 }

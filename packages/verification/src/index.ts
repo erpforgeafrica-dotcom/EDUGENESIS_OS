@@ -13,11 +13,14 @@ export type {
   GateContext,
   GateResult,
   GateSeverity,
+  GateStatus,
   GateSummary,
   SourceFile,
   Violation,
   ViolationKind,
 } from './types.js';
+
+export { gateStatus } from './types.js';
 
 export { GATE_REGISTRY, runAllGates, summarise } from './gates.js';
 
@@ -38,6 +41,7 @@ export {
   findProjectRoot,
   listAssetsDir,
   listConfigFiles,
+  listDocumentationFiles,
   listToolsDir,
   listWorkspaceSrcDirs,
   relativePosix,

@@ -6,6 +6,7 @@
  * a WARNING and `passed: false` — never a false pass, never a blocker.
  */
 import type { Gate, GateContext, GateResult, GateSummary } from './types.js';
+import { gateStatus } from './types.js';
 import { defaultProjectRoot } from './paths.js';
 import { contractGate } from './gates/contract-gate.js';
 import { failoverGate } from './gates/failover-gate.js';
@@ -73,28 +74,36 @@ export async function runAllGates(
 }
 
 /**
- * Summarise a gate run. One failed BLOCKER fails the whole run; failed
- * warnings are reported but do not block (they mean "could not verify").
+ * Summarise a gate run. A failed BLOCKER fails the run, and so does any gate
+ * that could not be evaluated: an unverified gate is not a pass, and a green
+ * summary must never be built out of gates that never ran (owner decision D-5).
  */
 export function summarise(results: readonly GateResult[]): GateSummary {
   const blockerFailures: Array<{ id: string; detail: string }> = [];
   const warningFailures: Array<{ id: string; detail: string }> = [];
   let passedCount = 0;
+  let unverifiedCount = 0;
 
   for (const result of results) {
-    if (result.passed) {
+    const status = gateStatus(result);
+    if (status === 'pass') {
       passedCount += 1;
       continue;
     }
-    if (result.severity === 'blocker') blockerFailures.push({ id: result.id, detail: result.detail });
-    else warningFailures.push({ id: result.id, detail: result.detail });
+    if (status === 'unverified') {
+      unverifiedCount += 1;
+      warningFailures.push({ id: result.id, detail: result.detail });
+      continue;
+    }
+    blockerFailures.push({ id: result.id, detail: result.detail });
   }
 
   return {
-    passed: blockerFailures.length === 0,
+    passed: blockerFailures.length === 0 && unverifiedCount === 0,
     total: results.length,
     passedCount,
     failedCount: results.length - passedCount,
+    unverifiedCount,
     blockerFailures,
     warningFailures,
   };

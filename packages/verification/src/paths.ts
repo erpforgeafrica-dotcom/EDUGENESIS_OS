@@ -41,6 +41,11 @@ const SCANNED_EXTENSIONS = new Set([
   '.htm',
   '.svg',
   '.webmanifest',
+  // Markdown and CSV ship with the product too. The round-4 audit found
+  // `.md`/`.csv` named nowhere in this set, so a documented absolute path was
+  // invisible to the portability gate that exists to forbid it.
+  '.md',
+  '.csv',
 ]);
 
 /** Files larger than this are not scanned (vendored bundles). */
@@ -212,6 +217,33 @@ export function listConfigFiles(root: string): string[] {
         if (existsSync(join(root, rel))) out.push(rel);
       }
     }
+  }
+  return out;
+}
+
+/**
+ * Documentation that ships with the project: the root-level docs plus
+ * everything under `docs/`.
+ *
+ * WHY THIS EXISTS: the portability gate scanned source, config and assets and
+ * never documentation, so a setup guide that told a reader to `cd` into a
+ * build-machine folder shipped a hardcoded absolute path on every copy. Docs
+ * are part of the product. They are routed to the path gate specifically, not
+ * into `listScannableDirs`, because prose legitimately quotes a colour literal
+ * or a provider URL; a machine path in prose is never legitimate.
+ */
+export function listDocumentationFiles(root: string): string[] {
+  const out: string[] = [];
+  for (const rel of ['README.md', 'REVIEW_RUBRIC.md', 'SESSION_PROCESS_LOG.md', 'CHANGELOG.md']) {
+    if (existsSync(join(root, rel))) out.push(rel);
+  }
+  const docsDir = join(root, 'docs');
+  if (!existsSync(docsDir)) return out;
+  const candidates: string[] = [];
+  walk(docsDir, candidates);
+  for (const absPath of candidates) {
+    if (!isScannableExtension(absPath)) continue;
+    out.push(relativePosix(root, absPath));
   }
   return out;
 }

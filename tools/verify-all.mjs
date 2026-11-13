@@ -88,6 +88,20 @@ function padLeft(value, width) {
 }
 
 /**
+ * The three-state verdict for one row.
+ *
+ * Mirrors `gateStatus` in `packages/verification/src/types.ts`: a
+ * warning-severity result is UNVERIFIED, never PASS. WHY it is duplicated
+ * here rather than imported: this tool must be able to report on a harness
+ * that failed to load at all, so it cannot depend on the harness to describe
+ * the harness. A test asserts the two derivations agree.
+ */
+function verdictOf(row) {
+  if (row.severity === 'warning') return 'UNVERIFIED';
+  return row.passed ? 'PASS' : 'FAIL';
+}
+
+/**
  * Write the machine-readable report that `tools/attest.mjs` binds.
  *
  * WHY a file and not just stdout: an attestation over "the gate table looked
@@ -95,23 +109,29 @@ function padLeft(value, width) {
  * attestation stores its digest, so a later edit to the result is detectable.
  * The report carries no timestamp or hostname: it describes the build, and two
  * runs of an unchanged tree must produce identical bytes.
+ *
+ * WHY `result` depends on unverified gates too (owner decision D-5): a chain
+ * that could not run a gate has not verified the build. `PASS` means every
+ * gate ran and held; anything else is `FAIL` or `INCOMPLETE`.
  */
 function writeReport(allRows, blockerFailures, warningFailures) {
   const report = {
     tool: 'tools/verify-all.mjs',
-    schemaVersion: 1,
-    result: blockerFailures.length === 0 ? 'PASS' : 'FAIL',
+    schemaVersion: 2,
+    result:
+      blockerFailures.length > 0 ? 'FAIL' : warningFailures.length > 0 ? 'INCOMPLETE' : 'PASS',
     gates: allRows.map((r) => ({
       id: r.id,
       title: r.title,
       severity: r.severity,
-      result: r.passed ? 'PASS' : r.severity === 'blocker' ? 'FAIL' : 'WARN',
+      result: verdictOf(r),
       detail: r.detail,
     })),
     counts: {
       gates: allRows.length,
-      passed: allRows.filter((r) => r.passed).length,
+      passed: allRows.filter((r) => verdictOf(r) === 'PASS').length,
       blockersFailed: blockerFailures.length,
+      unverified: warningFailures.length,
       warnings: warningFailures.length,
     },
   };
@@ -158,20 +178,20 @@ async function main() {
   );
   process.stdout.write(`${'-'.repeat(idWidth + titleWidth + 8 + 7 + 4 + 40)}\n`);
   for (const r of allRows) {
-    const verdict = r.passed ? 'PASS' : r.severity === 'blocker' ? 'FAIL' : 'WARN';
+    const verdict = verdictOf(r);
     process.stdout.write(
-      `${pad(r.id, idWidth)}  ${pad(r.title, titleWidth)}  ${pad(r.severity, 8)}  ${pad(verdict, 7)}  ${r.detail}\n`,
+      `${pad(r.id, idWidth)}  ${pad(r.title, titleWidth)}  ${pad(r.severity, 8)}  ${pad(verdict, 10)}  ${r.detail}\n`,
     );
   }
 
   const blockerFailures = allRows.filter((r) => !r.passed && r.severity === 'blocker');
-  const warningFailures = allRows.filter((r) => !r.passed && r.severity === 'warning');
+  const warningFailures = allRows.filter((r) => r.severity === 'warning');
 
   const report = writeReport(allRows, blockerFailures, warningFailures);
 
   process.stdout.write('\n');
   process.stdout.write(
-    `gates: ${String(report.counts.gates)}   passed: ${String(report.counts.passed)}   blockers failed: ${String(report.counts.blockersFailed)}   warnings: ${String(report.counts.warnings)}\n`,
+    `gates: ${String(report.counts.gates)}   passed: ${String(report.counts.passed)}   blockers failed: ${String(report.counts.blockersFailed)}   unverified: ${String(report.counts.unverified)}\n`,
   );
   process.stdout.write(`report: ${relativeReportPath()}\n`);
 
@@ -180,7 +200,7 @@ async function main() {
     for (const r of blockerFailures) process.stdout.write(`  - ${r.id}: ${r.detail}\n`);
   }
   if (warningFailures.length > 0) {
-    process.stdout.write('\nWARNINGS (could not be evaluated — not a pass)\n');
+    process.stdout.write('\nUNVERIFIED (could not be evaluated — never a pass, fails the chain)\n');
     for (const r of warningFailures) process.stdout.write(`  - ${r.id}: ${r.detail}\n`);
   }
 
@@ -189,7 +209,13 @@ async function main() {
     process.stdout.write('RESULT: FAIL — the build has unmet blockers.\n');
     process.exit(1);
   }
-  process.stdout.write('RESULT: PASS — no blocker failed. Warnings above are unverified areas, not passes.\n');
+  if (warningFailures.length > 0) {
+    process.stdout.write(
+      `RESULT: FAIL — ${String(warningFailures.length)} gate(s) could not be evaluated, so the build is UNVERIFIED, not green.\n`,
+    );
+    process.exit(1);
+  }
+  process.stdout.write('RESULT: PASS — every gate ran and none failed.\n');
   process.exit(0);
 }
 
