@@ -106,6 +106,30 @@ different drive letter, a different Node install. Therefore:
 | `checksums.sha256` | A sorted `sha256  path` line per shipped file | Covers the source tree, the documents and the two files above, with a fixed include list that does not depend on git |
 | `attestation.json` | The digests of the three files above, plus the gate counts | **Refuses to exist** unless the report is green *and* every listed file still matches its recorded digest. A red or tampered tree is refused with exit 1, and any stale attestation from an earlier run is deleted |
 
+### The dependency advisory check
+
+`npm audit` **inside this repository** is the dependency evidence of record. Run it from the project
+root:
+
+```
+npm audit --omit=dev     # runtime advisories
+npm audit                # including the dev toolchain
+```
+
+The runtime dependency set is empty (`dependencies: {}`); the only dev dependencies are `typescript`
+and `@types/node`. Any third-party advisory tool must be pointed at this directory explicitly — a tool
+that resolves a different working directory will report a different project's dependencies, which is
+not evidence about this one.
+
+Every scanner that polices the tree also proves it can fail:
+
+- the secrets scan **plants a canary token** in a throwaway directory and refuses to pass unless it
+  detects it, so "0 findings" is a measurement and not an inert scanner;
+- the design-token gate, the provider-leak gate and the contracts-baseline gate each have negative
+  fixtures that build the smallest tree that must fail;
+- the frozen-contract gate also treats an **untracked** file under `packages/contracts/` as a change,
+  because `git diff` alone cannot see one.
+
 ---
 
 ## Deployment
@@ -115,7 +139,10 @@ declares **one** free web service, `edugenesis-web`, which runs `node apps/cli/d
 Hosted mode widens *who* may connect — the platform proxy is never a loopback peer — and makes every
 `/api/` write a `403`, so the public instance is a read-only demonstration.
 
-The free tier's documented limits are load-bearing and are not worked around:
+The free tier's limits are load-bearing and are not worked around. **These are TARGET
+LIMITS quoted from Render's own published free-tier documentation, not limits this
+build has measured** — no instance has been created, so nothing here is an
+achieved result:
 
 - a Free web service spins down after 15 minutes idle;
 - its filesystem is ephemeral, so a local SQLite file is not a system of record;

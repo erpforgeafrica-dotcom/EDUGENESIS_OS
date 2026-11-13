@@ -34,6 +34,8 @@ export interface ContractsAmendment {
   path: string;
   reason: string;
   adr: string;
+  /** The commit that introduced the change. It must be an ancestor of HEAD. */
+  commit: string;
 }
 
 /** The parsed amendment register. */
@@ -101,6 +103,7 @@ export function parseAmendments(raw: string): AmendmentsRegister {
     const path = row['path'];
     const reason = row['reason'];
     const adr = row['adr'];
+    const commit = row['commit'];
     if (typeof path !== 'string' || path.length === 0) {
       throw new TypeError('every amendment must name a path');
     }
@@ -110,12 +113,19 @@ export function parseAmendments(raw: string): AmendmentsRegister {
     if (typeof adr !== 'string' || !/^ADR-\d{4}$/.test(adr)) {
       throw new TypeError(`amendment ${path} must cite an ADR`);
     }
+    // WHY THE COMMIT IS REQUIRED: an enumeration that names a path and a
+    // reason but not the commit that made the change cannot be checked. With
+    // the commit, the gate can prove the amendment is real history rather
+    // than a line written to silence the gate.
+    if (typeof commit !== 'string' || !/^[0-9a-f]{7,40}$/.test(commit)) {
+      throw new TypeError(`amendment ${path} must name the commit that introduced it`);
+    }
     if (isFrozenPath(path)) {
       throw new TypeError(
         `amendment ${path} is inside the frozen surface: a contract change cannot be allowlisted`,
       );
     }
-    rows.push({ path, reason, adr });
+    rows.push({ path, reason, adr, commit });
   }
   return { baseline, frozenPath, amendments: rows };
 }
@@ -178,8 +188,27 @@ export const contractsBaselineGate: Gate = {
       };
     }
 
+    // Untracked files under the contracts package count as changes.
+    //
+    // WHY: `git diff` compares commits to the WORKING TREE but it does not
+    // report a file that was never tracked. A brand-new file inside the
+    // frozen surface would therefore be invisible to the diff, and every
+    // package would compile against it. The freeze must see untracked files.
+    const untracked = git(ctx.root, [
+      'ls-files',
+      '--others',
+      '--exclude-standard',
+      '--',
+      CONTRACTS_DIR,
+    ]);
+    const untrackedPaths = untracked.stdout
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
     const frozen = git(ctx.root, ['diff', '--quiet', register.baseline, '--', register.frozenPath]);
-    if (frozen.status === 1) {
+    const untrackedInFrozen = untrackedPaths.filter((path) => isFrozenPath(path));
+    if (frozen.status === 1 || untrackedInFrozen.length > 0) {
       const names = git(ctx.root, ['diff', '--name-only', register.baseline, '--', register.frozenPath]);
       return {
         id: GATE_ID,
@@ -193,6 +222,7 @@ export const contractsBaselineGate: Gate = {
             .map((line) => line.trim())
             .filter((line) => line.length > 0)
             .map((path) => `changed: ${path}`),
+          ...untrackedInFrozen.map((path) => `untracked inside the frozen surface: ${path}`),
           'a contract change is a decision: record it in an ADR and re-baseline deliberately',
         ],
       };
@@ -208,18 +238,38 @@ export const contractsBaselineGate: Gate = {
     }
 
     const changed = git(ctx.root, ['diff', '--name-only', register.baseline, '--', CONTRACTS_DIR]);
-    const changedPaths = changed.stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    const changedPaths = [
+      ...changed.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+      ...untrackedPaths,
+    ];
     const listed = new Set(register.amendments.map((amendment) => amendment.path));
     const unlisted = changedPaths.filter((path) => !listed.has(path));
     const stale = [...listed].filter((path) => !changedPaths.includes(path));
 
+    // Every enumerated amendment must name a commit that EXISTS in this
+    // history and that is an ancestor of HEAD. A commit that does not exist,
+    // or that is not in this branch's past, is an enumeration written to
+    // silence the gate rather than a record of a real change.
+    const badCommits: string[] = [];
+    for (const amendment of register.amendments) {
+      const present = git(ctx.root, ['cat-file', '-e', `${amendment.commit}^{commit}`]);
+      if (present.status !== 0) {
+        badCommits.push(`${amendment.path}: commit ${amendment.commit} is not in this clone`);
+        continue;
+      }
+      const ancestor = git(ctx.root, ['merge-base', '--is-ancestor', amendment.commit, 'HEAD']);
+      if (ancestor.status !== 0) {
+        badCommits.push(`${amendment.path}: commit ${amendment.commit} is not an ancestor of HEAD`);
+      }
+    }
+
     const evidence = [
       `baseline ${register.baseline}`,
       `frozen surface ${register.frozenPath}: unchanged`,
-      `enumerated amendment(s): ${register.amendments.map((a) => `${a.path} (${a.adr})`).join(', ') || '(none)'}`,
+      `enumerated amendment(s): ${register.amendments.map((a) => `${a.path} (${a.adr}, ${a.commit})`).join(', ') || '(none)'}`,
     ];
 
     if (unlisted.length > 0) {
@@ -238,6 +288,15 @@ export const contractsBaselineGate: Gate = {
         severity: 'blocker',
         detail: `${String(stale.length)} enumerated amendment(s) no longer differ from the baseline`,
         evidence: [...evidence, ...stale.map((path) => `stale: ${path}`)],
+      };
+    }
+    if (badCommits.length > 0) {
+      return {
+        id: GATE_ID,
+        passed: false,
+        severity: 'blocker',
+        detail: `${String(badCommits.length)} enumerated amendment(s) name a commit that is not in this history`,
+        evidence: [...evidence, ...badCommits.map((line) => `bad commit: ${line}`)],
       };
     }
 

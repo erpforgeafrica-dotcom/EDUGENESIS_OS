@@ -121,10 +121,11 @@ const MONEY_KEY_PATTERN = /(^|_)(cents?|minor_units)$/i;
 /**
  * The exact preimage of an entry hash.
  *
- * Exported so an auditor (or a test) can verify a chain with nothing but this
- * function and the published entry.
+ * Module-internal: `computeEntryHash` is the public verifier, and an auditor
+ * needs the hash, not the preimage. Keeping this private stops the public
+ * surface from carrying a function no caller needs.
  */
-export function entryHashPreimage(entry: Omit<LedgerEntry, 'entryHash'>): {
+function entryHashPreimage(entry: Omit<LedgerEntry, 'entryHash'>): {
   seq: number;
   type: LedgerEntryType;
   at: string;

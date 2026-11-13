@@ -39,6 +39,8 @@ const SCANNED_EXTENSIONS = new Set([
   '.css',
   '.html',
   '.htm',
+  '.svg',
+  '.webmanifest',
 ]);
 
 /** Files larger than this are not scanned (vendored bundles). */
@@ -122,6 +124,64 @@ export function listToolsDir(root: string): string[] {
 export function listAssetsDir(root: string): string[] {
   const assetsDir = join(root, 'assets');
   return existsSync(assetsDir) ? [relativePosix(root, assetsDir)] : [];
+}
+
+/**
+ * The public folders of the workspace apps: `apps/*\/public`.
+ *
+ * WHY THEY ARE SCANNED: a static gate that cannot SEE a file cannot police
+ * it. The PWA shell (the HTML, the manifest, the icon, the service worker)
+ * lives in `apps/cli/public`, and a gate that scanned only `src` would report
+ * a clean tree while the shipped assets broke the rule it claims to enforce.
+ */
+export function listWorkspacePublicDirs(root: string): string[] {
+  const out: string[] = [];
+  const appsDir = join(root, 'apps');
+  if (!existsSync(appsDir)) return out;
+  let entries: string[] = [];
+  try {
+    entries = readdirSync(appsDir);
+  } catch {
+    return out;
+  }
+  for (const name of entries) {
+    const publicDir = join(appsDir, name, 'public');
+    if (!existsSync(publicDir)) continue;
+    out.push(relativePosix(root, publicDir));
+  }
+  return out;
+}
+
+/**
+ * EVERY directory the static scanners read.
+ *
+ * One definition, used by every gate, so the scan scope can never be narrower
+ * in one gate than in another. The scope is:
+ *
+ *   packages/*\/src   the library sources
+ *   apps/*\/src        the application sources
+ *   apps/*\/public     the shipped browser assets (HTML, CSS, JS, manifest, icon)
+ *   tools/             the shipped scripts
+ *   assets/            the shipped design tokens and other root assets
+ *
+ * The earlier scope — `packages/*\/src` and `apps/*\/src` only — was a false
+ * negative: the PWA assets it did not cover carried raw colour literals, and
+ * the gate that was supposed to prevent exactly that reported PASS.
+ */
+export function listScannableDirs(root: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const dir of [
+    ...listWorkspaceSrcDirs(root),
+    ...listWorkspacePublicDirs(root),
+    ...listToolsDir(root),
+    ...listAssetsDir(root),
+  ]) {
+    if (seen.has(dir)) continue;
+    seen.add(dir);
+    out.push(dir);
+  }
+  return out;
 }
 
 /**

@@ -10,6 +10,7 @@
  * `AgeAssuranceService` and `SessionRiskService`.
  */
 export * from './identity.js';
+export * from './enrolment.js';
 export * from './policy.js';
 export * from './consent.js';
 export * from './age-assurance.js';

@@ -112,6 +112,18 @@ Each agent owns exactly one package directory. Interfaces are fixed by contract 
 | A-29 | Evidence chain: deterministic SBOM, machine-readable report, checksums, attestation | **PASS** | SBOM is byte-identical across two runs (content-derived v5 serial; `SOURCE_DATE_EPOCH` → git commit date → now). `verify-all` writes `artifacts/verify-report.json`; `tools/checksums.mjs` hashes 173 files; `tools/attest.mjs` binds all three and **refuses** a red build — proved by injecting a red report and a tampered report, both refused, exit 1, with the stale attestation removed |
 | A-30 | Batch 5 suite after the repairs | **PASS** | 394 tests reported, 394 passed, 0 failed, 0 cancelled, 0 skipped; `META-GATE PASS` |
 | A-31 | Third full gate sweep (`verify-all`) | **PASS** | 14 gates, 14 passed, 0 blockers failed, 0 warnings, exit 0 |
+| A-32 | Round-2 Santa review (Reviewer B and Reviewer C, both fresh) | **FAIL (both)** | B: 2 critical issues (C10 ×2). C: 1 critical issue (C1). 3 merged blockers plus 3 defects the repair itself uncovered — see §12.2 |
+| A-33 | Repair: the enrolment path the Phase 1 criterion names did not exist | **PASS** | `packages/identity/src/enrolment.ts`: a guardian consent token, verified against the identity service's own verifier, bound to one learner, single-use, expiring; the learner enrols provisionally; the scopes the guardian authorised become ordinary consent grants; the path taken is written to the enrolment audit log. The passkey seam refuses with a typed error naming the deferred ceremony (D-05). 13 tests. **A defect in my own first implementation was caught by my own test**: the presented token's claims were trusted, so a caller could widen the scopes — the token is now a handle to server-side claims and a mismatch is refused |
+| A-34 | Repair: the design-token gate could not see the shipped browser assets | **PASS** | One shared scan root (`listScannableDirs`): `packages/*/src`, `apps/*/src`, `apps/*/public`, `tools/`, `assets/`; `.svg` and `.webmanifest` added to the scanned extensions. Widening it immediately exposed 5 findings the narrow scope had hidden. A literal in a format that cannot express a CSS variable (the manifest, the icon, the theme-color meta) is allowed **only** when the value is one the token stylesheet defines — a checked exemption, not a hole. Two of the five findings were false positives of my own making and were fixed at the cause: SVG path geometry is not personal data, and a scanner must not name a provider |
+| A-35 | Repair: the contract amendments recorded no introducing commit | **PASS** | `commit` is now a required field of an amendment, it must exist in the clone, and it must be an ancestor of HEAD. The one amendment records `05d3a79` |
+| A-36 | Repair found while writing the negative fixtures: the frozen-contract gate ignored untracked files | **PASS** | `git diff` cannot see a file that was never tracked, so a new file inside the frozen surface would have passed unnoticed. The gate now lists untracked files under `packages/contracts/` and treats them as changes. 6 new negative fixtures: a raw colour in source FAILS, an asset may hold a token colour, an asset colour that is not a token FAILS, an amendment without a commit is rejected, a change inside the frozen surface can never be allowlisted, an unlisted contracts change FAILS |
+| A-37 | Repair: the secrets scan had no proof that it detects anything | **PASS** | `tools/secrets-scan.mjs` now plants a canary token in a throwaway directory and runs the SAME detection code over it; it refuses to pass unless the canary is found. This is the verification method the P5-5 criterion names, which nothing had implemented |
+| A-38 | Repair: the `onAttempt` audit hook had no caller | **PASS** | A test proves the hook receives every rung of the ladder, in order, with the outcome recorded |
+| A-39 | Repair: the officer register recorded one name where the architecture document names three | **PASS** | `docs/OFFICERS.md` now records the Chief AI & Model Orchestrator (Marcus Thorne) and the Chief Learning Scientist (Nelly / Dr. Elena Rostova) exactly as 09 names them. Ten roles remain vacant, so P0-6 stays owner-blocked |
+| A-40 | Repair: four exports had no caller outside their own module | **PASS** | `createFailingProvider`, `buildFailoverDrillGateway`, `buildExhaustionDrillGateway` and `entryHashPreimage` are module-internal now. The public seam matches what callers actually need |
+| A-41 | Repair: the README stated the Render free-tier limits as though this build had measured them | **PASS** | They are now labelled TARGET LIMITS quoted from the vendor's published documentation, not achieved results. The README also names `npm audit` as the dependency advisory check of record and states that a tool resolving a different working directory is not evidence about this project |
+| A-42 | Round-2 suite after the repairs | **PASS** | 414 tests reported, 414 passed, 0 failed, 0 cancelled, 0 skipped; `META-GATE PASS` |
+| A-43 | Round-2 gate sweep (`verify-all`) | **PASS** | 14 gates, 14 passed, 0 blockers failed, 0 warnings, exit 0 — over 126 scanned files (102 before the scope repair) |
 
 ---
 
@@ -124,12 +136,12 @@ Each agent owns exactly one package directory. Interfaces are fixed by contract 
 | No learner path depends on a provider SDK | A static gate that fails on a provider host outside `packages/onekey` | **PASS** | `no-provider-leak-gate` — blocker, green. The boundary is the PACKAGE, not `packages/onekey/src/providers`: the rule is that nothing outside the OneKey package may name a provider at all, so a provider reference in `apps/` or `packages/ledger/` fails the build |
 | The ledger holds no learner PII | Recursive field-name + value-shape refusal, tamper detection | **PASS** | 63 ledger tests, incl. nested / case-variant keys, email-shaped values, and 5 injected mutations all killed |
 | Core learning is never denied on credit exhaustion | A test that exhausts the budget and asserts Tier 0 still answers | **PASS** | gateway test: budget at zero still returns a Tier 0 answer |
-| No API key is exposed | A secrets scan over the tracked tree | **PASS** | 146 files scanned, 1 skipped, 0 findings |
+| No API key is exposed | A secrets scan over the tracked tree, plus a canary proving the scan detects one | **PASS** | 168 files scanned, 4 skipped, 0 findings — and the scan's own canary self-test passes, so "0 findings" is a measurement, not an inert scanner |
 | The build is portable | Copy-to-new-path run with a different profile, zero source edits | **PASS** | `tools/verify-portability.mjs` — see §11 |
 | No critical dependency vulnerabilities | `npm audit` in the build repo (the MCP analyzer resolved the wrong root — §11.2) | **PASS** | 0 critical / 0 high / 0 moderate / 0 low / 0 total; `dependencies: {}`; dev deps are `typescript` + `@types/node` only |
 | Two independent reviewers pass | Santa Method dual review, both PASS | **PENDING** | dispatched after the gate sweep; see §12 |
 | Tokens meet WCAG in both themes | Contrast gate over resolved custom properties | **PASS** | 46 checks, 46 passed, 0 failed |
-| The test command cannot silently run nothing | Meta-gate floor | **PASS** | `tests reported: 394`, floor 20, `META-GATE PASS`. History: 345 at A-11, 347 at A-15, 378 after the Batch 1–4 repairs, 394 after the Batch 5 contract-fidelity and export-coverage tests |
+| The test command cannot silently run nothing | Meta-gate floor | **PASS** | `tests reported: 414`, floor 20, `META-GATE PASS`. History: 345 at A-11, 347 at A-15, 378 after the Batch 1–4 repairs, 394 after the Batch 5 contract-fidelity and export-coverage tests, 414 after the round-2 repairs (enrolment, scan scope, negative fixtures) |
 
 ---
 
@@ -216,9 +228,9 @@ the tree, and the positive lowercase test proves real lowercase paths are still 
 | Gate | Command | Result |
 |---|---|---|
 | Typecheck, all packages | `tsc -b … --pretty false` | **exit 0** |
-| Full suite + meta-gate | `assert-tests-ran.mjs --min 20 -- node --test …` | **394 / 394 pass**, 0 fail, `META-GATE PASS` |
+| Full suite + meta-gate | `assert-tests-ran.mjs --min 20 -- node --test …` | **414 / 414 pass**, 0 fail, `META-GATE PASS` |
 | Token contrast | `node tools/verify-contrast.mjs` | **46 checks, 46 passed, 0 failed** — both themes |
-| Secrets | `node tools/secrets-scan.mjs` | **146 files scanned, 0 findings** |
+| Secrets | `node tools/secrets-scan.mjs` | **168 files scanned, 0 findings**, plus the canary self-test proving the scan detects a planted token |
 | SBOM | `node tools/sbom.mjs` | CycloneDX written to `artifacts/sbom.cdx.json` — byte-identical across two runs (content-derived serial, commit-date timestamp) |
 | Checksums | `node tools/checksums.mjs` | **173 files** hashed into `artifacts/checksums.sha256`, sorted by relative path |
 | Attestation | `node tools/attest.mjs` | `artifacts/attestation.json` written; **refuses** a red report and refuses a tree that no longer matches the manifest |
@@ -238,10 +250,10 @@ non-existent directory.
 | failover-drill | blocker | **PASS** | all three scenarios hold, all five tiers were reached, and Tier 0 rescued the learner |
 | ledger-integrity | blocker | **PASS** | clean chain verifies, tampering is detected, personal data is refused |
 | consent-withdrawal | blocker | **PASS** | sharing blocked by withdrawal, core learning still permitted |
-| no-pii-in-source | blocker | **PASS** | no personal data found in 102 source files |
-| no-provider-leak | blocker | **PASS** | no provider reference outside `packages/onekey` in 73 source files |
-| path-portability | blocker | **PASS** | no absolute path in 116 shipped files |
-| design-token-governance | blocker | **PASS** | no raw colour literal in 102 source files |
+| no-pii-in-source | blocker | **PASS** | no personal data found in 126 source files |
+| no-provider-leak | blocker | **PASS** | no provider reference outside `packages/onekey` in 97 source files |
+| path-portability | blocker | **PASS** | no absolute path in 120 shipped files |
+| design-token-governance | blocker | **PASS** | no raw colour literal in 126 source files |
 | contracts-baseline | blocker | **PASS** | frozen contracts unchanged; 1 enumerated packaging change |
 | exit-criteria | blocker | **PASS** | 13 met, 3 owner-blocked of 16 exit criteria |
 | token-contrast | blocker | **PASS** | every role pair meets its WCAG requirement in both themes |
@@ -263,8 +275,13 @@ content hash must now be caught, and the path scanner has a positive lowercase-d
 Four gates were **added** in Batch 4–5, because the claims they prove were previously made in prose:
 `guardian-coverage` (every learner-facing emission is intercepted exactly once), `provider-repoint` (a
 provider swap is a registry entry, proved by a dynamic re-point with an unchanged source hash), plus the
-static `contracts-baseline` and `exit-criteria` gates. The gate count moved 10 → 14; the suite moved
-347 → 394 tests.
+static `contracts-baseline` and `exit-criteria` gates. The gate count moved 10 → 14.
+
+**The scan scope moved too, in round 2.** The static gates used to read `packages/*/src` and
+`apps/*/src` only, so they reported PASS over files they had never opened — including the shipped
+browser assets, where raw colour literals had accumulated. Every static gate now reads one shared
+root (`listScannableDirs`): the sources, the app public folders, `tools/` and `assets/`. The scan
+grew from 102 files to 126, and the suite moved 347 → 414 tests.
 
 ### 11.2 Dependency evidence (scope note)
 
@@ -289,7 +306,16 @@ reviewers are re-spawned fresh. Maximum three rounds, then escalation to the own
 | Round | Reviewer B | Reviewer C | Outcome |
 |---|---|---|---|
 | 1 | **FAIL** | **FAIL** | 11 merged critical issues; all repaired, then both re-spawned fresh for round 2 |
-| 2 | pending | pending | — |
+| 2 | **FAIL** | **FAIL** | 3 merged critical issues, plus 3 defects the repair itself uncovered; all repaired, then both re-spawned fresh for round 3 |
+| 3 | pending | pending | — |
+
+**Dispatch failures in round 2 (infrastructure, not review).** The first two dispatch attempts did not
+run: the `code-reviewer` agent's default model (`anthropic/claude-opus-4-5`) is not available on this
+provider, and the paid fallbacks (`opencode/claude-opus-5-5`, `opencode/gpt-6.1-sol`) are refused by
+the account's balance. The round-2 reviewers were therefore run on free models from two different
+families — `opencode/deepseek-v4.1-flash-free` and `opencode/glm-5.3-flash-free` — which keeps the
+context isolation the method requires. The failures are recorded here rather than hidden, because a
+review round that did not happen is not a passed review.
 
 ### 12.1 Round 1 — verdicts and repairs
 
@@ -314,3 +340,37 @@ finding one reviewer made and the other missed is still a finding. Eleven issues
 **Round 1 outcome:** both reviewers FAIL, so the slice is **not** accepted. Repairs were applied to the
 merged list only; no criterion was relaxed and no gate was weakened to force a pass. Round 2 is
 dispatched against the identical, corrected rubric, with both reviewers re-spawned fresh.
+
+### 12.2 Round 2 — verdicts and repairs
+
+Both reviewers returned **FAIL** again, on three critical issues. Reviewer C audited the exit-criteria
+register row by row and found one row whose evidence proved a different behaviour from its criterion.
+Reviewer B audited the gates against their own scope and found one that was reporting PASS over files
+it had never read.
+
+| # | Merged critical issue | Raised by | Repair | Evidence the repair holds |
+|---|---|---|---|---|
+| 1 | **P1-1 was recorded as `met` but the enrolment criterion was not implemented.** The Phase 1 criterion 1 reads "a learner can enrol via passkey, or via provisional identity plus guardian consent token; the path taken is recorded in the audit log". The frozen `IdentityService` has only `register`/`authenticate`/`get`/`assignRole`; there was no provisional identity, no guardian consent token, no enrolment audit log, and the cited evidence (`identity.test.js`) proved credential-verifier security instead. A criterion the builder could have satisfied in pure code was mislabelled as met | Reviewer C (C1) | `packages/identity/src/enrolment.ts` — the guardian-consent path, implemented end to end: a token bound to one learner, verified through the identity service's own verifier, single-use, expiring; the scopes the guardian authorised become ordinary consent grants, so a later withdrawal locks them like any other; the path taken is written to the enrolment audit log. The passkey seam refuses with a typed error naming the deferred ceremony (D-05) | 13 tests in `packages/identity/dist/enrolment.test.js`; the register row now points at them. **A defect in my own first implementation was caught by my own test**: the presented token's claims were trusted, so a caller could widen the scopes. The token is now a handle to server-side claims, and a mismatch is refused |
+| 2 | **The design-token gate was reporting PASS over files it never read.** Raw colour literals sat in `apps/cli/public` (`index.html`, `manifest.webmanifest`, `icon.svg`), and the gate scanned only `packages/*/src` and `apps/*/src` with no `.svg` or `.webmanifest` extension. The rule was unenforced exactly where the shipped assets live | Reviewer B (C10) | One shared scan root for every static gate — `listScannableDirs` = `packages/*/src` + `apps/*/src` + `apps/*/public` + `tools/` + `assets/`, with `.svg` and `.webmanifest` added. A literal in a format that cannot express a CSS variable is allowed **only** when the value is one the token stylesheet defines: a checked exemption, not a hole. Widening the scope immediately exposed 5 findings the narrow scope had hidden | 126 files scanned (was 102); the gate passes over the wider tree; 3 new negative fixtures prove it can still fail |
+| 3 | **The contract amendments recorded no introducing commit.** The rubric requires the file, the reason and the commit; the schema had no commit field, so the requirement could not be enforced | Reviewer B (C10) | `commit` is a required field of an amendment, it must exist in the clone, and it must be an ancestor of HEAD | `docs/contracts-baseline-amendments.json` records `05d3a79`; the gate refuses an amendment whose commit is unknown or not in this history |
+
+**Three further defects the repair itself uncovered** — these were not raised by either reviewer, and
+they are recorded because they are the reason the round-2 sweep was not simply a patch:
+
+| # | Defect | How it was found | Repair |
+|---|---|---|---|
+| 4 | **The secrets scan had no proof that it detects anything.** The P5-5 criterion says "verifiable by the canary-token sweep" and nothing implemented a canary sweep. "0 findings" is also what an inert scanner reports | Auditing the criterion against its own stated verification method while repairing it | `tools/secrets-scan.mjs` plants a canary in a throwaway directory and runs the SAME detection code over it; it refuses to pass unless the canary is found. The canary is assembled from fragments so the scanner does not find it in its own source |
+| 5 | **The frozen-contract gate ignored untracked files.** `git diff` compares commits to the working tree but does not report a file that was never tracked — so a brand-new file inside `packages/contracts/src` would have been invisible to the freeze | Writing the negative fixture for issue 3 | The gate now lists untracked files under `packages/contracts/` and treats them as changes |
+| 6 | **The `onAttempt` audit hook had no caller** — API surface that looked live and was not | Reviewer C (suggestion) | A test proves the hook receives every rung of the ladder, in order, with the outcome recorded |
+
+**Suggestions taken from both reviewers** (none of them relax a criterion): the officer register now
+records the three roles the architecture document names (ten remain vacant, so P0-6 stays
+owner-blocked); four exports with no caller outside their own module are now module-internal; the
+README labels the Render free-tier limits as TARGET LIMITS quoted from vendor documentation rather
+than measurements this build made; and the README names `npm audit` as the dependency advisory check
+of record, stating that a tool resolving a different working directory is not evidence about this
+project.
+
+**Round 2 outcome:** both reviewers FAIL, so the slice is **not** accepted. Every merged issue is
+repaired. Round 3 is the last round the method allows; if it does not produce two PASS verdicts, the
+decision escalates to the owner rather than continuing.

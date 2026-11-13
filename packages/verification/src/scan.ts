@@ -196,12 +196,32 @@ export function stripComments(content: string): string {
 }
 
 /**
+ * Remove SVG path geometry from a file's content before it is scanned.
+ *
+ * WHY: an SVG path is a list of coordinates — "M256 316" and curve parameters
+ * like "-30-20-66" — and a long dash-separated run of digits is
+ * indistinguishable from a telephone number to a digit-run rule. The geometry
+ * is not data and cannot carry personal data, so it is taken out of scope for
+ * the scan.
+ *
+ * ONLY the `d` attribute is removed. A `<text>` element is content, and it
+ * stays in scope: an SVG that displayed a learner's name would still be
+ * caught.
+ */
+function stripSvgGeometry(content: string): string {
+  return content.replace(/\sd="[^"]*"/g, ' d=""');
+}
+
+/**
  * Find hardcoded personal data.
  */
 export function findPiiViolations(files: readonly SourceFile[]): Violation[] {
   const out: Violation[] = [];
   for (const file of files) {
-    linesOf(file.content).forEach((text, index) => {
+    const content = file.relPath.toLowerCase().endsWith('.svg')
+      ? stripSvgGeometry(file.content)
+      : file.content;
+    linesOf(content).forEach((text, index) => {
       const line = index + 1;
       for (const match of text.matchAll(EMAIL_PATTERN)) {
         const value = match[0];
@@ -247,18 +267,69 @@ export function findPiiViolations(files: readonly SourceFile[]): Violation[] {
  * Find raw colour literals. The token stylesheet is the only place a colour
  * value may live.
  */
-export function findHexViolations(files: readonly SourceFile[]): Violation[] {
+/**
+ * The colour values a token stylesheet defines, upper-cased for comparison.
+ */
+export function extractTokenColours(stylesheet: string): ReadonlySet<string> {
+  const values = new Set<string>();
+  for (const match of stylesheet.matchAll(HEX_PATTERN)) {
+    const value = match[0];
+    if (value !== undefined) values.add(value.toUpperCase());
+  }
+  return values;
+}
+
+export interface HexScanOptions {
+  /**
+   * Project-relative path of the token stylesheet — the source of truth. Its
+   * own literals are not findings; they are the definitions everything else
+   * must agree with.
+   */
+  readonly tokenStylesheet: string;
+  /** The colour values the token stylesheet defines. */
+  readonly tokenColours: ReadonlySet<string>;
+  /**
+   * Files whose format cannot reference a CSS custom property. A literal in
+   * one of these is a finding UNLESS its value is a token colour.
+   */
+  readonly valueAssetFiles: readonly string[];
+}
+
+/**
+ * Find raw colour literals.
+ *
+ * Two rules, not one:
+ *
+ *   1. In ordinary source, a colour is written as `var(--eg-…)`. A literal is
+ *      a finding even when its value happens to match a token: the point of
+ *      the rule is that the component READS the token, so a theme switch
+ *      reaches it.
+ *
+ *   2. A few shipped formats cannot express a variable — the web app
+ *      manifest, an SVG loaded as an image, and the `theme-color` meta
+ *      element. In those files a literal is unavoidable, so it is allowed
+ *      ONLY when the value is one the token stylesheet defines. The exemption
+ *      is therefore checked, not assumed: a colour that drifts from the
+ *      tokens is still a finding.
+ */
+export function findHexViolations(files: readonly SourceFile[], options?: HexScanOptions): Violation[] {
   const out: Violation[] = [];
   for (const file of files) {
+    if (options && file.relPath === options.tokenStylesheet) continue;
+    const isValueAsset = options ? options.valueAssetFiles.includes(file.relPath) : false;
     linesOf(file.content).forEach((text, index) => {
       const line = index + 1;
-      for (const _match of text.matchAll(HEX_PATTERN)) {
+      for (const match of text.matchAll(HEX_PATTERN)) {
+        const value = match[0] ?? '';
+        if (isValueAsset && options && options.tokenColours.has(value.toUpperCase())) continue;
         out.push({
           kind: 'hex',
           file: file.relPath,
           line,
           rule: 'hex-literal',
-          detail: 'raw hex colour literal in source — use a design token',
+          detail: isValueAsset
+            ? `raw hex colour literal "${value}" that is not a design token value — an asset colour must equal a token colour`
+            : 'raw hex colour literal in source — use a design token',
         });
       }
       for (const _match of text.matchAll(FUNCTIONAL_COLOUR_PATTERN)) {

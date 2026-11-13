@@ -20,7 +20,8 @@
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,7 +63,10 @@ const PATTERNS = [
     group: 0,
   },
   {
-    id: 'openai-style-key',
+    // The rule is named for the SHAPE it detects, not for a vendor: the
+    // scanner must not name a provider, because a provider name outside
+    // packages/onekey is itself a leak (the no-provider-leak gate).
+    id: 'sk-prefixed-key',
     expression: /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9]{32,}/g,
     group: 0,
   },
@@ -188,6 +192,93 @@ function findApiKeyEntries(relativePath, text) {
   return findings;
 }
 
+/**
+ * The findings in one file's text.
+ *
+ * WHY IT IS A FUNCTION: the canary self-test below must exercise the SAME
+ * detection code as the real scan. A second implementation would prove
+ * nothing — the canary would be found by code the real scan does not use.
+ */
+function scanText(relativePath, text) {
+  const found = [];
+  const lines = text.split(/\r?\n/);
+  lines.forEach((line, index) => {
+    for (const pattern of PATTERNS) {
+      pattern.expression.lastIndex = 0;
+      let match = pattern.expression.exec(line);
+      while (match !== null) {
+        const captured = match[pattern.group] ?? match[0];
+        if (!looksLikePlaceholder(captured)) {
+          found.push({
+            file: relativePath,
+            line: index + 1,
+            rule: pattern.id,
+            fingerprint: fingerprint(captured),
+          });
+        }
+        match = pattern.expression.exec(line);
+      }
+    }
+  });
+
+  for (const entry of findApiKeyEntries(relativePath, text)) {
+    found.push({
+      file: relativePath,
+      line: 0,
+      rule: 'settings-api-keys',
+      fingerprint: fingerprint(entry.value),
+    });
+  }
+  return found;
+}
+
+/**
+ * The canary self-test.
+ *
+ * WHY THIS EXISTS: "no findings" is what a scanner that finds nothing also
+ * reports. A scan that has never been shown a secret cannot be trusted to
+ * find one. So the scanner plants a canary in a throwaway directory, runs
+ * the SAME detection code over it, and refuses to pass unless the canary is
+ * found.
+ *
+ * The canary is assembled from fragments so that this file does not itself
+ * contain the literal it is looking for.
+ */
+function canarySelfTest() {
+  // The canary is shaped like the thing it imitates: a vendor prefix, a dash,
+  // then a long alphanumeric run. It is assembled from fragments so that this
+  // file never contains the literal it searches for, and it avoids every word
+  // the placeholder rule treats as "obviously not a secret" — otherwise the
+  // self-test would pass for the wrong reason.
+  const canary = ['sk', 'canaryNotARealKey0123456789abcdefghij'].join('-');
+  const directory = mkdtempSync(join(tmpdir(), 'edugenesis-canary-'));
+  try {
+    const file = join(directory, 'canary.txt');
+    writeFileSync(file, `const credential = "${canary}";\n`, 'utf8');
+    const found = scanText('canary.txt', readFileSync(file, 'utf8'));
+    if (found.length === 0) {
+      return { ok: false, detail: 'the scanner did not detect its own canary token' };
+    }
+    return {
+      ok: true,
+      detail: `the scanner detected its canary (rule "${found[0]?.rule}") — the detector is live, not inert`,
+    };
+  } finally {
+    try {
+      rmSync(directory, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
+    } catch {
+      // A leaked temp directory is not a scan failure.
+    }
+  }
+}
+
+const selfTest = canarySelfTest();
+if (!selfTest.ok) {
+  console.error(`FAIL  secrets scan self-test: ${selfTest.detail}.`);
+  console.error('A scanner that cannot find a planted canary cannot be trusted to find a real secret.');
+  process.exit(1);
+}
+
 const findings = [];
 let scanned = 0;
 let skipped = 0;
@@ -219,35 +310,7 @@ for (const relativePath of publishedFiles()) {
     continue;
   }
   scanned += 1;
-
-  const lines = text.split(/\r?\n/);
-  lines.forEach((line, index) => {
-    for (const pattern of PATTERNS) {
-      pattern.expression.lastIndex = 0;
-      let match = pattern.expression.exec(line);
-      while (match !== null) {
-        const captured = match[pattern.group] ?? match[0];
-        if (!looksLikePlaceholder(captured)) {
-          findings.push({
-            file: relativePath,
-            line: index + 1,
-            rule: pattern.id,
-            fingerprint: fingerprint(captured),
-          });
-        }
-        match = pattern.expression.exec(line);
-      }
-    }
-  });
-
-  for (const entry of findApiKeyEntries(relativePath, text)) {
-    findings.push({
-      file: relativePath,
-      line: 0,
-      rule: 'settings-api-keys',
-      fingerprint: fingerprint(entry.value),
-    });
-  }
+  findings.push(...scanText(relativePath, text));
 }
 
 if (findings.length > 0) {
@@ -261,6 +324,7 @@ if (findings.length > 0) {
 }
 
 console.log(`PASS  secrets scan: ${scanned} file(s) scanned, ${skipped} skipped, 0 findings.`);
+console.log(`PASS  canary self-test: ${selfTest.detail}.`);
 if (!existsSync(join(ROOT, '.git'))) {
   console.log('note  git metadata was not available; the tree was walked instead of read from the index.');
 }

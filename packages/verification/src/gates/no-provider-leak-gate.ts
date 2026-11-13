@@ -9,7 +9,7 @@
  * does not itself contain a literal the scanner would find.
  */
 import type { Gate, GateContext, GateResult } from '../types.js';
-import { collectSourceFiles, listWorkspaceSrcDirs } from '../paths.js';
+import { collectSourceFiles, listScannableDirs } from '../paths.js';
 import { stripComments } from '../scan.js';
 
 const GATE_ID = 'no-provider-leak';
@@ -62,7 +62,7 @@ export const noProviderLeakGate: Gate = {
   title: 'No provider SDK or provider host appears outside packages/onekey (ADR-0001)',
   severity: 'blocker',
   async run(ctx: GateContext): Promise<GateResult> {
-    const dirs = listWorkspaceSrcDirs(ctx.root);
+    const dirs = listScannableDirs(ctx.root);
     const all = collectSourceFiles(ctx.root, dirs);
     const files = all.filter((file) => !isExcludedPath(file.relPath));
 

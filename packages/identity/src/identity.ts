@@ -106,6 +106,17 @@ export interface LocalIdentityService extends IdentityServiceContract {
   issueCredential(subjectId: string, secret?: string): LocalKeyCredential;
   /** The stored verifiers for a subject. Contains no secret by construction. */
   credentials(subjectId: string): readonly StoredCredentialRecord[];
+  /**
+   * Merge a patch into a subject's ABAC attributes.
+   *
+   * WHY IT EXISTS: an enrolment links a guardian to the learner they
+   * consented for. The ABAC rule that governs access to a learner's record
+   * reads the `linkedLearnerIds` attribute, so something must be able to
+   * write it. The contract interface has no such method, and the contract is
+   * frozen — so this is an addition on the adapter, not a change to the
+   * contract.
+   */
+  updateAttributes(id: string, patch: Readonly<Record<string, string | number | boolean>>): void;
 }
 
 interface PrincipalRecord {
@@ -269,7 +280,12 @@ export function createIdentityService(opts: IdentityServiceOptions = {}): LocalI
     return [...record.credentials.values()];
   }
 
-  return { register, issueCredential, authenticate, get, assignRole, credentials };
+  function updateAttributes(id: string, patch: Readonly<Record<string, string | number | boolean>>): void {
+    const record = requireSubject(id);
+    record.principal.attributes = { ...record.principal.attributes, ...patch };
+  }
+
+  return { register, issueCredential, authenticate, get, assignRole, credentials, updateAttributes };
 }
 
 /**

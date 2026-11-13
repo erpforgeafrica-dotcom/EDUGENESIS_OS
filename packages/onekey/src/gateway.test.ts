@@ -297,6 +297,33 @@ test('gateway: a provider that refuses on budget falls through to the next tier'
   assert.equal(g.circuitState('p1'), 'closed', 'a budget refusal must not trip the provider circuit');
 });
 
+test('gateway: the onAttempt hook receives every rung of the ladder as it happens', async () => {
+  // The hook exists so a deployment can stream the audit trail live. A hook
+  // nobody sets is an API surface that looks live and is not, so the wiring
+  // is proven here: the hook fires per attempt, in order, with the outcome
+  // the ladder recorded.
+  const seen: { tier: number; providerId: string; outcome: string }[] = [];
+  const g = createOneKeyGateway({
+    tierZero: createTierZeroProvider(),
+    onAttempt: (attempt) => {
+      seen.push({ tier: attempt.tier, providerId: attempt.providerId, outcome: attempt.outcome });
+    },
+  });
+  g.register(
+    createMockAdapter({ id: 'p1', tier: 1, failWith: new ProviderUnavailableError('p1', 'boom') }).adapter,
+  );
+  g.register(createMockAdapter({ id: 'p2', tier: 2 }).adapter);
+
+  await g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext());
+
+  assert.deepEqual(
+    seen.map((a) => `${a.tier}:${a.outcome}`),
+    ['0:no-offline-content', '1:failed', '2:served'],
+    'the hook must see every attempt, in order, as it happens',
+  );
+  assert.equal(seen[1]?.providerId, 'p1');
+});
+
 test('gateway: the provenance a provider reports reaches the caller unchanged', async () => {
   // Where an answer came from is part of the answer. The gateway must not
   // drop, rename or summarise a provider's source lineage on its way out.

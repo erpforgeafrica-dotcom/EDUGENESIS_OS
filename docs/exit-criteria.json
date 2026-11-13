@@ -22,7 +22,11 @@
         {
           "kind": "file",
           "target": "docs/adr/README.md",
-          "contains": ["| ADR | Title | Status | Owner |", "ADR-0016", "Accepted"]
+          "contains": [
+            "| ADR | Title | Status | Owner |",
+            "ADR-0016",
+            "Accepted"
+          ]
         }
       ]
     },
@@ -43,8 +47,17 @@
       "source": "09 §12.2 exit criterion 4",
       "status": "met",
       "evidence": [
-        { "kind": "file", "target": "apps/cli/public/app.css", "contains": ["--eg-"] },
-        { "kind": "tool", "target": "verify-contrast.mjs" }
+        {
+          "kind": "file",
+          "target": "apps/cli/public/app.css",
+          "contains": [
+            "--eg-"
+          ]
+        },
+        {
+          "kind": "tool",
+          "target": "verify-contrast.mjs"
+        }
       ]
     },
     {
@@ -53,7 +66,12 @@
       "criterion": "An accessibility CI job exists that fails a build on an ARC-I1 violation, proven by an intentionally broken fixture and a red build.",
       "source": "09 §12.2 exit criterion 5 merged with 09 §12.3 exit criterion 3; AC-23",
       "status": "met",
-      "evidence": [{ "kind": "gate", "target": "accessibility-contract" }]
+      "evidence": [
+        {
+          "kind": "gate",
+          "target": "accessibility-contract"
+        }
+      ]
     },
     {
       "id": "P0-6",
@@ -62,7 +80,7 @@
       "source": "09 §12.2 exit criterion 6",
       "status": "owner-blocked",
       "owner": "Founder & CEO",
-      "reason": "One role is named (Chief Inclusion & Accessibility Officer: Noni / Amara Diop). The remaining officer roles have no named person; a build cannot invent an appointment.",
+      "reason": "Three roles are named in the approved architecture document and are recorded in docs/OFFICERS.md (Chief AI & Model Orchestrator: Marcus Thorne; Chief Inclusion & Accessibility Officer: Noni / Amara Diop; Chief Learning Scientist: Nelly / Dr. Elena Rostova). The remaining ten roles have no named person, and a build cannot invent an appointment.",
       "unblock": "Founder & CEO appoints each vacant role in docs/OFFICERS.md; the gate re-reads the register and flips when no row reads VACANT."
     },
     {
@@ -72,8 +90,13 @@
       "source": "09 §12.3 exit criterion 1",
       "status": "met",
       "evidence": [
-        { "kind": "test", "target": "packages/identity/dist/identity.test.js", "minTests": 5 }
-      ]
+        {
+          "kind": "test",
+          "target": "packages/identity/dist/enrolment.test.js",
+          "minTests": 13
+        }
+      ],
+      "note": "Implemented branch: the guardian-consent-token path. The criterion is a disjunction - \"via passkey, OR via provisional identity plus guardian consent token\". The passkey CEREMONY is deferred by Slice 0 decision D-05, because it needs a browser and an authenticator; the seam is fixed and refuses with a typed error, and the attempt is recorded in the enrolment audit log. The path actually taken is recorded in the enrolment audit log, which is what the criterion asks to be verifiable."
     },
     {
       "id": "P1-2",
@@ -81,7 +104,12 @@
       "criterion": "A withdrawal of consent visibly locks the sharing surfaces and does not block core learning, asserted by a scripted test.",
       "source": "09 §12.3 exit criterion 2; AC-26",
       "status": "met",
-      "evidence": [{ "kind": "gate", "target": "consent-withdrawal" }]
+      "evidence": [
+        {
+          "kind": "gate",
+          "target": "consent-withdrawal"
+        }
+      ]
     },
     {
       "id": "P1-3",
@@ -89,7 +117,12 @@
       "criterion": "A learner-facing output that bypasses the Guardian is impossible: the coverage assertion reports 100 %.",
       "source": "09 §12.3 exit criterion 4; AC-19",
       "status": "met",
-      "evidence": [{ "kind": "tool", "target": "verify-coverage.mjs" }]
+      "evidence": [
+        {
+          "kind": "tool",
+          "target": "verify-coverage.mjs"
+        }
+      ]
     },
     {
       "id": "P1-4",
@@ -101,9 +134,16 @@
         {
           "kind": "file",
           "target": "apps/cli/public/manifest.webmanifest",
-          "contains": ["theme_color", "background_color", "display"]
+          "contains": [
+            "theme_color",
+            "background_color",
+            "display"
+          ]
         },
-        { "kind": "tool", "target": "verify-contrast.mjs" }
+        {
+          "kind": "tool",
+          "target": "verify-contrast.mjs"
+        }
       ]
     },
     {
@@ -112,7 +152,12 @@
       "criterion": "Re-pointing the adapter registry to a second provider completes without any learner-path code change, verifiable by the diff of the re-pointing change.",
       "source": "09 §12.7 exit criterion 1; AC-17",
       "status": "met",
-      "evidence": [{ "kind": "tool", "target": "verify-repoint.mjs" }]
+      "evidence": [
+        {
+          "kind": "tool",
+          "target": "verify-repoint.mjs"
+        }
+      ]
     },
     {
       "id": "P5-2",
@@ -121,7 +166,11 @@
       "source": "09 §12.7 exit criterion 2; AC-17",
       "status": "met",
       "evidence": [
-        { "kind": "test", "target": "packages/onekey/dist/conformance.test.js", "minTests": 4 }
+        {
+          "kind": "test",
+          "target": "packages/onekey/dist/conformance.test.js",
+          "minTests": 4
+        }
       ]
     },
     {
@@ -130,7 +179,12 @@
       "criterion": "All five tiers are exercised in a documented failover test, including the §6.6 procedure end to end.",
       "source": "09 §12.7 exit criterion 3; AC-16",
       "status": "met",
-      "evidence": [{ "kind": "gate", "target": "failover-drill" }]
+      "evidence": [
+        {
+          "kind": "gate",
+          "target": "failover-drill"
+        }
+      ]
     },
     {
       "id": "P5-4",
@@ -139,7 +193,11 @@
       "source": "09 §12.7 exit criterion 4; AC-35",
       "status": "met",
       "evidence": [
-        { "kind": "test", "target": "packages/onekey/dist/gateway.test.js", "minTests": 10 }
+        {
+          "kind": "test",
+          "target": "packages/onekey/dist/gateway.test.js",
+          "minTests": 10
+        }
       ]
     },
     {
@@ -148,7 +206,12 @@
       "criterion": "No API key is present in a client bundle, in the sandbox, or in logs, verifiable by the canary-token sweep.",
       "source": "09 §12.7 exit criterion 5; AC-12",
       "status": "met",
-      "evidence": [{ "kind": "tool", "target": "secrets-scan.mjs" }]
+      "evidence": [
+        {
+          "kind": "tool",
+          "target": "secrets-scan.mjs"
+        }
+      ]
     },
     {
       "id": "P5-6",
@@ -157,7 +220,11 @@
       "source": "09 §12.7 exit criterion 6; AC-34",
       "status": "met",
       "evidence": [
-        { "kind": "test", "target": "packages/onekey/dist/egress.test.js", "minTests": 3 }
+        {
+          "kind": "test",
+          "target": "packages/onekey/dist/egress.test.js",
+          "minTests": 3
+        }
       ]
     }
   ]

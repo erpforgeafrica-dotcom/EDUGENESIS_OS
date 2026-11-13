@@ -82,7 +82,14 @@ const DRILL_REQUEST_ID = 'failover-drill';
  * deployment can run against its own gateway, so it ships with its own
  * deliberately broken providers.
  */
-export function createFailingProvider(id: string, tier: 1 | 2 | 3): ProviderAdapter {
+/**
+ * A provider that always fails.
+ *
+ * Module-internal: the drill ships with its own deliberately broken providers
+ * because it is a diagnostic a deployment can run against its own gateway. The
+ * individual factory is not part of the public seam — `runFailoverDrill` is.
+ */
+function createFailingProvider(id: string, tier: 1 | 2 | 3): ProviderAdapter {
   const capabilities: ProviderCapabilities = {
     modalities: ['text'],
     supportsContextCaching: false,
@@ -154,8 +161,10 @@ function drillPolicy(taskClass: TaskPolicy['taskClass'] = 'explain'): TaskPolicy
  * Build the drill gateway: a failing primary, a failing secondary, a failing
  * local model, the offline tier, and a human-support tier that catches the
  * learner when every model tier is gone.
+ *
+ * Module-internal: the drill runner owns the scenarios.
  */
-export function buildFailoverDrillGateway(): OneKeyGatewayImpl {
+function buildFailoverDrillGateway(): OneKeyGatewayImpl {
   const gateway = createOneKeyGateway({
     tierZero: createTierZeroProvider(),
     policyVersion: 'failover-drill-v1',
@@ -184,8 +193,10 @@ export function buildFailoverDrillGateway(): OneKeyGatewayImpl {
  * A drill gateway with NO offline tier and NO human-support tier, so the
  * ladder must fail with a typed error instead of pretending a learner was
  * served. This is the negative control for the other two scenarios.
+ *
+ * Module-internal: the drill runner owns the scenarios.
  */
-export function buildExhaustionDrillGateway(): OneKeyGatewayImpl {
+function buildExhaustionDrillGateway(): OneKeyGatewayImpl {
   const gateway = createOneKeyGateway({
     policyVersion: 'failover-drill-v1',
   });

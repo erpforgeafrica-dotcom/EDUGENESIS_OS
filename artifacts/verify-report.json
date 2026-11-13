@@ -36,28 +36,28 @@
       "title": "no-pii-in-source",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no personal data found in 104 source file(s)"
+      "detail": "no personal data found in 126 source file(s)"
     },
     {
       "id": "no-provider-leak",
       "title": "no-provider-leak",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no provider reference outside packages/onekey in 75 source file(s)"
+      "detail": "no provider reference outside packages/onekey in 97 source file(s)"
     },
     {
       "id": "path-portability",
       "title": "path-portability",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no absolute path in 118 shipped file(s)"
+      "detail": "no absolute path in 120 shipped file(s)"
     },
     {
       "id": "design-token-governance",
       "title": "design-token-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no raw colour literal in 104 source file(s)"
+      "detail": "no raw colour literal in 126 source file(s)"
     },
     {
       "id": "contracts-baseline",

@@ -6,7 +6,8 @@
     {
       "path": "packages/contracts/tsconfig.json",
       "reason": "The compiler config pointed at an absolute path on the author's machine. It now extends ../../tsconfig.base.json, which is required by the portability law (GLOBAL order 9) and changes no contract type.",
-      "adr": "ADR-0016"
+      "adr": "ADR-0016",
+      "commit": "05d3a79fb3788078124d70a20f46433e7d477831"
     }
   ]
 }

@@ -6,7 +6,7 @@
  * (documented allowlist patterns in `scan.ts`).
  */
 import type { Gate, GateContext, GateResult } from '../types.js';
-import { collectSourceFiles, listWorkspaceSrcDirs } from '../paths.js';
+import { collectSourceFiles, listScannableDirs } from '../paths.js';
 import { findPiiViolations } from '../scan.js';
 
 const GATE_ID = 'no-pii-in-source';
@@ -16,7 +16,7 @@ export const piiGate: Gate = {
   title: 'No personal data is hardcoded in the source tree',
   severity: 'blocker',
   async run(ctx: GateContext): Promise<GateResult> {
-    const dirs = listWorkspaceSrcDirs(ctx.root);
+    const dirs = listScannableDirs(ctx.root);
     const files = collectSourceFiles(ctx.root, dirs);
     if (files.length === 0) {
       return {
