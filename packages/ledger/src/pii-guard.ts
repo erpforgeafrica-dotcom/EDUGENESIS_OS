@@ -131,14 +131,52 @@ export const EXTENDED_FORBIDDEN_LEDGER_FIELDS: readonly string[] = [
 ];
 
 /**
+ * Characters that RENDER as an ASCII letter but are a different code point.
+ *
+ * WHY: `learner_id` written with a Cyrillic `е` (U+0435) instead of a Latin `e`
+ * is a different string that a human reviewer reads as the same field. The
+ * previous normaliser stripped every non-ASCII character, which turned the
+ * look-alike spelling into the unrelated token `lrnrid` and let a forbidden
+ * name through. Folding first makes the comparison see what the reader sees.
+ *
+ * WHY IT IS AN EXTENSION, NOT A NARROWING: ledger field names are machine
+ * identifiers. A genuine Cyrillic or Greek identifier is not a field this
+ * platform produces, so folding it can only create a refusal, never hide one.
+ */
+const CONFUSABLE_LETTERS: Readonly<Record<string, string>> = {
+  // Cyrillic lower-case look-alikes.
+  'а': 'a', 'в': 'b', 'е': 'e', 'ё': 'e', 'к': 'k', 'м': 'm', 'н': 'h',
+  'о': 'o', 'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'х': 'x', 'і': 'i',
+  'ї': 'i', 'ј': 'j', 'ѕ': 's', 'ԁ': 'd', 'ԛ': 'q', 'ԝ': 'w', 'ғ': 'f',
+  'һ': 'h', 'ɡ': 'g',
+  // Greek lower-case look-alikes.
+  'α': 'a', 'β': 'b', 'γ': 'y', 'ε': 'e', 'η': 'n', 'ι': 'i', 'κ': 'k',
+  'ν': 'v', 'ο': 'o', 'ρ': 'p', 'τ': 't', 'υ': 'u', 'χ': 'x', 'ω': 'w',
+  'μ': 'u', 'π': 'n', 'ζ': 'z',
+  // Latin extended / phonetic forms.
+  'ı': 'i', 'ȷ': 'j', 'ɑ': 'a', 'ʟ': 'l', 'ɴ': 'n', 'ʀ': 'r', 'ʏ': 'y',
+};
+
+/**
  * Normalise a field name for comparison.
  *
- * Lower-cases and removes every non-alphanumeric character, so all of
- * `learner_id`, `LEARNER_ID`, `learnerId`, `learner.id` and `learner id`
- * collapse onto the single token `learnerid`.
+ * Four steps, each closing a different bypass:
+ *   1. NFKC folds compatibility forms, so full-width `ｌｅａｒｎｅｒ＿ｉｄ` becomes
+ *      `learner_id` instead of collapsing to `id`;
+ *   2. lower-casing makes the comparison case-insensitive;
+ *   3. look-alike letters fold to ASCII, so a homoglyph spelling cannot pose as
+ *      a different field name;
+ *   4. every remaining non-alphanumeric character is removed, so all of
+ *      `learner_id`, `LEARNER_ID`, `learnerId`, `learner.id` and `learner id`
+ *      collapse onto the single token `learnerid`.
  */
 export function normalizeFieldName(name: string): string {
-  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const folded = name.normalize('NFKC').toLowerCase();
+  let ascii = '';
+  for (const character of folded) {
+    ascii += CONFUSABLE_LETTERS[character] ?? character;
+  }
+  return ascii.replace(/[^a-z0-9]/g, '');
 }
 
 /** Every forbidden name, normalised. */

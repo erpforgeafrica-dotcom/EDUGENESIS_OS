@@ -121,6 +121,44 @@ test('the guard reports the exact paths it found', () => {
   assert.equal(findPersonalDataValues({ a: 'learner@example.org' }).length, 1);
 });
 
+/**
+ * HOMOGLYPH AND UNICODE-FORM TESTS (round-4 audit, finding F4-01).
+ *
+ * The guard's promise is that a forbidden field cannot reach the public ledger.
+ * A field name is attacker-chosen text, so the comparison has to survive the
+ * spellings a text editor does not distinguish: compatibility forms, and
+ * letters borrowed from another alphabet.
+ */
+test('a full-width spelling of a forbidden field is caught, not collapsed away', () => {
+  // NFKC folds the full-width forms; without it the letters are stripped and
+  // `ｌｅａｒｎｅｒ＿ｉｄ` becomes the meaningless token `id`.
+  assert.equal(normalizeFieldName('\uFF4C\uFF45\uFF41\uFF52\uFF4E\uFF45\uFF52\uFF3F\uFF49\uFF44'), 'learnerid');
+  assert.equal(isForbiddenFieldName('\uFF4C\uFF45\uFF41\uFF52\uFF4E\uFF45\uFF52\uFF3F\uFF49\uFF44'), true);
+});
+
+test('a Cyrillic look-alike spelling of a forbidden field is caught', () => {
+  // `lеаrnerid` written with U+0435 and U+0430: visually identical to the
+  // Latin spelling, and previously normalised to `lrnrid`.
+  const homoglyph = `l\u0435\u0430rner\u0456d`;
+  assert.equal(normalizeFieldName(homoglyph), 'learnerid');
+  assert.equal(isForbiddenFieldName(homoglyph), true);
+});
+
+test('a Greek look-alike spelling of a forbidden field is caught', () => {
+  const homoglyph = `\u03B1ddress`; // GREEK SMALL LETTER ALPHA
+  assert.equal(normalizeFieldName(homoglyph), 'address');
+  assert.equal(isForbiddenFieldName(homoglyph), true);
+});
+
+test('folding is an extension: ordinary ASCII normalisation is unchanged', () => {
+  assert.equal(normalizeFieldName('learner_id'), 'learnerid');
+  assert.equal(normalizeFieldName('learnerId'), 'learnerid');
+  assert.equal(normalizeFieldName('LEARNER_ID'), 'learnerid');
+  assert.equal(normalizeFieldName('learner.id'), 'learnerid');
+  assert.equal(normalizeFieldName('learner id'), 'learnerid');
+  assert.equal(isForbiddenFieldName('total_spend_cents'), false);
+});
+
 test('the detection rules are published so an auditor can read them', () => {
   assert.ok(VALUE_DETECTION_RULES.length >= 3);
   assert.match(VALUE_DETECTION_RULES.join(' '), /email-address/);
