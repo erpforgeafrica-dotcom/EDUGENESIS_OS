@@ -29,35 +29,35 @@
       "title": "consent-withdrawal",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "sharing blocked by withdrawal, core learning still permitted"
+      "detail": "sharing was active, withdrawal blocked it, and core learning still works"
     },
     {
       "id": "no-pii-in-source",
       "title": "no-pii-in-source",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no personal data found in 128 source file(s)"
+      "detail": "no personal data found in 130 source file(s)"
     },
     {
       "id": "no-provider-leak",
       "title": "no-provider-leak",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no provider reference outside packages/onekey in 99 source file(s)"
+      "detail": "no provider reference outside packages/onekey in 101 source file(s)"
     },
     {
       "id": "path-portability",
       "title": "path-portability",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no absolute path in 122 shipped file(s)"
+      "detail": "no absolute path in 141 shipped file(s)"
     },
     {
       "id": "design-token-governance",
       "title": "design-token-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no raw colour literal in 128 source file(s)"
+      "detail": "no raw colour literal in 130 source file(s)"
     },
     {
       "id": "contracts-baseline",

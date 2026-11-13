@@ -8,30 +8,25 @@
     "passed": 16,
     "blockersFailed": 0,
     "warnings": 0,
-    "filesVerified": 183
+    "filesVerified": 179
   },
   "subjects": [
     {
       "name": "artifacts/verify-report.json",
-      "sha256": "9d71c2ca35c7d7b6145e35cc3041ac34708c5fd80a8cb27f7e11e31ddd4f4f06",
-      "bytes": 3735
+      "sha256": "26ef057fbb3ee00fcbe6c7b9fb9941b00ba68aefdf3247a8e403092eb708289e",
+      "bytes": 3748
     },
     {
       "name": "artifacts/sbom.cdx.json",
-      "sha256": "55f0e3b7b0ec1c569547b15870244b11927e67dfdb40f477c48cc7d5fcef555e",
-      "bytes": 7285
+      "sha256": "f67630978ad9c44861d6b7e61c2a701a9faaecabdafa80b94b22fd456794157b",
+      "bytes": 7263
     },
     {
       "name": "artifacts/checksums.sha256",
-      "sha256": "0f758ba278d1d810dc7a8347d3ee1b8e74fe0a56fd8cdcc20a65cbabaa2ce87f",
-      "bytes": 18387
+      "sha256": "2fa96c7dd1f428d40f985e50fa1576bcb618412e5382ad0c7dc77ef37b1b1dfc",
+      "bytes": 17937
     }
   ],
-  "source": {
-    "gitHead": "f1f3b5e68688f7df123524b10d2797fc4e54b14d",
-    "gitDirty": true,
-    "timestamp": "2026-11-13T15:24:53.000Z"
-  },
   "toolchain": {
     "node": "v24.19.0",
     "platform": "win32",
