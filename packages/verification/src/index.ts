@@ -60,6 +60,21 @@ export {
 export { pathPortabilityGate } from './gates/path-portability-gate.js';
 export { hexTokenGate } from './gates/hex-token-gate.js';
 export {
+  keyboardFocusGate,
+  assessFocusVisibility,
+  collectCssRules,
+  hidesIndicator,
+  TOKEN_STYLESHEET as FOCUS_TOKEN_STYLESHEET,
+} from './gates/keyboard-focus-gate.js';
+export type { FocusAssessment } from './gates/keyboard-focus-gate.js';
+export {
+  formSemanticsGate,
+  assessFormSemantics,
+  parseAttributes,
+  SETTINGS_PAGE,
+} from './gates/form-semantics-gate.js';
+export type { FormSemanticsAssessment } from './gates/form-semantics-gate.js';
+export {
   contractsBaselineGate,
   isFrozenPath,
   parseAmendments,

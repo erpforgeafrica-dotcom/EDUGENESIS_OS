@@ -19,6 +19,8 @@ import { contractsBaselineGate } from './gates/contracts-baseline-gate.js';
 import { exitCriteriaGate } from './gates/exit-criteria-gate.js';
 import { pwaLightDefaultGate } from './gates/pwa-light-default-gate.js';
 import { adrGovernanceGate } from './gates/adr-governance-gate.js';
+import { keyboardFocusGate } from './gates/keyboard-focus-gate.js';
+import { formSemanticsGate } from './gates/form-semantics-gate.js';
 
 /**
  * Every gate, in the order the report prints them.
@@ -38,6 +40,8 @@ export const GATE_REGISTRY: readonly Gate[] = [
   contractsBaselineGate,
   exitCriteriaGate,
   pwaLightDefaultGate,
+  keyboardFocusGate,
+  formSemanticsGate,
   adrGovernanceGate,
 ];
 

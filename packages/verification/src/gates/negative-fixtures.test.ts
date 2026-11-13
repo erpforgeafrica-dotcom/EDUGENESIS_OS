@@ -21,6 +21,8 @@ import { contractsBaselineGate, parseAmendments } from './contracts-baseline-gat
 import { pwaLightDefaultGate } from './pwa-light-default-gate.js';
 import { adrGovernanceGate } from './adr-governance-gate.js';
 import { assessConsentTransition } from './consent-gate.js';
+import { assessFocusVisibility } from './keyboard-focus-gate.js';
+import { assessFormSemantics } from './form-semantics-gate.js';
 
 /** Create a throwaway project root with one file at `relPath`. */
 function treeWith(relPath: string, content: string): string {
@@ -588,4 +590,137 @@ test('consent gate: withdrawal that blocks learning fails', () => {
 test('consent gate: a real transition passes', () => {
   const verdict = assessConsentTransition({ shareBefore: true, shareAfter: false, mayLearn: true });
   assert.equal(verdict.passed, true);
+});
+
+/* -------------------------------------------------------------------------- */
+/* Batch E gate halves: keyboard-focus (F2-01 / E1) and form-semantics (E2).  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The smallest focus system that SHOULD pass.
+ *
+ * The colours are system keywords, never literals, so the design-token gate
+ * has nothing to report about this fixture.
+ */
+const GOOD_FOCUS_CSS = `:root {
+  --eg-focus-width: 2px;
+  --eg-focus-offset: 2px;
+  --eg-focus-ring: CanvasText;
+  --eg-surface: Canvas;
+  --eg-gold: ButtonFace;
+  --eg-text-primary: CanvasText;
+}
+:focus-visible {
+  outline: var(--eg-focus-width) solid var(--eg-focus-ring);
+  outline-offset: var(--eg-focus-offset);
+  box-shadow: 0 0 0 calc(var(--eg-focus-width) + var(--eg-focus-offset)) var(--eg-surface);
+}
+.btn--gold:focus-visible {
+  outline-color: var(--eg-text-primary);
+}
+@media (forced-colors: active) {
+  :focus-visible { outline: 3px solid Highlight; }
+}
+`;
+
+test('focus gate: a stylesheet with no focus-visible rule fails', () => {
+  const verdict = assessFocusVisibility(':root { --eg-surface: Canvas; }\na { color: CanvasText; }\n');
+  assert.equal(verdict.passed, false, 'a page with no authored focus indicator must fail the gate');
+  assert.ok(verdict.findings.some((line) => line.includes('no `:focus-visible` rule')));
+});
+
+test('focus gate: a rule that removes the outline fails', () => {
+  const css = GOOD_FOCUS_CSS.replace('outline-offset: var(--eg-focus-offset);', 'outline-offset: var(--eg-focus-offset);\n  outline: none;');
+  const verdict = assessFocusVisibility(css);
+  assert.equal(verdict.passed, false, 'outline:none in the focus rule must fail, not pass silently');
+  assert.ok(verdict.findings.some((line) => line.includes('hides the indicator')));
+});
+
+test('focus gate: a focus rule that suppresses the outline elsewhere fails', () => {
+  const css = `${GOOD_FOCUS_CSS}\n.card:focus { outline: none; }\n`;
+  const verdict = assessFocusVisibility(css);
+  assert.equal(verdict.passed, false, 'any :focus rule that removes the indicator must fail');
+  assert.ok(verdict.findings.some((line) => line.includes('suppresses the outline')));
+});
+
+test('focus gate: a missing forced-colors override fails', () => {
+  const css = GOOD_FOCUS_CSS.replace(/@media \(forced-colors: active\) \{[\s\S]*?\}\n\}/, '');
+  const verdict = assessFocusVisibility(css);
+  assert.equal(verdict.passed, false, 'the ring disappears in forced-colors mode without an override');
+  assert.ok(verdict.findings.some((line) => line.includes('forced-colors')));
+});
+
+test('focus gate: an undefined focus token fails', () => {
+  const css = GOOD_FOCUS_CSS.replace('--eg-focus-ring: CanvasText;', '');
+  const verdict = assessFocusVisibility(css);
+  assert.equal(verdict.passed, false, 'a token the stylesheet never defines cannot ship a visible ring');
+  assert.ok(verdict.findings.some((line) => line.includes('--eg-focus-ring')));
+});
+
+test('focus gate: the complete focus system passes', () => {
+  const verdict = assessFocusVisibility(GOOD_FOCUS_CSS);
+  assert.equal(verdict.passed, true, `unexpected findings: ${verdict.findings.join(' | ')}`);
+});
+
+/** The smallest settings page that SHOULD pass the form-semantics gate. */
+const GOOD_FORM_HTML = `<!doctype html>
+<html lang="en">
+  <body>
+    <main id="main">
+      <form id="settings-form" novalidate>
+        <div class="field">
+          <label for="server-port">Port</label>
+          <input id="server-port" name="server.port" type="number" aria-describedby="hint-server-port" />
+          <p class="hint" id="hint-server-port">A port change takes effect the next time the server starts.</p>
+        </div>
+        <div class="switch">
+          <input id="features-telemetry" type="checkbox" aria-describedby="hint-features-telemetry" />
+          <label for="features-telemetry">Telemetry</label>
+          <p class="hint" id="hint-features-telemetry">Off by default.</p>
+        </div>
+        <p class="eg-status" id="status" role="status" aria-live="polite"></p>
+      </form>
+    </main>
+  </body>
+</html>
+`;
+
+test('form-semantics gate: a hinted control that does not reference its hint fails', () => {
+  const html = GOOD_FORM_HTML.replace(' aria-describedby="hint-server-port"', '');
+  const verdict = assessFormSemantics(html);
+  assert.equal(verdict.passed, false, 'a hint rendered next to a control must be announced with it');
+  assert.ok(verdict.findings.some((line) => line.includes('hint-server-port')));
+});
+
+test('form-semantics gate: a dangling describedby reference fails', () => {
+  const html = GOOD_FORM_HTML.replace('aria-describedby="hint-server-port"', 'aria-describedby="hint-missing"');
+  const verdict = assessFormSemantics(html);
+  assert.equal(verdict.passed, false, 'a reference to an id that does not exist must fail');
+  assert.ok(verdict.findings.some((line) => line.includes('hint-missing')));
+});
+
+test('form-semantics gate: a duplicated id fails', () => {
+  const html = GOOD_FORM_HTML.replace('id="status"', 'id="hint-server-port"');
+  const verdict = assessFormSemantics(html);
+  assert.equal(verdict.passed, false, 'a duplicated id makes every reference to it ambiguous');
+  assert.ok(verdict.findings.some((line) => line.includes('appears 2 times')));
+});
+
+test('form-semantics gate: an unlabelled control fails', () => {
+  const html = GOOD_FORM_HTML.replace('<label for="server-port">Port</label>', '');
+  const verdict = assessFormSemantics(html);
+  assert.equal(verdict.passed, false, 'a control with no accessible name must fail');
+  assert.ok(verdict.findings.some((line) => line.includes('no accessible name')));
+});
+
+test('form-semantics gate: a page with no live region fails', () => {
+  const html = GOOD_FORM_HTML.replace(' role="status" aria-live="polite"', '');
+  const verdict = assessFormSemantics(html);
+  assert.equal(verdict.passed, false, 'save and error feedback that is never announced is silent');
+  assert.ok(verdict.findings.some((line) => line.includes('role="status"')));
+});
+
+test('form-semantics gate: the complete settings page passes', () => {
+  const verdict = assessFormSemantics(GOOD_FORM_HTML);
+  assert.equal(verdict.passed, true, `unexpected findings: ${verdict.findings.join(' | ')}`);
 });

@@ -26,6 +26,13 @@ surface is one settings page and the design-token/contrast gates already cover i
 | Chain | checksums → 179 files (assets included, build cache and local override excluded); attestation PASS | manifest bound |
 | Exit criteria | `exit-criteria` gate | **13 met, 3 owner-blocked** (P0-1, P0-3, P0-6) |
 
+**Current working tree after Batch E (the two accessibility gate halves):** `npm run verify`
+exit 0 — **495/495 tests** (29 suites), **18/18 gates PASS**, 0 warnings, secrets scan 0
+findings over 179 files (canary live), **181-file manifest**, attestation PASS, and the path
+gate reads **143 shipped file(s)**. The table above is the `677f415` snapshot the audit was
+performed against and is left as observed; these are the numbers of the tree that now carries
+the fixes.
+
 **New structural defect found by this run:** `npm run verify` on a clean tree **dirtied the
 tree by design** — it rewrites `artifacts/attestation.json`, `artifacts/checksums.sha256` and
 `artifacts/sbom.cdx.json` — and the attestation then recorded `git HEAD 677f415` together with
@@ -140,8 +147,9 @@ vacuity in the emission fixtures and the untested stateful contrast pairs.
 **Repaired in the working tree after the digests landed:** F2-02 (`--eg-overlay` remapped for
 `[data-theme=light]`, plus `text-primary/overlay`, `link-hover/canvas`, `link-hover/surface`
 added to `tools/verify-contrast.mjs`) and F2-03 (`aria-describedby` on every hinted control,
-hint ids added). F2-01, F2-04 and F2-05 remain open: they need the guardian wired into a
-learner route, two gates that do not exist, and a stricter ARC-I1.
+hint ids added). The two gates those findings asked for now exist and pass (Batch E:
+`keyboard-focus`, `form-semantics`). F2-01 and F2-05 remain open: they need the guardian wired
+into a learner route and a stricter ARC-I1.
 
 ### F4 — identity (first-hand)
 Confirmed F8-03 / F8-01 / F8-02 by reading the code (quoted above). The crypto is sound: scrypt
@@ -150,8 +158,9 @@ claims. The gap is **authority**, not cryptography: nothing in the identity pack
 calling* before it grants, withdraws or mints.
 
 ### F6 — verification and tools (first-hand, plus delegated reviewer)
-The 16 gates are real: they read the shipped tree, have negative fixtures, and the two new gates
-(`pwa-light-default`, `adr-governance`) compute rather than string-match. Three defects:
+The gates are real: they read the shipped tree, have negative fixtures, and the four new gates
+(`pwa-light-default`, `adr-governance`, `keyboard-focus`, `form-semantics`) compute rather than
+string-match. Three defects:
 - **F6-R4-01 (major):** `npm run verify` is not idempotent — it rewrites three artifacts and the
   attestation then records a dirty tree. A clean-checkout reproduction can never match a
   committed attestation. Fix: bind the artifacts by their own digests and delete every field
@@ -218,7 +227,7 @@ are summarised here rather than merged into the register. This document is there
 authoritative statement of the reviewer counts.
 
 The blocker that blocks the *product* is still F0-01/F0-03. F6-03 blocks the *evidence claim*,
-which is why "16/16 PASS" must not be read as "the gates are sound".
+which is why "18/18 PASS" must not be read as "the gates are sound".
 
 
 ### F7 — runtime reality (first-hand)
@@ -238,7 +247,7 @@ ledger invariants and gate suite are strong — but a library no learner can rea
 product. Anyone reading 86 must also read the slice boundary in `README.md`.
 
 **After Batch A:** the authorisation cap is lifted for the consent/enrolment surfaces (A1–A7
-verified, 483/483 tests). The product score stays blocked because the two product blockers are
+verified, 495/495 tests). The product score stays blocked because the two product blockers are
 untouched: no learner route (F0-01) and no production caller of `createEnrolmentService`
 (F0-03), and there is still no deployment or rollback path.
 
@@ -247,7 +256,7 @@ untouched: no learner route (F0-01) and no production caller of `createEnrolment
 ## 5. Fix plan — ordered, each with a named executable check
 
 Batch A — authority (closes the sharpest security findings, all code-only):
-**Status: implemented in the working tree (A1–A7), 483/483 tests, 16/16 gates. Evidence per item:**
+**Status: implemented in the working tree (A1–A7), 495/495 tests, 18/18 gates. Evidence per item:**
 1. **A1 · F8-03** consent authorisation: make `grant`/`withdraw` take an actor principal and an
    authoriser; refuse when the actor may not act for that learner. Check: `consent.test.ts` —
    "a third party cannot grant or withdraw for another learner"; gate `consent-withdrawal`
@@ -306,15 +315,31 @@ Batch D — evidence chain:
 
 Batch E — accessibility:
 17. **E1 · F2-01** authored `:focus-visible` for links, buttons, inputs, checkboxes and the skip
-    link, with a 3:1 non-text contrast check. Check: new gate `keyboard-focus` parses the
+    link, with a 3:1 non-text contrast check. Check: gate `keyboard-focus` parses the
     stylesheet and fails on a missing rule; negative fixture included.
-    **Partially closed:** `assets/edugenesis-tokens.css` already authors a dual-ring
-    `:focus-visible`; the `keyboard-focus` gate does not exist yet.
+    **CLOSED.** `packages/verification/src/gates/keyboard-focus-gate.ts` (id `keyboard-focus`,
+    severity `blocker`) parses the token stylesheet with a recursive `parseRules` walk (so
+    `@media` blocks are not silently dropped) and fails when: no standalone `:focus-visible`
+    rule exists; its `outline` is `none`/`0`/`transparent` (last declaration wins, per the CSS
+    cascade) or is a literal instead of a token; `outline-offset` is missing; no second ring
+    (`box-shadow`) exists; no filled-control override sets `outline-color`; no
+    `@media (forced-colors: active)` re-authoring; any `:focus` rule suppresses the outline; or
+    a referenced `var(--token)` is never defined. Six negative fixtures in
+    `negative-fixtures.test.ts` prove each refusal. Gate result on the shipped tree: **PASS**.
+    Runtime claim (a person tabs and sees the ring) stays UNVERIFIED — no browser run.
 18. **E2 · F2-02** `aria-describedby` on every control with a hint or error; error summary
     announced. Check: gate `form-semantics` asserts every input with a sibling `.hint` has a
     matching `aria-describedby`.
-    **Code half closed:** all hinted controls now carry `aria-describedby` with matching hint
-    ids; the `form-semantics` gate is still to be written.
+    **CLOSED.** `packages/verification/src/gates/form-semantics-gate.ts` (id `form-semantics`,
+    severity `blocker`) reads `apps/cli/public/index.html` and fails when: an id is duplicated;
+    an `aria-describedby`/`aria-labelledby` token resolves to no id; a visible input/select/
+    textarea has no accessible name (`aria-label`, resolvable `aria-labelledby`, or `<label
+    for>`); a control owning a `hint-<id>` node does not reference it; a hint node is
+    referenced by nothing; or the page has no `role="status"`/`role="alert"` live region. Six
+    negative fixtures in `negative-fixtures.test.ts` prove each refusal. Gate result on the
+    shipped tree: **PASS** (15 controls, 15 `for=` bindings, 14 containers, 13 hint nodes with
+    11 wired by their owning control and 0 orphans, 18 distinct idref targets). Runtime claim
+    (a screen reader announces the hint) stays UNVERIFIED — no screen-reader run.
 
 Owner decisions (cannot be closed by code):
 19. **D-1 Runtime:** build the learner route now, or hold for Slice 1 (recommended) with the
@@ -343,15 +368,16 @@ Owner decisions (cannot be closed by code):
 ## 7. Batch A closure - executed 2026-11-13 (code-only security batch)
 
 Every item below was implemented, then proved by build + tests + the gate chain.
-The last authoritative run: `npm run verify` -> build 0, **483/483 tests**, 29 suites,
-`16/16 gates PASS`, `0 blockers failed`, `0 warnings`, secrets scan `0 findings`
-(canary live), SBOM 10 components, manifest **179 files**, attestation **PASS**.
+The last authoritative run (after the Batch E gate halves): `npm run verify` -> build 0,
+**495/495 tests**, 29 suites, `18/18 gates PASS`, `0 blockers failed`, `0 warnings`, secrets
+scan `0 findings` (canary live, 179 files), SBOM 10 components, manifest **181 files**,
+attestation **PASS**.
 
 **Evidence chain, exactly as executed** (`npm run verify`, exit 0, 2026-11-13):
-`path-portability` scanned **141 shipped file(s)** (124 source + 17 config);
-`secrets:scan` read 177 files, skipped 4, and its canary fired; the manifest hashed **179
-files**; the attestation reports 16 gates, 16 passed, 179 files verified, and prints
-`git HEAD 677f415 (informational; the attestation names no commit)` plus
+`path-portability` scanned **143 shipped file(s)**;
+`secrets:scan` read 179 files, skipped 4, and its canary fired; the manifest hashed **181
+files**; the attestation reports 18 gates, 18 passed, 181 files verified, and prints
+`git HEAD <current commit> (informational; the attestation names no commit)` plus
 `artifact tree: 4 regenerated path(s) (reported, never attested)`. `artifacts/attestation.json`
 contains **no `gitHead`, no `source` block (no dirty flag, no changed paths) and no `timestamp`
 key** — no `SOURCE_DATE_EPOCH` was declared. Its bytes are a function of tree content alone.
@@ -401,7 +427,9 @@ Implemented in the working tree this session: `aria-describedby` wired from ever
 control to a stable hint id (`apps/cli/public/index.html`), and the quiet-button hover pair
 retuned in `assets/edugenesis-tokens.css` (the 1.26:1 light-theme state).
 Still open: no shipped path emits an `AccessibilityEmission` (F2-01, blocker-grade for the
-"accessibility guardian" claim), `accessible_alternative.text` remains optional in the
-frozen contract (F2-05), and no `form-semantics` / `keyboard-focus` gate exists, so the
-two fixes above are not yet enforced by the harness. No browser or screen-reader run was
-performed: the runtime accessibility surface remains **UNVERIFIED**.
+"accessibility guardian" claim) and `accessible_alternative.text` remains optional in the
+frozen contract (F2-05). The two source fixes above are now **enforced**: the `keyboard-focus`
+gate proves the tokenised dual-ring focus system survives forced colors and is never suppressed,
+and the `form-semantics` gate proves every control is named and every hint is announced by the
+control it describes — both blocker-severity, each locked by six negative fixtures. No browser
+or screen-reader run was performed: the runtime accessibility surface remains **UNVERIFIED**.

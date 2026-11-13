@@ -1843,15 +1843,15 @@
       },
       "evidence_and_gates": {
         "F6-01": "tools/attest.mjs stores no VCS-derived field at all (no gitHead, no gitDirty, no dirty flag, no changed paths, no HEAD-derived timestamp): committing the attestation is what makes the tree clean, so a stored dirty flag contradicts itself on commit. HEAD, code-tree and artifact-tree state print to the console only; the attested bytes are a function of content, with buildTime only when SOURCE_DATE_EPOCH is declared. tools/sbom.mjs applies the same rule to metadata.timestamp. npm run verify:repro compares two consecutive runs and fails on drift.",
-        "F6-02": "tools/checksums.mjs includes assets/ and excludes *.tsbuildinfo AND gitignored settings/*.local.json (machine-local, may hold API keys); manifest 179 files, assets covered",
+        "F6-02": "tools/checksums.mjs includes assets/ and excludes *.tsbuildinfo AND gitignored settings/*.local.json (machine-local, may hold API keys); manifest 179 files when the fix landed, 181 after the two Batch E gates were added, assets covered",
         "F6-R4-01": "same fix as F6-01; verify:repro is the executable check",
         "F6-R4-04": "NEW, found while fixing F6-02, fixed: gitignored settings/settings.local.json was in the checksum manifest, so two copies of the same commit disagreed and a secret-bearing file received a published digest; now excluded by EXCLUDE_PATTERNS in tools/checksums.mjs. An earlier draft recorded this fix under F6-R4-02, which is the secrets-scan finding and stays open."
       },
       "accessibility": {
         "F2-02": "light-theme --eg-overlay remapped to #E6E0D2; a:hover uses --eg-accent-text; three stateful pairs added to tools/verify-contrast.mjs",
         "F2-03": "every hinted control carries aria-describedby with a matching hint id in apps/cli/public/index.html; 11 of 15 inputs are described controls and 13 of 13 hints have ids",
-        "F2-R4-01": "the stylesheet authors a dual-ring :focus-visible for links, buttons, inputs, checkboxes and the skip link, so the source-level defect is closed; the keyboard-focus gate that would enforce it does NOT exist (F2-04).",
-        "F2-R4-02": "0 broken aria-describedby references: 11 of 15 inputs are described controls, 13 of 13 hint paragraphs have ids (self-check against apps/cli/public/index.html)."
+        "F2-R4-01": "the stylesheet authors a dual-ring :focus-visible for links, buttons, inputs, checkboxes and the skip link, AND the keyboard-focus gate now enforces it (F2-04 / batch item E1): the outline must be tokenised and never none/0, carry an offset and a second ring, have a filled-control override, be re-authored under forced-colors, never be suppressed by a :focus rule, and reference no undefined token. Six negative fixtures lock the gate.",
+        "F2-R4-02": "0 broken aria-describedby references: 11 of 15 inputs are described controls, 13 of 13 hint paragraphs have ids (self-check against apps/cli/public/index.html). The form-semantics gate now enforces the convention (batch item E2): unique ids, every idref resolves, one accessible name per control, every hint-<id> referenced by its owning control, no orphaned hint, and a live status/alert region. Six negative fixtures lock the gate."
       }
     },
     "open_after_round4": {
@@ -1867,9 +1867,9 @@
       "open_blockers": ["F6-03", "F6-04"],
       "blocker_detail": {
         "F6-03": "gates.ts summarise() returns passed: blockerFailures.length === 0, so a gate that cannot run (sibling package unbuilt) comes back as severity 'warning' and the run still reports passed and exits 0. Closing it is a policy change (warning = could not verify = not a pass). Owner decision D-5.",
-        "F6-04": "PARTIALLY FIXED: the dead config-file scan is repaired (stat-before-read; four named root configs incl render.yaml, plus packages/* and apps/* tsconfig.json/package.json; 140 files = 122 source + 18 config; locked by paths.test.ts). Still open: the scan.ts detectors match backslash spellings only, so /Users/..., /home/... and C:/Users/... pass, and .md/.csv are never read."
+        "F6-04": "PARTIALLY FIXED: the dead config-file scan is repaired (stat-before-read; four named root configs incl render.yaml, plus packages/* and apps/* tsconfig.json/package.json; live count 143 shipped files after the Batch E gates; locked by paths.test.ts). Still open: the scan.ts detectors match backslash spellings only, so /Users/..., /home/... and C:/Users/... pass, and .md/.csv are never read."
       }
     },
-    "note": "Round-4 re-verification at HEAD 677f415, plus the Batch A authority repairs and the F6 gate/evidence repairs applied in the working tree afterwards. Batch A closed with npm run verify green: 483/483 tests, 16/16 gates, 179-file manifest, attestation PASS. open_counts covers the 85 round-3 findings only (56 open); the round-4 findings are in new_findings, open_after_round4 and closed_after_round4, and the delegated reviewer counts are in reviewer_corpus. F6-04 is open_after_round4 as PARTIALLY FIXED: the dead config scan is repaired but the detectors are still backslash-only. F6-R4-02 is the secrets-scan finding and remains OPEN; the settings.local.json checksum fix is recorded as F6-R4-04. See docs/AUDIT_ROUND4.md sections 7-9."
+    "note": "Round-4 re-verification at HEAD 677f415, plus the Batch A authority repairs, the F6 gate/evidence repairs, and the Batch E accessibility gate halves applied in the working tree afterwards. Batch A + Batch E closed with npm run verify green: 495/495 tests, 18/18 gates, 181-file manifest, attestation PASS. open_counts covers the 85 round-3 findings only (56 open); the round-4 findings are in new_findings, open_after_round4 and closed_after_round4, and the delegated reviewer counts are in reviewer_corpus. F6-04 is open_after_round4 as PARTIALLY FIXED: the dead config scan is repaired but the detectors are still backslash-only. F6-R4-02 is the secrets-scan finding and remains OPEN; the settings.local.json checksum fix is recorded as F6-R4-04. F2-R4-01 and F2-R4-02 are closed by the keyboard-focus and form-semantics gates. See docs/AUDIT_ROUND4.md sections 7-9."
   }
 }
