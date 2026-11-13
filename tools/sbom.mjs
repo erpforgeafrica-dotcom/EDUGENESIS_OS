@@ -12,7 +12,6 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -145,32 +144,27 @@ function declaredDependencies(manifest) {
 }
 
 /**
- * The SBOM timestamp, in reproducible-build order of preference:
+ * The SBOM timestamp: `SOURCE_DATE_EPOCH` if the build system declares one,
+ * otherwise `null` and the field is omitted.
  *
- *   1. `SOURCE_DATE_EPOCH` — the build system's declared build time.
- *   2. The git commit date of HEAD — stable for a given checkout.
- *   3. The current time — only when neither is available.
+ * WHY THE COMMIT DATE IS NOT A FALLBACK
+ *   `metadata.timestamp` is optional in CycloneDX 1.5. Deriving it from the
+ *   HEAD commit date makes the document a function of the commit that carries
+ *   it: committing `sbom.cdx.json` moves HEAD, so the next generation produces
+ *   a different timestamp, the working tree is dirty again, and no checkout can
+ *   ever reproduce its own committed SBOM. That is the same self-reference that
+ *   `tools/attest.mjs` had. Deriving it from "now" is worse: two runs over an
+ *   unchanged tree disagree and the checksum binds nothing.
  *
- * WHY: a timestamp of "now" makes every run of an unchanged tree produce a
- * different document, so a checksum over `artifacts/` could never be compared
- * across two builds and an attestation would bind nothing. A document that
- * identifies the same dependency graph must hash the same.
+ *   The document therefore identifies the dependency graph and nothing else.
+ *   When a build system wants the timestamp it sets `SOURCE_DATE_EPOCH`, the
+ *   reproducible-builds convention, and the value is recorded verbatim.
  */
 function sbomTimestamp() {
   const epoch = process.env['SOURCE_DATE_EPOCH'];
-  if (typeof epoch === 'string' && /^\d+$/.test(epoch)) {
-    const declared = new Date(Number(epoch) * 1000);
-    if (!Number.isNaN(declared.getTime())) return declared.toISOString();
-  }
-
-  const git = spawnSync('git', ['log', '-1', '--format=%cI'], { cwd: ROOT, encoding: 'utf8' });
-  const commitDate = git.status === 0 && typeof git.stdout === 'string' ? git.stdout.trim() : '';
-  if (commitDate.length > 0) {
-    const parsed = new Date(commitDate);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-  }
-
-  return new Date().toISOString();
+  if (typeof epoch !== 'string' || !/^\d+$/.test(epoch.trim())) return null;
+  const declared = new Date(Number(epoch.trim()) * 1000);
+  return Number.isNaN(declared.getTime()) ? null : declared.toISOString();
 }
 
 /**

@@ -25,7 +25,8 @@
     "sbom": "node tools/sbom.mjs",
     "secrets:scan": "node tools/secrets-scan.mjs",
     "tsconfig:fix": "node tools/fix-tsconfig-paths.mjs",
-    "verify": "npm run build && npm run test:only && node tools/verify-all.mjs && npm run secrets:scan && npm run sbom && node tools/checksums.mjs && node tools/attest.mjs"
+    "verify": "npm run build && npm run test:only && node tools/verify-all.mjs && npm run secrets:scan && npm run sbom && node tools/checksums.mjs && node tools/attest.mjs",
+    "verify:repro": "node tools/verify-repro.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

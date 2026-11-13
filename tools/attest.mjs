@@ -20,10 +20,16 @@
  *   manifest is verified against the bytes on disk, file by file, before
  *   anything is attested. A missing file or a changed digest is a hard refusal.
  *
- * WHY THE TIMESTAMP IS REPRODUCIBLE
- *   Same policy as the SBOM: `SOURCE_DATE_EPOCH` → git commit date → now. A
- *   timestamp of "now" would make an unchanged tree produce a different
- *   attestation on every run, and a digest over it would then be useless.
+ * WHY THE ATTESTATION NAMES NO COMMIT, AND HAS NO DEFAULT TIMESTAMP
+ *   An attestation lives inside the tree it describes, so it cannot name the
+ *   commit that contains it: the name would have to be known before the commit
+ *   exists, and every commit would then change the file it just committed. The
+ *   same applies to a timestamp taken from the HEAD commit. The bytes are
+ *   therefore a function of the tree and nothing else. When the build system
+ *   supplies `SOURCE_DATE_EPOCH` (the reproducible-builds convention) that
+ *   value is recorded; otherwise the field is omitted rather than faked. The
+ *   commit that introduced an artifact is recoverable with
+ *   `git log -1 --format=%H -- artifacts/attestation.json`.
  *
  * Usage:  node tools/attest.mjs
  */
@@ -145,17 +151,9 @@ for (const required of ['artifacts/sbom.cdx.json', 'artifacts/verify-report.json
 
 function reproducibleTimestamp() {
   const epoch = process.env['SOURCE_DATE_EPOCH'];
-  if (typeof epoch === 'string' && /^\d+$/.test(epoch)) {
-    const declared = new Date(Number(epoch) * 1000);
-    if (!Number.isNaN(declared.getTime())) return declared.toISOString();
-  }
-  const commit = spawnSync('git', ['log', '-1', '--format=%cI'], { cwd: ROOT, encoding: 'utf8' });
-  const commitDate = commit.status === 0 && typeof commit.stdout === 'string' ? commit.stdout.trim() : '';
-  if (commitDate.length > 0) {
-    const parsed = new Date(commitDate);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
-  }
-  return new Date().toISOString();
+  if (typeof epoch !== 'string' || !/^\d+$/.test(epoch.trim())) return null;
+  const declared = new Date(Number(epoch.trim()) * 1000);
+  return Number.isNaN(declared.getTime()) ? null : declared.toISOString();
 }
 
 function gitValue(args) {
@@ -166,13 +164,73 @@ function gitValue(args) {
 }
 
 const head = gitValue(['rev-parse', 'HEAD']);
-const status = gitValue(['status', '--porcelain']);
+
+/**
+ * Read `git status --porcelain` WITHOUT trimming the output.
+ *
+ * WHY NOT gitValue(): `.trim()` removes the leading space of the first line,
+ * and in porcelain format that space is the index-status column. Trimming it
+ * shifted the first path by one character — `apps/cli/public/index.html` was
+ * attested as `pps/cli/public/index.html`. gitValue stays for scalar values.
+ */
+function gitStatusPaths() {
+  const result = spawnSync(
+    'git',
+    ['status', '--porcelain=v1', '--untracked-files=normal'],
+    { cwd: ROOT, encoding: 'utf8' },
+  );
+  if (result.status !== 0 || typeof result.stdout !== 'string') return null;
+  return result.stdout
+    .split('\n')
+    .map((line) => line.replace(/\r$/, ''))
+    .filter((line) => line.length >= 4)
+    .map((line) => {
+      // Format: XY<space>PATH. A rename appends " -> ORIGINAL" in v1.
+      const rest = line.slice(3);
+      const arrow = rest.lastIndexOf(' -> ');
+      return (arrow === -1 ? rest : rest.slice(arrow + 4)).replace(/^"(.*)"$/, '$1');
+    });
+}
+
+const changedPaths = gitStatusPaths();
+const treeKnown = changedPaths !== null;
+const allPaths = changedPaths ?? [];
+
+/*
+ * WHY NO GIT STATE IS WRITTEN INTO THE ATTESTATION
+ *
+ * This tool rewrites artifacts/attestation.json, artifacts/checksums.sha256 and
+ * artifacts/sbom.cdx.json on every run, so the whole tree is dirty immediately
+ * after a successful run. The obvious repair — record `codeTreeDirty` over
+ * source only — does not work either, and the reason is worth stating because
+ * it is the same defect as `gitHead`:
+ *
+ *   Committing `attestation.json` is exactly what makes the code tree clean.
+ *   A file that stores the tree's dirty state therefore contradicts itself the
+ *   moment it is committed: a clean checkout regenerates it with
+ *   `codeTreeDirty: false`, the bytes differ from the committed ones, the tree
+ *   is dirty again, and `git status --porcelain` can never be empty.
+ *
+ *   So the dirty state, the changed paths, HEAD and any HEAD-derived timestamp
+ *   are all reported to the console and never stored. The attested bytes are a
+ *   function of the tree's CONTENT and of nothing else: re-running the chain on
+ *   a committed checkout reproduces this file byte for byte. That is the
+ *   property `npm run verify:repro` checks.
+ */
+const artifactPaths = allPaths.filter(
+  (path) => path === 'artifacts' || path.startsWith('artifacts/'),
+);
+const codePaths = allPaths.filter(
+  (path) => !(path === 'artifacts' || path.startsWith('artifacts/')),
+);
 
 const subjects = [
   { name: 'artifacts/verify-report.json', sha256: sha256File(REPORT_PATH), bytes: statSync(REPORT_PATH).size },
   { name: 'artifacts/sbom.cdx.json', sha256: sha256File(SBOM_PATH), bytes: statSync(SBOM_PATH).size },
   { name: 'artifacts/checksums.sha256', sha256: sha256File(MANIFEST_PATH), bytes: statSync(MANIFEST_PATH).size },
 ];
+
+const timestamp = reproducibleTimestamp();
 
 const attestation = {
   schemaVersion: 1,
@@ -188,11 +246,7 @@ const attestation = {
     filesVerified: verified.length,
   },
   subjects,
-  source: {
-    gitHead: head,
-    gitDirty: status !== null ? status.length > 0 : null,
-    timestamp: reproducibleTimestamp(),
-  },
+  ...(timestamp === null ? {} : { buildTime: timestamp }),
   toolchain: {
     node: process.version,
     platform: process.platform,
@@ -208,7 +262,9 @@ const toPosix = (value) => value.split('\\').join('/');
 process.stdout.write('EDUGENESIS OS — attestation\n\n');
 process.stdout.write(`gates attested     : ${String(attestation.counts.gates)} (${String(attestation.counts.passed)} passed, ${String(attestation.counts.blockersFailed)} blocker failures)\n`);
 process.stdout.write(`files verified     : ${String(verified.length)} against the checksum manifest\n`);
-process.stdout.write(`git HEAD           : ${head ?? '(not a git checkout)'}${attestation.source.gitDirty === true ? ' (dirty tree)' : ''}\n`);
+process.stdout.write(`git HEAD           : ${head ?? '(not a git checkout)'} (informational; the attestation names no commit)\n`);
+process.stdout.write(`code tree          : ${treeKnown ? (codePaths.length === 0 ? 'clean' : `${String(codePaths.length)} changed path(s), artifacts excluded`) : '(git unavailable)'} (reported, never attested)\n`);
+process.stdout.write(`artifact tree      : ${artifactPaths.length === 0 ? 'unchanged' : `${String(artifactPaths.length)} regenerated path(s)`} (reported, never attested)\n`);
 process.stdout.write(`attestation        : ${toPosix(relative(ROOT, OUTPUT_PATH))}\n`);
 process.stdout.write(`attestation sha256 : ${sha256File(OUTPUT_PATH)}\n`);
 process.stdout.write('RESULT: PASS — the evidence is bound and the build is green.\n');

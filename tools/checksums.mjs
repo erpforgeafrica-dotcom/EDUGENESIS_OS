@@ -43,6 +43,7 @@ const INCLUDE_ROOTS = [
   '.github',
   '.gitignore',
   'apps',
+  'assets',
   'docs',
   'package-lock.json',
   'package.json',
@@ -56,11 +57,35 @@ const INCLUDE_ROOTS = [
   'tsconfig.base.json',
 ];
 
+/**
+ * Files that must never appear in the manifest.
+ *
+ * WHY THE BUILD STATE IS EXCLUDED: `*.tsbuildinfo` is TypeScript's incremental
+ * cache. It is gitignored, it changes on every compile, and it is not shipped —
+ * so attesting it made the manifest describe the build machine rather than the
+ * product, and made two otherwise identical trees disagree. The round-4 audit
+ * found seven of them in the manifest while `assets/` — which IS shipped — was
+ * absent entirely.
+ */
+const EXCLUDE_SUFFIXES = ['.tsbuildinfo'];
+
 /** Evidence artefacts included by name, because they live in a skipped scope. */
 const INCLUDE_ARTIFACTS = ['artifacts/sbom.cdx.json', 'artifacts/verify-report.json'];
 
 /** Files that must never appear in the manifest (self-reference / circularity). */
 const EXCLUDE_PATHS = new Set(['artifacts/checksums.sha256', 'artifacts/attestation.json']);
+
+/**
+ * Paths that are runtime state, not shipped files.
+ *
+ * WHY: `settings/settings.local.json` is gitignored — it holds the learner's
+ * own overrides, including API keys — so it differs on every machine that runs
+ * the project. Attesting it made two copies of the same commit produce
+ * different manifests, and put a digest of a secret-bearing file into a public
+ * artefact. The manifest's own claim is "every SHIPPED file"; this keeps it
+ * true.
+ */
+const EXCLUDE_PATTERNS = [/^settings\/.*\.local\.json$/, /^\.edugenesis-data\//];
 
 function toPosix(value) {
   return value.split(sep).join('/');
@@ -108,6 +133,8 @@ const rows = [];
 for (const absolute of files) {
   const relPath = toPosix(relative(ROOT, absolute));
   if (EXCLUDE_PATHS.has(relPath)) continue;
+  if (EXCLUDE_SUFFIXES.some((suffix) => relPath.endsWith(suffix))) continue;
+  if (EXCLUDE_PATTERNS.some((pattern) => pattern.test(relPath))) continue;
   const digest = createHash('sha256').update(readFileSync(absolute)).digest('hex');
   rows.push({ relPath, digest });
 }
