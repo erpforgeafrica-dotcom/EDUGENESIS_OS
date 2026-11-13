@@ -63,6 +63,7 @@
   --eg-canvas-light:      #FAF8F2;
   --eg-surface-light:     #FFFFFF;
   --eg-raised-light:      #F2EEE4;
+  --eg-overlay-light:     #E6E0D2; /* hover/pressed overlay on light (text 13.1:1) */
   --eg-text-primary-light:   #131A2C; /* AAA 16.32:1 on canvas                   */
   --eg-text-secondary-light: #47526C; /* AAA  7.35:1 on canvas                   */
   --eg-text-tertiary-light:  #5E6982; /* AA   5.18:1 on canvas                   */
@@ -210,6 +211,13 @@
   --eg-canvas:      var(--eg-canvas-light);
   --eg-surface:     var(--eg-surface-light);
   --eg-raised:      var(--eg-raised-light);
+  /*
+   * WHY --eg-overlay IS REMAPPED: .btn--quiet:hover paints text-primary on the
+   * overlay. The dark-theme overlay (#1E2A58) under light-theme ink (#131A2C)
+   * is 1.26:1 - the hover state was unreadable in the DEFAULT theme. A light
+   * tint of the raised surface keeps the hover visible in both themes.
+   */
+  --eg-overlay:     var(--eg-overlay-light);
   --eg-text-primary:   var(--eg-text-primary-light);
   --eg-text-secondary: var(--eg-text-secondary-light);
   --eg-text-tertiary:  var(--eg-text-tertiary-light);
@@ -261,7 +269,10 @@ h4, h5, h6 {
 p { margin: 0 0 var(--eg-space-4); max-width: var(--eg-container-prose); }
 
 a { color: var(--eg-link-text); text-decoration-thickness: 1px; text-underline-offset: 3px; }
-a:hover { color: var(--eg-gold); }
+/* WHY accent-text AND NOT gold: the raw gold fill token is 1.7:1 as text on
+   the light canvas. accent-text resolves to gold on dark and gold-ink on light,
+   so the hover state stays readable in both themes. */
+a:hover { color: var(--eg-accent-text); }
 
 code, kbd, pre, samp { font-family: var(--eg-font-mono); font-size: 0.9em; }
 

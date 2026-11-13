@@ -61,6 +61,14 @@ const PAIRS = [
   { id: 'warning/canvas', fg: '--eg-warning', bg: '--eg-canvas', min: 4.5 },
   { id: 'danger/canvas', fg: '--eg-danger', bg: '--eg-canvas', min: 4.5 },
   { id: 'info/canvas', fg: '--eg-info', bg: '--eg-canvas', min: 4.5 },
+
+  // ---- interactive states the settings page actually renders --------------
+  // .btn--quiet:hover paints text-primary on --eg-overlay. Omitting this pair
+  // is how the 1.26:1 light-theme hover shipped while the gate reported PASS.
+  { id: 'text-primary/overlay', fg: '--eg-text-primary', bg: '--eg-overlay', min: 4.5 },
+  // a:hover uses --eg-accent-text, which must stay readable on both canvases.
+  { id: 'link-hover/canvas', fg: '--eg-accent-text', bg: '--eg-canvas', min: 4.5 },
+  { id: 'link-hover/surface', fg: '--eg-accent-text', bg: '--eg-surface', min: 4.5 },
 ];
 
 /* -------------------------------------------------------------------------- */
