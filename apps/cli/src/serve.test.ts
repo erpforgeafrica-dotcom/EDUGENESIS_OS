@@ -12,7 +12,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { authorizePeer, isHostedWriteRefused, isLoopback } from './serve.js';
+import { authorizePeer, authorizeSettingsWrite, isHostedWriteRefused, isLoopback } from './serve.js';
 
 test('loopback detection accepts the IPv4, IPv6 and mapped loopback forms', () => {
   assert.equal(isLoopback('127.0.0.1'), true);
@@ -54,4 +54,87 @@ test('the hosted write refusal never blocks a read', () => {
 
 test('the hosted write refusal does not reach beyond the API surface', () => {
   assert.equal(isHostedWriteRefused(true, 'POST', '/app.js'), false);
+});
+
+/**
+ * CSRF GATE TESTS (round-4 audit, finding F7-05).
+ *
+ * A loopback server is reachable by every page the learner has open. These
+ * cases are the attack: a cross-origin POST that costs the attacker nothing
+ * because it needs no preflight.
+ */
+const LOCAL = {
+  hosted: false,
+  remoteAddress: '127.0.0.1',
+  method: 'POST',
+  pathname: '/api/settings',
+  contentType: 'application/json',
+  origin: undefined,
+  secFetchSite: undefined,
+} as const;
+
+test('csrf: a JSON write from a loopback peer is admitted', () => {
+  assert.deepEqual(authorizeSettingsWrite({ ...LOCAL }), { allowed: true });
+  assert.deepEqual(
+    authorizeSettingsWrite({ ...LOCAL, contentType: 'application/json; charset=utf-8' }),
+    { allowed: true },
+  );
+});
+
+test('csrf: a text/plain write is refused, which is the attack shape', () => {
+  // `text/plain` is a CORS simple request: the browser sends it with no
+  // preflight, so this is exactly the request a hostile page can make.
+  const verdict = authorizeSettingsWrite({ ...LOCAL, contentType: 'text/plain' });
+  assert.equal(verdict.allowed, false);
+  assert.match(verdict.reason ?? '', /application\/json/);
+});
+
+test('csrf: a form-encoded write is refused', () => {
+  assert.equal(
+    authorizeSettingsWrite({ ...LOCAL, contentType: 'application/x-www-form-urlencoded' }).allowed,
+    false,
+  );
+  assert.equal(authorizeSettingsWrite({ ...LOCAL, contentType: undefined }).allowed, false);
+});
+
+test('csrf: a write carrying a foreign Origin is refused', () => {
+  const verdict = authorizeSettingsWrite({ ...LOCAL, origin: 'https://attacker.example' });
+  assert.equal(verdict.allowed, false);
+  assert.match(verdict.reason ?? '', /not this machine/);
+});
+
+test('csrf: a cross-site fetch metadata hint is refused even with a loopback origin', () => {
+  assert.equal(
+    authorizeSettingsWrite({
+      ...LOCAL,
+      origin: 'http://127.0.0.1:4817',
+      secFetchSite: 'cross-site',
+    }).allowed,
+    false,
+  );
+});
+
+test('csrf: a loopback origin is admitted, including the localhost and IPv6 spellings', () => {
+  for (const origin of ['http://127.0.0.1:4817', 'http://localhost:4817', 'http://[::1]:4817']) {
+    assert.equal(authorizeSettingsWrite({ ...LOCAL, origin }).allowed, true, origin);
+  }
+});
+
+test('csrf: a non-loopback peer is refused even with every header in order', () => {
+  const verdict = authorizeSettingsWrite({ ...LOCAL, remoteAddress: '10.0.0.5' });
+  assert.equal(verdict.allowed, false);
+  assert.match(verdict.reason ?? '', /loopback/);
+});
+
+test('csrf: hosted mode refuses the write before any header is considered', () => {
+  assert.equal(authorizeSettingsWrite({ ...LOCAL, hosted: true }).allowed, false);
+});
+
+test('csrf: reads and non-API paths are not gated', () => {
+  assert.equal(authorizeSettingsWrite({ ...LOCAL, method: 'GET' }).allowed, true);
+  assert.equal(authorizeSettingsWrite({ ...LOCAL, pathname: '/app.js' }).allowed, true);
+});
+
+test('csrf: an origin that is not a URL is refused rather than guessed at', () => {
+  assert.equal(authorizeSettingsWrite({ ...LOCAL, origin: 'null' }).allowed, false);
 });

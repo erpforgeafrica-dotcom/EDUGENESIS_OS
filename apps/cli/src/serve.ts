@@ -107,6 +107,98 @@ export function isHostedWriteRefused(
   return hosted && (method === 'POST' || method === 'PUT') && pathname.startsWith('/api/');
 }
 
+/** The request facts a settings-write decision is made from. */
+export interface SettingsWriteRequest {
+  readonly hosted: boolean;
+  readonly remoteAddress: string | undefined;
+  readonly method: string;
+  readonly pathname: string;
+  /** The `Content-Type` header, verbatim. */
+  readonly contentType: string | undefined;
+  /** The `Origin` header, verbatim. Absent for a non-browser client. */
+  readonly origin: string | undefined;
+  /** The `Sec-Fetch-Site` header, when the browser sends one. */
+  readonly secFetchSite: string | undefined;
+}
+
+/** True when a URL host is this machine. */
+function isLoopbackHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === 'localhost' ||
+    host === '::1' ||
+    host === '[::1]' ||
+    host === '127.0.0.1' ||
+    host.startsWith('127.')
+  );
+}
+
+/**
+ * Decide whether a settings write may proceed.
+ *
+ * WHY A SECOND GATE: loopback-only admission says which PEER may connect. It
+ * says nothing about which PAGE caused the request. A page at any origin can
+ * POST `text/plain` to `http://127.0.0.1:<port>/api/settings` as a CORS
+ * "simple request" — no preflight — and the write lands even though the page
+ * cannot read the reply. The settings carry provider base URLs and API keys, so
+ * that write can point a credential at an attacker's host.
+ *
+ * THREE CONDITIONS, ALL REQUIRED:
+ *  1. the peer is loopback;
+ *  2. the body declares `application/json`, which no cross-origin page can do
+ *     without a preflight this server never grants;
+ *  3. when the browser says where the request came from, that origin is
+ *     loopback too — and `Sec-Fetch-Site: cross-site` refuses outright.
+ *
+ * A non-browser client (curl, a test) sends no `Origin` and is admitted: CSRF
+ * is a browser behaviour, and the content-type condition has already excluded
+ * the form-encoded shapes a browser can send without a preflight.
+ */
+export function authorizeSettingsWrite(
+  request: SettingsWriteRequest,
+): { allowed: boolean; reason?: string } {
+  const isWrite = request.method === 'POST' || request.method === 'PUT';
+  if (!isWrite || !request.pathname.startsWith('/api/')) return { allowed: true };
+  if (request.hosted) {
+    return { allowed: false, reason: 'Settings are read-only on the hosted demonstration.' };
+  }
+  if (!isLoopback(request.remoteAddress)) {
+    return { allowed: false, reason: 'Only loopback clients may write settings.' };
+  }
+  const mediaType = (request.contentType ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  if (mediaType !== 'application/json') {
+    return {
+      allowed: false,
+      reason: 'A settings write must declare Content-Type: application/json.',
+    };
+  }
+  if ((request.secFetchSite ?? '').toLowerCase() === 'cross-site') {
+    return { allowed: false, reason: 'A cross-site page may not write settings.' };
+  }
+  if (request.origin !== undefined) {
+    let origin: URL;
+    try {
+      origin = new URL(request.origin);
+    } catch {
+      return { allowed: false, reason: `The request origin "${request.origin}" is not a URL.` };
+    }
+    if (origin.protocol !== 'http:' && origin.protocol !== 'https:') {
+      return { allowed: false, reason: `The request origin "${request.origin}" is not a web origin.` };
+    }
+    if (!isLoopbackHost(origin.hostname)) {
+      return { allowed: false, reason: `The origin "${request.origin}" is not this machine.` };
+    }
+  }
+  return { allowed: true };
+}
+
+/** Header lookup that treats an empty value as absent. */
+function headerValue(request: IncomingMessage, name: string): string | undefined {
+  const raw = request.headers[name];
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  return value === undefined || value.length === 0 ? undefined : value;
+}
+
 function readRootVersion(): string {
   try {
     const raw = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf8')) as { version?: string };
@@ -262,6 +354,24 @@ export async function main(argv: readonly string[]): Promise<number> {
         return;
       }
       if (method === 'POST' || method === 'PUT') {
+        // The peer gate above says WHO connected. This says which PAGE caused
+        // the write: without it, any site the learner visits can POST here.
+        const writeAccess = authorizeSettingsWrite({
+          hosted,
+          remoteAddress: request.socket.remoteAddress,
+          method,
+          pathname,
+          contentType: headerValue(request, 'content-type'),
+          origin: headerValue(request, 'origin'),
+          secFetchSite: headerValue(request, 'sec-fetch-site'),
+        });
+        if (!writeAccess.allowed) {
+          sendJson(response, 403, {
+            ok: false,
+            error: writeAccess.reason ?? 'This request may not write settings.',
+          });
+          return;
+        }
         let body: unknown;
         try {
           body = await readBody(request);
