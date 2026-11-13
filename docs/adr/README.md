@@ -24,24 +24,24 @@ later ADR, not edited in place.
 
 ## Index
 
-| ADR | Title | Status | Record |
-|---|---|---|---|
-| ADR-0001 | Provider abstraction and the OneKey gateway | Accepted | Proposal §11 |
-| ADR-0002 | No payment object exists in the learner request path | Accepted | Proposal §11 |
-| ADR-0003 | Ledger-versus-store separation | Accepted | Proposal §11 |
-| ADR-0004 | Offline-first and Tier 0 are a product guarantee, not a degraded mode | Accepted | Proposal §11 |
-| ADR-0005 | Accessibility as a runtime contract enforced at the emission boundary | Accepted | Proposal §11 |
-| ADR-0006 | AI Main Tutor with Occasional Human Enrichment | Accepted | Proposal §11 |
-| ADR-0007 | Background autonomy is preparation only; production authority is human-governed | Accepted | Proposal §11 |
-| ADR-0008 | Data residency posture for the Alibaba / Qwen pilot | Proposed | Proposal §11 |
-| ADR-0009 | Deployment platform and Railway project/service allocation under the owner's Hobby cap | Proposed | Proposal §11 |
-| ADR-0010 | Sponsor firewall enforcement | Accepted | Proposal §11 |
-| ADR-0011 | The learner PWA defaults to the LIGHT theme | Accepted | Proposal §11 |
-| ADR-0012 | No real learner data in technical demonstrations | Accepted | Proposal §11 |
-| [ADR-0013](ADR-0013-typescript-on-node-with-node-sqlite.md) | TypeScript on Node 24 with `node:sqlite` behind a repository interface | Accepted | This directory |
-| [ADR-0014](ADR-0014-zero-runtime-dependencies.md) | Zero runtime dependencies | Accepted | This directory |
-| [ADR-0015](ADR-0015-node-test-as-the-test-runner.md) | `node:test` as the test runner | Accepted | This directory |
-| [ADR-0016](ADR-0016-versioned-json-settings-and-the-settings-ui.md) | Versioned JSON settings inside the project, edited by a local Settings UI served by `eg serve` | Accepted | This directory |
+| ADR | Title | Status | Owner | Record |
+|---|---|---|---|---|
+| ADR-0001 | Provider abstraction and the OneKey gateway | Accepted | Chief AI & Model Orchestrator | Proposal §11 |
+| ADR-0002 | No payment object exists in the learner request path | Accepted | Chief AI & Model Orchestrator | Proposal §11 |
+| ADR-0003 | Ledger-versus-store separation | Accepted | Finance Lead | Proposal §11 |
+| ADR-0004 | Offline-first and Tier 0 are a product guarantee, not a degraded mode | Accepted | Chief AI & Model Orchestrator | Proposal §11 |
+| ADR-0005 | Accessibility as a runtime contract enforced at the emission boundary | Accepted | Chief Inclusion & Accessibility Officer | Proposal §11 |
+| ADR-0006 | AI Main Tutor with Occasional Human Enrichment | Accepted | Chief Learning Scientist | Proposal §11 |
+| ADR-0007 | Background autonomy is preparation only; production authority is human-governed | Accepted | Chief AI & Model Orchestrator | Proposal §11 |
+| ADR-0008 | Data residency posture for the Alibaba / Qwen pilot | Proposed | Security Officer | Proposal §11 |
+| ADR-0009 | Deployment platform and Render resource allocation | Proposed | Chief AI & Model Orchestrator | Proposal §11 |
+| ADR-0010 | Sponsor firewall enforcement | Accepted | Governance Lead | Proposal §11 |
+| ADR-0011 | The learner PWA defaults to the LIGHT theme | Accepted | Chief Inclusion & Accessibility Officer | Proposal §11 |
+| ADR-0012 | No real learner data in technical demonstrations | Accepted | Child Safeguarding Officer | Proposal §11 |
+| [ADR-0013](ADR-0013-typescript-on-node-with-node-sqlite.md) | TypeScript on Node 24 with `node:sqlite` behind a repository interface | Accepted | Chief AI & Model Orchestrator | This directory |
+| [ADR-0014](ADR-0014-zero-runtime-dependencies.md) | Zero runtime dependencies | Accepted | Security Officer | This directory |
+| [ADR-0015](ADR-0015-node-test-as-the-test-runner.md) | `node:test` as the test runner | Accepted | OpenCode Lead | This directory |
+| [ADR-0016](ADR-0016-versioned-json-settings-and-the-settings-ui.md) | Versioned JSON settings inside the project, edited by a local Settings UI served by `eg serve` | Accepted | Chief AI & Model Orchestrator | This directory |
 
 ## ADR-0001 to ADR-0012
 

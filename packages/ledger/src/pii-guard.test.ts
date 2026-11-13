@@ -13,12 +13,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { FORBIDDEN_LEDGER_FIELDS } from '@edugenesis/contracts';
+
 import {
   assertNoPersonalData,
   findForbiddenFieldPaths,
   findPersonalDataValues,
   isForbiddenFieldName,
   normalizeFieldName,
+  EXTENDED_FORBIDDEN_LEDGER_FIELDS,
   VALUE_DETECTION_RULES,
 } from './pii-guard.js';
 
@@ -122,4 +125,18 @@ test('the detection rules are published so an auditor can read them', () => {
   assert.ok(VALUE_DETECTION_RULES.length >= 3);
   assert.match(VALUE_DETECTION_RULES.join(' '), /email-address/);
   assert.match(VALUE_DETECTION_RULES.join(' '), /long-digit-string/);
+});
+
+test('every forbidden field in the frozen contract is enforced by this guard', () => {
+  // The contract lists the fields that may never reach the public ledger. The
+  // guard extends that list with more it discovered. The extension must be an
+  // extension, never a narrowing: a field the contract forbids but the guard
+  // permits would be a hole in the published ledger.
+  const missing = FORBIDDEN_LEDGER_FIELDS.filter((field) => !isForbiddenFieldName(field));
+
+  assert.deepEqual(missing, [], 'the guard permits a field the frozen contract forbids');
+  assert.ok(
+    EXTENDED_FORBIDDEN_LEDGER_FIELDS.length > FORBIDDEN_LEDGER_FIELDS.length,
+    'the guard is supposed to extend the contract list, not replace it',
+  );
 });

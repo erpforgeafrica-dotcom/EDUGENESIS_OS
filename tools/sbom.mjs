@@ -10,8 +10,9 @@
  *
  * Every path is derived from this file's own location.
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -143,6 +144,56 @@ function declaredDependencies(manifest) {
   return names;
 }
 
+/**
+ * The SBOM timestamp, in reproducible-build order of preference:
+ *
+ *   1. `SOURCE_DATE_EPOCH` — the build system's declared build time.
+ *   2. The git commit date of HEAD — stable for a given checkout.
+ *   3. The current time — only when neither is available.
+ *
+ * WHY: a timestamp of "now" makes every run of an unchanged tree produce a
+ * different document, so a checksum over `artifacts/` could never be compared
+ * across two builds and an attestation would bind nothing. A document that
+ * identifies the same dependency graph must hash the same.
+ */
+function sbomTimestamp() {
+  const epoch = process.env['SOURCE_DATE_EPOCH'];
+  if (typeof epoch === 'string' && /^\d+$/.test(epoch)) {
+    const declared = new Date(Number(epoch) * 1000);
+    if (!Number.isNaN(declared.getTime())) return declared.toISOString();
+  }
+
+  const git = spawnSync('git', ['log', '-1', '--format=%cI'], { cwd: ROOT, encoding: 'utf8' });
+  const commitDate = git.status === 0 && typeof git.stdout === 'string' ? git.stdout.trim() : '';
+  if (commitDate.length > 0) {
+    const parsed = new Date(commitDate);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+
+  return new Date().toISOString();
+}
+
+/**
+ * A content-derived UUID for the BOM serial.
+ *
+ * WHY NOT `randomUUID()`: the serial is the identity of the document. If it is
+ * random, two runs over an unchanged tree disagree, and nothing downstream can
+ * tell "the SBOM changed" from "the SBOM was generated again". This derives the
+ * serial from the dependency graph itself and shapes it as a version-5 UUID so
+ * CycloneDX consumers still receive a well-formed `urn:uuid:`.
+ *
+ * The toolchain (Node version) is deliberately NOT part of the identity: the
+ * serial names the dependency graph, not the machine that serialised it.
+ */
+function contentUuid(content) {
+  const digest = createHash('sha256').update(content).digest();
+  const bytes = Buffer.from(digest.subarray(0, 16));
+  bytes[6] = ((bytes[6] ?? 0) & 0x0f) | 0x50;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 const root = rootComponent();
 const manifests = installedPackages();
 const components = manifests.map(toComponent).sort((a, b) => a.name.localeCompare(b.name));
@@ -169,13 +220,16 @@ for (const manifest of manifests) {
   dependencies.push({ ref: purl, dependsOn });
 }
 
+// The identity of the document is its dependency graph — nothing else.
+const serialNumber = `urn:uuid:${contentUuid(JSON.stringify({ root, components, dependencies }))}`;
+
 const sbom = {
   bomFormat: 'CycloneDX',
   specVersion: '1.5',
-  serialNumber: `urn:uuid:${randomUUID()}`,
+  serialNumber,
   version: 1,
   metadata: {
-    timestamp: new Date().toISOString(),
+    timestamp: sbomTimestamp(),
     tools: [
       {
         vendor: 'EduGenesis OS',

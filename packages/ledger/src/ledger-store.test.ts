@@ -299,3 +299,40 @@ test('an unparseable timestamp is refused', () => {
     LedgerPayloadError,
   );
 });
+
+test('the value scan can be switched off for a migration, but the field rule never can', () => {
+  // `valueScan: 'off'` exists for one narrow purpose: a controlled migration of
+  // an existing store whose VALUES look personal but whose FIELD NAMES are
+  // legitimate. It exists at all because a name-based rule alone is not a
+  // guarantee.
+  const migrated = createLedgerStore({ valueScan: 'off' });
+  migrated.append('sponsor_pledge', { amount_cents: 100, sponsor_ref: 'SP-001' });
+  assert.equal(migrated.verify().ok, true);
+
+  // The escape hatch must not open the other door. A forbidden FIELD NAME is
+  // refused whatever the value scan is set to — this is the property that
+  // makes the option safe to expose at all.
+  assert.throws(
+    () => {
+      migrated.append('sponsor_pledge', { amount_cents: 100, learner_name: 'Synthetic Learner' });
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof LedgerPiiError);
+      assert.match(error.message, /forbidden field name/i);
+      return true;
+    },
+  );
+
+  // And with the scan ON, the same value is refused for its shape.
+  const enforcing = createLedgerStore();
+  assert.throws(
+    () => {
+      enforcing.append('sponsor_pledge', { amount_cents: 100, note: 'learner@example.org' });
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof LedgerPiiError);
+      assert.match(error.message, /email|personal/i);
+      return true;
+    },
+  );
+});

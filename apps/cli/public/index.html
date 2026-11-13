@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <title>EduGenesis OS — Settings</title>
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#FAF8F2" />
+    <!-- ADR-0011: the learner PWA defaults to the LIGHT theme. Declaring it here
+         stops the browser from applying a dark UA stylesheet to form controls
+         before the stylesheet loads. -->
+    <meta name="color-scheme" content="light" />
     <link rel="stylesheet" href="/assets/edugenesis-tokens.css" />
     <link rel="stylesheet" href="/app.css" />
   </head>
@@ -166,5 +173,18 @@
     </footer>
 
     <script src="/app.js" defer></script>
+    <script>
+      /* Register the shell cache, but only over a secure context: a service
+         worker is unavailable on plain HTTP beyond localhost, and registering
+         blindly would throw on a LAN address. Failure is silent and harmless —
+         the page works without it. */
+      if ('serviceWorker' in navigator && window.isSecureContext) {
+        window.addEventListener('load', function () {
+          navigator.serviceWorker.register('/sw.js').catch(function () {
+            /* The app is fully usable without the cache. */
+          });
+        });
+      }
+    </script>
   </body>
 </html>

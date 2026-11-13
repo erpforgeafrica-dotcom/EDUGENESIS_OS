@@ -128,7 +128,7 @@
     renderKeyRows();
   }
 
-  function load() {
+  function load(notice) {
     setStatus('Loading…', 'ok');
     fetch('/api/settings', { headers: { Accept: 'application/json' } })
       .then(function (response) {
@@ -140,7 +140,7 @@
           return;
         }
         applySettings(payload.settings);
-        setStatus('Loaded from ' + (payload.file || 'the settings file') + '.', 'ok');
+        setStatus(notice || 'Loaded from ' + (payload.file || 'the settings file') + '.', 'ok');
       })
       .catch(function (error) {
         setStatus('Could not reach the local server: ' + error.message, 'error');
@@ -235,5 +235,31 @@
     });
   }
 
-  load();
+  /* ---- hosted demonstration -------------------------------------------- */
+
+  // The Render deployment serves this same UI, but settings are read-only
+  // there. Ask the server which mode it is in before enabling the form, so a
+  // hosted visitor never types into a form that cannot save.
+  fetch('/api/health', { headers: { Accept: 'application/json' } })
+    .then(function (response) {
+      return response.json();
+    })
+    .then(function (health) {
+      return health && health.hosted === true;
+    })
+    .catch(function () {
+      return false;
+    })
+    .then(function (hosted) {
+      var submit = form.querySelector('button[type="submit"]');
+      if (hosted && submit) {
+        submit.disabled = true;
+        submit.textContent = 'Read-only on the hosted demonstration';
+      }
+      load(
+        hosted
+          ? 'Hosted demonstration: settings are read-only. Run the project locally to change them.'
+          : undefined
+      );
+    });
 })();

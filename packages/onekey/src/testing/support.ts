@@ -129,6 +129,8 @@ export interface MockAdapterOptions {
   clearedSafetyTiers?: SafetyTier[];
   maxContextTokens?: number;
   text?: string;
+  /** The provenance the provider reports for its answer. */
+  sourceLineage?: SourceLineage[];
   /** When set, complete() rejects with this error. */
   failWith?: Error;
   /** When set, complete() rejects with a BudgetExceededError-shaped refusal. */
@@ -179,7 +181,7 @@ export function createMockAdapter(opts: MockAdapterOptions): MockAdapterHandle {
         modelId,
         usage: { inputTokens: 12, outputTokens: 24 },
         latencyMs: 7,
-        sourceLineage: [],
+        sourceLineage: opts.sourceLineage ?? [],
       };
     },
     async health() {

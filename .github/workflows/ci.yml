@@ -108,9 +108,43 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      # The SBOM and the attestation take their timestamp from the commit, not
+      # from the clock, so two runs of the same commit produce the same bytes
+      # and a digest over them means something.
+      - name: Pin the reproducible build time
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
       - name: Build
         run: npm run build
-      - name: Typecheck, test, scan and inventory
+      # This is the single command the README promises. It must be the command
+      # CI runs, or CI would be testing a different claim than the one published.
+      - name: Run the full verification chain
         run: npm run verify
+      - name: Show the gate table
+        if: always()
+        run: |
+          if [ -f artifacts/verify-report.json ]; then
+            node -e "
+              const r = require('./artifacts/verify-report.json');
+              console.log('result:', r.result);
+              console.log('gates:', r.counts.gates, 'passed:', r.counts.passed,
+                          'blockers failed:', r.counts.blockersFailed,
+                          'warnings:', r.counts.warnings);
+              for (const g of r.gates) console.log(' ', g.result.padEnd(5), g.id);
+            "
+          else
+            echo "no verify-report.json was produced — the chain failed before the gates ran"
+          fi
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidence
+          path: |
+            artifacts/verify-report.json
+            artifacts/sbom.cdx.json
+            artifacts/checksums.sha256
+            artifacts/attestation.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Environment doctor
         run: npm run doctor

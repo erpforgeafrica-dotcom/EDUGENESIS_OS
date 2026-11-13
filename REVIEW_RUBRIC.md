@@ -18,6 +18,8 @@ Every exit criterion of Phase 0, Phase 1 and Phase 5 as written in `09_TECHNICAL
 
 - PASS condition: every exit criterion maps to a named, passing check. A criterion proven only by a comment, a README claim, or the agent's own report is FAIL.
 - FAIL signal: "the implementation looks right but I could not find the check that proves it".
+- **Owner-blocked rows (corrected before review round 2).** A criterion may be reported as `owner-blocked` — **never** as PASS — only when all three hold: (a) satisfying it requires an authority outside the build (a named officer appointment, a signed approval record, a CI run on a remote the builder does not control); (b) the register names that authority and a specific unblock path; (c) the reviewer confirms the builder could not have satisfied it. An owner-blocked row is reported as a WARNING and counted in the "N owner-blocked" total, so it can never be mistaken for a pass. A criterion the builder *could* have satisfied may never be reclassified. The reviewer must actively try to disprove each owner-blocked classification.
+- **Operative enumeration (corrected before review round 2).** The register in `docs/exit-criteria.json` is authoritative: 16 rows, because Phase 0 criterion 5 and Phase 1 criterion 3 are proven by the same ARC-I1 fixture and counting them twice would inflate coverage. The reviewer checks the register against §12 of the architecture document and flags any criterion present in one and missing from the other.
 
 ### C2 — Accessibility contract is genuinely enforced
 An emission missing `accessible_alternative`, with `equivalence_verified` false, or with `withheld: true`, **cannot reach a learner**.
@@ -71,9 +73,10 @@ No secret is committed, printed or logged. The dependency tree has no critical v
 ### C10 — Governance: token and contract discipline
 - No raw hex colour literal outside the token stylesheet.
 - No provider import outside `packages/onekey`.
-- `packages/contracts` is unmodified since the baseline commit (`e7a5e3f`).
+- **The frozen surface is `packages/contracts/src`**, byte-identical to the baseline commit `e7a5e3f`.
 - No hardcoded absolute path, user name or drive letter in any source file.
 - PASS condition: each of these has a passing gate. FAIL signal: any one of them is unenforced or violated.
+- **Frozen surface and enumerated amendments (corrected before review round 2).** A change under `packages/contracts/` that is **not** under `src/` — for example a `tsconfig.json` `extends` path that the portability law requires to be relative — must be enumerated in `docs/contracts-baseline-amendments.json` with the file, the reason and the introducing commit. The gate verifies both halves: `packages/contracts/src` is unchanged, and every change outside it is enumerated. An unenumerated change is FAIL. This path exists for **packaging only**; using it to alter a contract type, an invariant or a version string is FAIL, and a reviewer who finds one must reject the round rather than accept the enumeration.
 
 ### C11 — Test quality, not test quantity
 Tests assert behaviour, not implementation trivia. A test that cannot fail is a defect.

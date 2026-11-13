@@ -17,7 +17,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { EduGenesisSettings } from '@edugenesis/contracts';
-import { DEFAULT_SETTINGS_PATH, LOCAL_SETTINGS_PATH, SCHEMA_PATH } from './paths.js';
+import { DEFAULT_SETTINGS_PATH, LOCAL_SETTINGS_PATH, SCHEMA_PATH, isCommittedDefault } from './paths.js';
 import { formatIssues, validateAgainstSchema, type SchemaIssue, type SchemaObject } from './schema-validate.js';
 
 /** A settings file on disk. `extra` holds keys the schema does not know. */
@@ -288,7 +288,10 @@ export function loadSettings(options: LoadOptions = {}): SettingsLoadResult {
  */
 export function writeSettingsFile(targetPath: string, settings: SettingsFile): void {
   const target = resolve(targetPath);
-  if (target === resolve(DEFAULT_SETTINGS_PATH)) {
+  // One definition of "the committed default", shared with the caller that
+  // decides whether a write is allowed at all. A second inline copy of this
+  // comparison would drift the first time the path layout changed.
+  if (isCommittedDefault(target)) {
     throw new Error(
       `Refusing to write the committed default settings file (${DEFAULT_SETTINGS_PATH}). ` +
         `The CLI writes to ${LOCAL_SETTINGS_PATH} or to an explicit --settings target.`,

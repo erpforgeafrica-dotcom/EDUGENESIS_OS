@@ -15,7 +15,7 @@
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { flagBoolean, flagString, parseArgs } from './args.js';
-import { displayPath, isMainModule, LOCAL_SETTINGS_PATH } from './paths.js';
+import { displayPath, isMainModule, localOverridePath } from './paths.js';
 import {
   coerceValue,
   getByPath,
@@ -99,7 +99,7 @@ export async function main(argv: readonly string[]): Promise<number> {
 
     if (subcommand === 'path') {
       const loaded = explicitPath ? loadSettings({ settingsPath: explicitPath }) : loadSettings();
-      const target = explicitPath ? resolve(explicitPath) : LOCAL_SETTINGS_PATH;
+      const target = explicitPath ? resolve(explicitPath) : localOverridePath();
       process.stdout.write(`${displayPath(target)}\n`);
       if (!asJson) process.stdout.write(`Reading from: ${displayPath(loaded.activePath)}\n`);
       return 0;
@@ -156,7 +156,7 @@ export async function main(argv: readonly string[]): Promise<number> {
       const schema = readSchema();
       const declaredType = schemaTypeAtPath(schema, path);
 
-      const target = explicitPath ? resolve(explicitPath) : LOCAL_SETTINGS_PATH;
+      const target = explicitPath ? resolve(explicitPath) : localOverridePath();
       let base: SettingsFile;
       if (explicitPath) {
         base = existsSync(explicitPath)

@@ -29,6 +29,7 @@ export {
   isAllowlistedValue,
   isNameLike,
   isPhoneShaped,
+  stripComments,
 } from './scan.js';
 
 export {
@@ -45,6 +46,8 @@ export {
 
 export { contractGate, resolveValidator, asArcResult } from './gates/contract-gate.js';
 export { failoverGate, collectTiers, findDrill, REQUIRED_TIERS } from './gates/failover-gate.js';
+export { assessDrill, assessReport, assessScenario, extractTransitions, OPERATIONS_TERMS } from './gates/failover-gate.js';
+export type { DrillAssessment, DrillExpectation, DrillTransition } from './gates/failover-gate.js';
 export { ledgerGate, resolveLedger } from './gates/ledger-gate.js';
 export { consentGate, resolveConsent } from './gates/consent-gate.js';
 export { piiGate } from './gates/pii-gate.js';
@@ -56,6 +59,23 @@ export {
 } from './gates/no-provider-leak-gate.js';
 export { pathPortabilityGate } from './gates/path-portability-gate.js';
 export { hexTokenGate } from './gates/hex-token-gate.js';
+export {
+  contractsBaselineGate,
+  isFrozenPath,
+  parseAmendments,
+} from './gates/contracts-baseline-gate.js';
+export type { AmendmentsRegister, ContractsAmendment } from './gates/contracts-baseline-gate.js';
+export {
+  exitCriteriaGate,
+  parseExitCriteria,
+  sourceSibling,
+} from './gates/exit-criteria-gate.js';
+export type {
+  CriterionEvidence,
+  EvidenceKind,
+  ExitCriteriaRegister,
+  ExitCriterionRow,
+} from './gates/exit-criteria-gate.js';
 
 export { brokenEmission, contentHash, validEmission } from './gates/emission-fixtures.js';
 export {

@@ -16,6 +16,7 @@
     "clean": "tsc -b --clean"
   },
   "dependencies": {
+    "@edugenesis/accessibility": "0.1.0",
     "@edugenesis/contracts": "0.1.0"
   }
 }

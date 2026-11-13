@@ -106,6 +106,96 @@ function linesOf(content: string): string[] {
 }
 
 /**
+ * Remove comments from a source file, preserving line structure.
+ *
+ * WHY: a provider name in a citation or a doc comment is not a provider
+ * dependency. A provider HOST or SDK in executable code is. Stripping comments
+ * lets a gate scan every package — including `packages/contracts`, whose header
+ * cites the sponsor document by name — without excluding a package or
+ * weakening the rule. Newlines are preserved so reported line numbers stay
+ * true, and string literals are NOT stripped: a provider host inside a string
+ * is executable and must still be caught.
+ *
+ * A `//` is only treated as a comment when it follows whitespace or the start
+ * of the file, so a regex literal such as `/\/\//` is not mistaken for one.
+ */
+export function stripComments(content: string): string {
+  let out = '';
+  let index = 0;
+  let state: 'code' | 'line' | 'block' | 'single' | 'double' | 'template' = 'code';
+  let previous = '';
+
+  while (index < content.length) {
+    const char = content[index] ?? '';
+    const next = content[index + 1];
+
+    if (state === 'code') {
+      const startsComment =
+        char === '/' && (next === '/' || next === '*') && (previous === '' || /\s/.test(previous));
+      if (startsComment) {
+        state = next === '/' ? 'line' : 'block';
+        out += '  ';
+        index += 2;
+        continue;
+      }
+      if (char === "'") state = 'single';
+      else if (char === '"') state = 'double';
+      else if (char === '`') state = 'template';
+      out += char;
+      previous = char;
+      index += 1;
+      continue;
+    }
+
+    if (state === 'line') {
+      if (char === '\n') {
+        state = 'code';
+        out += char;
+        previous = '';
+      } else {
+        out += ' ';
+      }
+      index += 1;
+      continue;
+    }
+
+    if (state === 'block') {
+      if (char === '*' && next === '/') {
+        state = 'code';
+        out += '  ';
+        index += 2;
+        continue;
+      }
+      out += char === '\n' ? '\n' : ' ';
+      index += 1;
+      continue;
+    }
+
+    // Inside a string literal: copy verbatim, honouring escapes.
+    if (char === '\\') {
+      out += char;
+      if (next !== undefined) {
+        out += next;
+        index += 2;
+      } else {
+        index += 1;
+      }
+      continue;
+    }
+    const closes =
+      (state === 'single' && char === "'") ||
+      (state === 'double' && char === '"') ||
+      (state === 'template' && char === '`');
+    if (closes) state = 'code';
+    out += char;
+    previous = char;
+    index += 1;
+  }
+
+  return out;
+}
+
+/**
  * Find hardcoded personal data.
  */
 export function findPiiViolations(files: readonly SourceFile[]): Violation[] {

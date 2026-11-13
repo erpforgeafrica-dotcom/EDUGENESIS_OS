@@ -11,8 +11,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
-import { flagString, parseArgs } from './args.js';
-import { displayPath, isMainModule, LOCAL_SETTINGS_PATH, PROJECT_ROOT, PUBLIC_DIR, TOKENS_PATH } from './paths.js';
+import { flagBoolean, flagString, parseArgs } from './args.js';
+import { displayPath, isMainModule, localOverridePath, PROJECT_ROOT, PUBLIC_DIR, TOKENS_PATH } from './paths.js';
 import {
   deepMerge,
   describeApiKeys,
@@ -31,6 +31,7 @@ const CONTENT_TYPES: Record<string, string> = {
   '.js': 'text/javascript; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 /** Static files the UI may request. Nothing else is reachable. */
@@ -39,6 +40,11 @@ const STATIC_ROUTES: Record<string, string> = {
   '/index.html': 'index.html',
   '/app.css': 'app.css',
   '/app.js': 'app.js',
+  // The service worker must be served from the origin root: its scope is its
+  // own directory, so `/sw.js` can control `/` but `/assets/sw.js` could not.
+  '/sw.js': 'sw.js',
+  '/manifest.webmanifest': 'manifest.webmanifest',
+  '/icon.svg': 'icon.svg',
 };
 
 function sendJson(response: ServerResponse, status: number, payload: unknown): void {
@@ -63,10 +69,42 @@ function sendText(response: ServerResponse, status: number, body: string, conten
 }
 
 /** Only loopback callers may talk to the settings API. */
-function isLoopback(remoteAddress: string | undefined): boolean {
+export function isLoopback(remoteAddress: string | undefined): boolean {
   if (!remoteAddress) return false;
   const normalized = remoteAddress.replace(/^::ffff:/, '');
   return normalized === '127.0.0.1' || normalized === '::1' || normalized.startsWith('127.');
+}
+
+/**
+ * Decide whether a request may reach the settings surface.
+ *
+ * Two modes, and the difference is deliberate:
+ *
+ *   local   — only a loopback peer. This is the default, and it is why a
+ *             laptop's settings page is unreachable from the network.
+ *   hosted  — any peer, because the request arrives through the platform's
+ *             proxy and is never loopback. Writes are refused separately, so a
+ *             hosted instance is a read-only demonstration, never a remote
+ *             settings editor.
+ *
+ * Pure and exported so the policy is unit-tested without opening a socket.
+ */
+export function authorizePeer(
+  remoteAddress: string | undefined,
+  hosted: boolean,
+): { allowed: boolean; reason?: string } {
+  if (hosted) return { allowed: true };
+  if (isLoopback(remoteAddress)) return { allowed: true };
+  return { allowed: false, reason: 'Only loopback clients may reach the local settings server.' };
+}
+
+/** True when a hosted instance must refuse the write. */
+export function isHostedWriteRefused(
+  hosted: boolean,
+  method: string,
+  pathname: string,
+): boolean {
+  return hosted && (method === 'POST' || method === 'PUT') && pathname.startsWith('/api/');
 }
 
 function readRootVersion(): string {
@@ -147,17 +185,31 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
 export async function main(argv: readonly string[]): Promise<number> {
   const args = parseArgs(argv);
   const loaded = loadSettings();
-  const host = flagString(args, 'host') ?? loaded.settings.server.host;
-  const port = Number(flagString(args, 'port') ?? String(loaded.settings.server.port));
-  const writeTarget = LOCAL_SETTINGS_PATH;
+  // Hosted mode exists for the Render deployment. It widens WHO may connect
+  // (the platform's proxy is never loopback) and narrows WHAT may be written
+  // (settings become read-only). It is opt-in, so a laptop is never exposed by
+  // accident.
+  const hosted = flagBoolean(args, 'hosted') || process.env['EDUGENESIS_HOSTED'] === '1';
+  const envPort = process.env['PORT'];
+  const host = flagString(args, 'host') ?? (hosted ? '0.0.0.0' : loaded.settings.server.host);
+  const port = Number(
+    flagString(args, 'port') ?? (hosted && envPort ? envPort : String(loaded.settings.server.port)),
+  );
+  // The only file this process may write. Named through the accessor rather
+  // than the constant so the rule has one definition (see paths.ts).
+  const writeTarget = localOverridePath();
 
   const handle = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const method = request.method ?? 'GET';
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
     const pathname = url.pathname;
 
-    if (!isLoopback(request.socket.remoteAddress)) {
-      sendJson(response, 403, { ok: false, error: 'Only loopback clients may reach the local settings server.' });
+    const access = authorizePeer(request.socket.remoteAddress, hosted);
+    if (!access.allowed) {
+      sendJson(response, 403, {
+        ok: false,
+        error: access.reason ?? 'This peer may not reach the settings server.',
+      });
       return;
     }
 
@@ -180,6 +232,7 @@ export async function main(argv: readonly string[]): Promise<number> {
         ok: true,
         status: 'ok',
         service: 'edugenesis-os',
+        hosted,
         version: readRootVersion(),
         node: process.version,
         uptimeSec: Math.round(process.uptime()),
@@ -199,6 +252,13 @@ export async function main(argv: readonly string[]): Promise<number> {
         } catch (error) {
           sendJson(response, 500, { ok: false, error: (error as Error).message });
         }
+        return;
+      }
+      if (isHostedWriteRefused(hosted, method, pathname)) {
+        sendJson(response, 403, {
+          ok: false,
+          error: 'Settings are read-only on the hosted demonstration. Run the project locally to change them.',
+        });
         return;
       }
       if (method === 'POST' || method === 'PUT') {

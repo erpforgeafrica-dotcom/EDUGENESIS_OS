@@ -1,8 +1,13 @@
-import { createHash } from 'node:crypto';
+import {
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  equivalenceReport,
+  hashCanonicalContent,
+} from '@edugenesis/accessibility';
 import { AllTiersExhaustedError, BudgetExceededError, ContractViolation } from '@edugenesis/contracts';
 import type {
   AccessibilityEmission,
   ArcViolation,
+  CanonicalContent,
   CompletionRequest,
   CompletionResult,
   FallbackTier,
@@ -20,6 +25,7 @@ import { createKillSwitch } from './kill-switch.js';
 import type { KillSwitch } from './kill-switch.js';
 import { createPolicyEngine, TIER_FOUR_PROVIDER_ID, TIER_ZERO_PROVIDER_ID } from './policy.js';
 import type { PolicyEngine } from './policy.js';
+import { hasTierZeroFallback } from './tier-zero-fallback.js';
 import { createProviderRegistry } from './registry.js';
 import type { ProviderRegistry, RegisterMeta } from './registry.js';
 import { redactSecret } from './redact.js';
@@ -100,6 +106,24 @@ export interface TierFourHandler {
   ): Promise<CompletionResult | null>;
 }
 
+/**
+ * The equivalence check the gateway runs before it may claim
+ * `equivalence_verified`.
+ *
+ * WHY injectable: the gateway is the producer of the emission, so it must not
+ * be the only judge of its own accessibility claim. The default is the
+ * 07 §4 Multimodal Equivalence Rule; a deployment (or a test) can supply a
+ * stricter verifier, and a rejecting verifier must withhold the emission
+ * rather than let a false `true` reach a learner.
+ */
+export interface EquivalenceVerdict {
+  readonly ok: boolean;
+  /** The missing dimensions, named, for the audit trail. */
+  readonly missing: readonly string[];
+}
+
+export type EquivalenceVerifier = (emission: AccessibilityEmission) => EquivalenceVerdict;
+
 export interface GatewayOptions {
   registry?: ProviderRegistry;
   breaker?: CircuitBreaker;
@@ -109,6 +133,8 @@ export interface GatewayOptions {
   /** Optional human-support / deferred-response tier. */
   tierFour?: TierFourHandler;
   policyEngine?: PolicyEngine;
+  /** The equivalence verifier behind `equivalence_verified`. Defaults to 07 §4. */
+  equivalenceVerifier?: EquivalenceVerifier;
   /** Recorded on every result, for audit. */
   policyVersion?: string;
   /** Injectable clock, so timestamps are deterministic under test. */
@@ -129,9 +155,16 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
   const breaker = opts.breaker ?? createCircuitBreaker();
   const killSwitch = opts.killSwitch ?? createKillSwitch();
   const tierZero = opts.tierZero;
+  const tierZeroFallback = hasTierZeroFallback(opts.tierZero) ? opts.tierZero : undefined;
   const tierFour = opts.tierFour;
   const policyVersion = opts.policyVersion ?? 'policy-v1';
   const now = opts.now ?? ((): number => Date.now());
+  const verifyEquivalence: EquivalenceVerifier =
+    opts.equivalenceVerifier ??
+    ((emission): EquivalenceVerdict => {
+      const report = equivalenceReport(emission);
+      return { ok: report.ok, missing: report.missing };
+    });
   const policyEngine =
     opts.policyEngine ?? createPolicyEngine({ registry, breaker, killSwitch, policyVersion });
   const attemptsByRequest = new Map<string, GatewayAttempt[]>();
@@ -193,6 +226,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
             servedOffline: true,
             policyVersion,
             now,
+            verify: verifyEquivalence,
           });
         }
         record(0, TIER_ZERO_PROVIDER_ID, 'no-offline-content', 'the offline bundle has no cached answer for this task');
@@ -291,7 +325,44 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
           servedOffline: false,
           policyVersion,
           now,
+          verify: verifyEquivalence,
         });
+      }
+
+      // ---- Tier 0 last resort: a cached lesson when every model failed ------
+      // WHY after the paid ladder: the exact curriculum match was already tried
+      // first. This second Tier 0 visit is the §6.6 ladder's 2 -> 3 -> 0 step:
+      // once every hosted model has failed, a deterministic lesson still beats
+      // a deferral, and a learner is never denied core learning (Doc 16 §6.4).
+      if (tierZeroFallback) {
+        const lastResort = await tierZeroFallback.serveFallback(policy, req);
+        if (lastResort) {
+          record(
+            0,
+            TIER_ZERO_PROVIDER_ID,
+            'served',
+            'every model tier failed; the deterministic offline tier served a cached lesson',
+          );
+          return await deliver({
+            result: lastResort,
+            policy,
+            req,
+            ctx,
+            decision,
+            attempts,
+            tier: 0,
+            servedOffline: true,
+            policyVersion,
+            now,
+            verify: verifyEquivalence,
+          });
+        }
+        record(
+          0,
+          TIER_ZERO_PROVIDER_ID,
+          'no-offline-content',
+          'every model tier failed and the offline bundle has no lesson for this task',
+        );
       }
 
       // ---- Tier 4: human support or deferred response ----------------------
@@ -314,6 +385,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
             servedOffline: false,
             policyVersion,
             now,
+            verify: verifyEquivalence,
           });
         }
       }
@@ -370,6 +442,7 @@ interface DeliverInput {
   servedOffline: boolean;
   policyVersion: string;
   now: () => number;
+  verify: EquivalenceVerifier;
 }
 
 /**
@@ -381,12 +454,23 @@ interface DeliverInput {
  * is thrown — a blocked emission is NEVER delivered.
  */
 async function deliver(input: DeliverInput): Promise<GatewayCompletionResult> {
-  const { result, policy, req, ctx, decision, attempts, tier, servedOffline, policyVersion, now: clock } =
-    input;
+  const {
+    result,
+    policy,
+    req,
+    ctx,
+    decision,
+    attempts,
+    tier,
+    servedOffline,
+    policyVersion,
+    now: clock,
+    verify,
+  } = input;
   let text = result.text;
 
   if (ctx.learnerFacing) {
-    const emission = buildEmission(result, policy, req, clock);
+    const emission = buildEmission(result, policy, req, clock, verify);
     const verdict = await ctx.guardian.intercept(emission, {
       locale: req.locale,
       safetyTier: req.safetyTier,
@@ -433,24 +517,51 @@ async function deliver(input: DeliverInput): Promise<GatewayCompletionResult> {
  *
  * The gateway is the boundary between a raw provider completion and a
  * learner-facing emission, so this is where the contract shape is created.
+ *
+ * THREE THINGS ARE COMPUTED, NEVER HARDCODED:
+ *   - `metadata.content_hash` is the ARC-I9 digest of the canonical content,
+ *     produced by the same function the invariant recomputes.
+ *   - `equivalence_verified` is the verdict of the injected verifier. The
+ *     gateway does not assert its own accessibility claim.
+ *   - `uncertainty_note` is present whenever the provider reports confidence
+ *     below the routing threshold (ARC-I4).
  */
 function buildEmission(
   result: CompletionResult,
   policy: TaskPolicy,
   req: CompletionRequest,
   now: () => number,
+  verify: EquivalenceVerifier,
 ): AccessibilityEmission {
-  const contentHash = createHash('sha256').update(result.text, 'utf8').digest('hex');
-  return {
-    canonical_content: {
-      contentId: `${result.providerId}:${result.modelId}:${contentHash.slice(0, 16)}`,
-      body: result.text,
-      modality: 'text',
-    },
+  // The content id needs a stable seed, but it must not be part of a circular
+  // hash. Hash a placeholder id first, then hash the final canonical content.
+  const seed = hashCanonicalContent({ contentId: '', body: result.text, modality: 'text' });
+  const canonical: CanonicalContent = {
+    contentId: `${result.providerId}:${result.modelId}:${seed.slice('sha256:'.length, 'sha256:'.length + 16)}`,
+    body: result.text,
+    modality: 'text',
+  };
+  const contentHash = hashCanonicalContent(canonical);
+  const confidence = result.confidence;
+
+  const emission: AccessibilityEmission = {
+    canonical_content: canonical,
     accessible_alternative: {
       text: result.text,
       covers: ['visual'],
       method: 'auto',
+      // ARC-I6: a motor-independent route through the lesson. Text needs no
+      // pointer, drag, timed or voice input, and the steps make that explicit
+      // rather than merely claimed.
+      interactiveAlternative: {
+        description:
+          'Read the lesson in order using the keyboard alone; no pointer, drag, timed or voice input is required.',
+        steps: [
+          'Tab to the lesson region and press Enter to open it.',
+          'Read each paragraph in order; the text is the complete lesson.',
+          'Use the notes or transcript panel to review at your own pace.',
+        ],
+      },
     },
     metadata: {
       contractVersion: 'nine-element/1.0',
@@ -460,7 +571,7 @@ function buildEmission(
       content_hash: contentHash,
       taskClass: policy.taskClass,
     },
-    source_lineage: result.sourceLineage,
+    source_lineage: result.sourceLineage ?? [],
     risk_tier: 1,
     language: { primary: req.locale ?? 'en' },
     reading_level: { band: 'unspecified' },
@@ -474,8 +585,15 @@ function buildEmission(
       input: ['keyboard', 'pointer', 'touch'],
       output: ['visual', 'text'],
     },
-    // ARC-I1: set true only when an accessible equivalent has been verified.
+    // ARC-I1: replaced immediately below with the verifier's verdict.
     equivalence_verified: false,
-    confidence_score: result.confidence,
+    confidence_score: confidence,
+    uncertainty_note:
+      typeof confidence === 'number' && confidence < DEFAULT_CONFIDENCE_THRESHOLD
+        ? 'This answer is a best effort from the available material and has not been fully checked. Verify it with your teacher or the cited sources.'
+        : null,
   };
+
+  emission.equivalence_verified = verify(emission).ok;
+  return emission;
 }

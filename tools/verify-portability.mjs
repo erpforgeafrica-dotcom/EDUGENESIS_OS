@@ -23,7 +23,9 @@
 import {
   copyFileSync,
   existsSync,
+  lstatSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -46,10 +48,86 @@ const EXCLUDED_SUFFIXES = ['.tsbuildinfo'];
 
 const results = [];
 let failed = false;
+/** The sandbox this run created, so the report can name it and clean it up. */
+let sandboxRoot = null;
 
 function record(step, status, detail) {
   results.push({ step, status, detail });
   if (status === 'FAIL') failed = true;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sandbox lifecycle                                                           */
+/* -------------------------------------------------------------------------- */
+
+/** A synchronous sleep, for retrying a filesystem operation. */
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * Remove a path, retrying the transient Windows failures.
+ *
+ * WHY: on Windows a delete fails with EPERM/EBUSY while an antivirus scanner,
+ * the search indexer or a just-exited child process still holds a handle. Those
+ * failures are timing, not a portability defect — retrying is correct. A real
+ * failure (a path that is not there, a permission the user genuinely lacks) is
+ * reported and does not crash the gate.
+ */
+function removeWithRetry(target, options = {}) {
+  let lastError;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      rmSync(target, { force: true, maxRetries: 3, retryDelay: 100, ...options });
+      return true;
+    } catch (error) {
+      lastError = error;
+      const code = error && typeof error === 'object' ? error.code : undefined;
+      if (code !== 'EPERM' && code !== 'EBUSY' && code !== 'ENOTEMPTY' && code !== 'EACCES') break;
+      sleepSync(250 * (attempt + 1));
+    }
+  }
+  process.stdout.write(
+    `note: could not remove ${target}: ${lastError instanceof Error ? lastError.message : String(lastError)}\n`,
+  );
+  return false;
+}
+
+/**
+ * Delete the sandbox WITHOUT following a junction into the real tree.
+ *
+ * WHY THIS IS NOT `rmSync(copyRoot, { recursive: true })`: the copy's
+ * `node_modules` contains junctions pointing at the ORIGINAL install and at the
+ * original packages. A recursive delete that follows a reparse point would
+ * delete the project it was meant to test. Every link is therefore unlinked
+ * first, explicitly, and only then is the remaining tree removed.
+ */
+function removeSandbox(sandboxRoot) {
+  const unlinkLinks = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      let stat;
+      try {
+        stat = lstatSync(full);
+      } catch {
+        continue;
+      }
+      if (stat.isSymbolicLink()) {
+        removeWithRetry(full, { recursive: false });
+        continue;
+      }
+      if (stat.isDirectory()) unlinkLinks(full);
+    }
+  };
+
+  unlinkLinks(sandboxRoot);
+  return removeWithRetry(sandboxRoot, { recursive: true });
 }
 
 /* -------------------------------------------------------------------------- */
@@ -192,13 +270,17 @@ function main() {
 
   // A temp path that deliberately looks like a different machine:
   // a space in the folder name and a user-like segment that is NOT this user.
-  const tempRoot = join(tmpdir(), 'opencode', 'eg-portability');
+  //
+  // WHY mkdtemp: a fixed directory name means two runs — CI and a developer, or
+  // two CI jobs on one runner — delete each other's sandbox mid-test. The
+  // suffix makes every run independent.
+  const tempRoot = mkdtempSync(join(tmpdir(), 'eg-portability-'));
   const copyRoot = join(tempRoot, 'Portable Learner Account', 'EduGenesis OS');
   // Deliberately NOT created: anything that depends on the user profile dies here.
   const fakeProfile = join(tempRoot, 'Portable Learner Account', 'profile that does not exist');
 
-  rmSync(join(tempRoot, 'Portable Learner Account'), { recursive: true, force: true });
   mkdirSync(tempRoot, { recursive: true });
+  sandboxRoot = tempRoot;
 
   process.stdout.write('EDUGENESIS OS — portability gate\n');
   process.stdout.write(`source      : ${ROOT}\n`);
@@ -432,9 +514,14 @@ function report() {
   const warns = results.filter((r) => r.status === 'WARN').length;
   process.stdout.write(`\n${String(results.length)} steps, ${String(fails)} failed, ${String(warns)} warnings\n`);
   if (fails > 0) {
+    // Keep a failed sandbox: it is the thing a person needs to look at.
+    if (sandboxRoot !== null) process.stdout.write(`sandbox kept for inspection: ${sandboxRoot}\n`);
     process.stdout.write('RESULT: FAIL — the project does not run from a copy at a different path.\n');
     process.exit(1);
   }
+  // A passing sandbox is disposable, and leaving one behind per run would fill
+  // the temp directory with copies of the project.
+  if (sandboxRoot !== null) removeSandbox(sandboxRoot);
   process.stdout.write('RESULT: PASS — the copy runs from a different path under a different profile.\n');
   process.exit(0);
 }

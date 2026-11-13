@@ -1,0 +1,40 @@
+# EduGenesis OS — Render Blueprint (ADR-0009; Document 09 §9.4).
+#
+# ONE web service, deliberately. The demonstration phase runs on the free plan,
+# whose documented limits are load-bearing:
+#   - a Free web service spins down after 15 minutes idle;
+#   - its filesystem is ephemeral, so local writes are lost on redeploy or spin-down;
+#   - the workspace draws on 750 Free instance hours per month.
+# A free instance is a demonstration and governance surface, never a system of
+# record. Durable learner state lives on the learner's device (Tier 0).
+#
+# No database is declared here on purpose. Genesis Slice 0 persists through a
+# repository interface backed by SQLite; declaring an unused Render Postgres
+# would claim infrastructure the code does not use. The database is added when
+# that interface is backed by Postgres (ADR-0013).
+
+services:
+  - type: web
+    name: edugenesis-web
+    runtime: node
+    plan: free
+    # Provisional. Render cannot change a service's region after creation, so
+    # this must be confirmed against the pilot region (OQ-5) before the first
+    # deploy. Frankfurt is the nearest listed region to the pilot's African and
+    # European users; Singapore is the alternative for the China pilot.
+    region: frankfurt
+    branch: main
+    # Render sets NODE_ENV=production, which would skip the devDependency that
+    # compiles TypeScript. --include=dev keeps the build honest.
+    buildCommand: npm ci --include=dev && npm run build
+    # --hosted widens WHO may connect (the platform proxy is never loopback)
+    # and makes settings read-only. PORT is supplied by Render.
+    startCommand: node apps/cli/dist/serve.js --hosted
+    healthCheckPath: /api/health
+    # A red build must never reach a learner.
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: EDUGENESIS_HOSTED
+        value: "1"

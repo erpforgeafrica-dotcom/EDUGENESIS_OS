@@ -15,11 +15,14 @@ import { piiGate } from './gates/pii-gate.js';
 import { noProviderLeakGate } from './gates/no-provider-leak-gate.js';
 import { pathPortabilityGate } from './gates/path-portability-gate.js';
 import { hexTokenGate } from './gates/hex-token-gate.js';
+import { contractsBaselineGate } from './gates/contracts-baseline-gate.js';
+import { exitCriteriaGate } from './gates/exit-criteria-gate.js';
 
 /**
  * Every gate, in the order the report prints them.
  * Behavioural gates first (they prove the product works), then the static
- * governance gates (they prove the tree stays honest).
+ * governance gates (they prove the tree stays honest), then the phase
+ * register, which re-runs the gates it cites as evidence.
  */
 export const GATE_REGISTRY: readonly Gate[] = [
   contractGate,
@@ -30,6 +33,8 @@ export const GATE_REGISTRY: readonly Gate[] = [
   noProviderLeakGate,
   pathPortabilityGate,
   hexTokenGate,
+  contractsBaselineGate,
+  exitCriteriaGate,
 ];
 
 /**

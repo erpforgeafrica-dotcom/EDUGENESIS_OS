@@ -1,0 +1,28 @@
+{
+  "name": "EduGenesis OS",
+  "short_name": "EduGenesis",
+  "description": "Learn without a connection: the offline lesson library is the floor, not a degraded mode.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#FAF8F2",
+  "background_color": "#FAF8F2",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "maskable"
+    }
+  ]
+}

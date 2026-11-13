@@ -1,0 +1,12 @@
+{
+  "baseline": "e7a5e3f",
+  "frozenPath": "packages/contracts/src",
+  "note": "The frozen surface is packages/contracts/src. A change there is a blocker, not an amendment. The paths below are packaging changes that must accompany the frozen contracts and are enumerated here so the gate can prove that nothing else moved.",
+  "amendments": [
+    {
+      "path": "packages/contracts/tsconfig.json",
+      "reason": "The compiler config pointed at an absolute path on the author's machine. It now extends ../../tsconfig.base.json, which is required by the portability law (GLOBAL order 9) and changes no contract type.",
+      "adr": "ADR-0016"
+    }
+  ]
+}

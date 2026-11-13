@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="EduGenesis OS">
+  <rect width="512" height="512" fill="#FAF8F2"/>
+  <circle cx="256" cy="256" r="176" fill="#0E1633"/>
+  <circle cx="256" cy="150" r="42" fill="#E8C15C"/>
+  <path d="M256 316c-30-20-66-28-106-26v-92c40-2 76 6 106 26z" fill="#FAF8F2"/>
+  <path d="M256 316c30-20 66-28 106-26v-92c-40-2-76 6-106 26z" fill="#F3D896"/>
+</svg>

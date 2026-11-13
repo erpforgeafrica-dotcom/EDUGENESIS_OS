@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ProviderUnavailableError } from '@edugenesis/contracts';
-import { createQwenAdapter } from './qwen-adapter.js';
+import { createQwenAdapter, QWEN_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_MAINLAND_BASE_URL } from './qwen-adapter.js';
 import { createContext, createRequest } from '../testing/support.js';
 import type { FetchLike, FetchRequestInit } from './qwen-adapter.js';
 
@@ -205,4 +205,31 @@ test('qwen: dispose releases the credential and the adapter stops working', asyn
       return true;
     },
   );
+});
+
+test('qwen: the two regional endpoints are distinct, both https, and both end the same way', () => {
+  // The pilot is international (DashScope intl) but a mainland deployment must
+  // be able to switch without editing source. Two URLs that accidentally
+  // collapsed into one would send every request to the wrong region.
+  assert.notEqual(QWEN_BASE_URL, QWEN_MAINLAND_BASE_URL);
+  assert.match(QWEN_BASE_URL, /^https:\/\//);
+  assert.match(QWEN_MAINLAND_BASE_URL, /^https:\/\//);
+  assert.match(QWEN_BASE_URL, /\/compatible-mode\/v1$/);
+  assert.match(QWEN_MAINLAND_BASE_URL, /\/compatible-mode\/v1$/);
+  assert.match(QWEN_BASE_URL, /^https:\/\/dashscope-intl\.aliyuncs\.com\//);
+  assert.match(QWEN_MAINLAND_BASE_URL, /^https:\/\/dashscope\.aliyuncs\.com\//);
+  assert.equal(QWEN_DEFAULT_MODEL, 'qwen-plus');
+});
+
+test('qwen: the adapter calls whichever endpoint it was given', async () => {
+  const calls: RecordedCall[] = [];
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    baseUrl: QWEN_MAINLAND_BASE_URL,
+    fetchImpl: recordingFetch(calls, { status: 200, body: OPENAI_COMPATIBLE_RESPONSE }),
+  });
+
+  await adapter.complete(createRequest(), createContext());
+
+  assert.equal(calls[0]?.url, `${QWEN_MAINLAND_BASE_URL}/chat/completions`);
 });

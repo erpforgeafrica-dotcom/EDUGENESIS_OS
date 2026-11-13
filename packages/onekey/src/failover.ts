@@ -1,3 +1,4 @@
+import { createAccessibilityGuardian, createAccessibilityValidator } from '@edugenesis/accessibility';
 import { AllTiersExhaustedError, ProviderUnavailableError } from '@edugenesis/contracts';
 import type {
   CompletionRequest,
@@ -54,10 +55,19 @@ export interface FailoverDrillResult {
 export interface FailoverDrillOptions {
   /** The gateway under test. A drill gateway is built when omitted. */
   gateway?: OneKeyGatewayImpl;
+  /**
+   * Which ladder outcome to exercise. Defaults to `offline-rescue`.
+   *   offline-rescue  — every model fails, Tier 0 serves a cached lesson
+   *   human-deferral  — every model fails and no cached lesson exists, Tier 4 defers
+   *   exhausted       — no Tier 0 and no Tier 4: the ladder raises a typed error
+   */
+  scenario?: FailoverScenario;
   policy?: TaskPolicy;
   request?: CompletionRequest;
   ctx?: RequestContext;
 }
+
+export type FailoverScenario = 'offline-rescue' | 'human-deferral' | 'exhausted';
 
 /** The deferred response a human-support tier returns. */
 export const DEFERRED_RESPONSE_TEXT =
@@ -106,20 +116,16 @@ function drillContext(requestId: string): RequestContext {
     requestId,
     deadlineAt: Date.now() + 60_000,
     budget: createBudgetLedger('failover-drill-pool', 100_000, 'token'),
-    // A permissive guardian: the drill measures the ladder, not the
-    // accessibility contract. The real guardian is always supplied by the
-    // learner path.
-    guardian: {
-      async intercept(emission) {
-        return { deliver: true, emission, violations: [] };
-      },
-    },
-    learnerFacing: false,
+    // WHY the REAL guardian: the drill is a claim about what a learner
+    // receives, so it must run the same interception point a learner's request
+    // runs. A permissive stub would prove the ladder and not the delivery.
+    guardian: createAccessibilityGuardian(createAccessibilityValidator()),
+    learnerFacing: true,
   };
 }
 
 /** A task the offline bundle has nothing for, so the ladder must escalate. */
-function drillRequest(): CompletionRequest {
+function researchRequest(): CompletionRequest {
   return {
     prompt: 'Research the effect of soil salinity on maize yields in East Africa',
     dataClass: 'public',
@@ -129,8 +135,19 @@ function drillRequest(): CompletionRequest {
   };
 }
 
-function drillPolicy(): TaskPolicy {
-  return { taskClass: 'research', safetyTier: 'low', dataClass: 'public' };
+/** A tutoring task the offline bundle CAN answer, used for the rescue drill. */
+function tutoringRequest(): CompletionRequest {
+  return {
+    prompt: 'Explain how to solve a linear equation step by step',
+    dataClass: 'public',
+    safetyTier: 'low',
+    maxOutputTokens: 512,
+    requiresAccessibilityContract: false,
+  };
+}
+
+function drillPolicy(taskClass: TaskPolicy['taskClass'] = 'explain'): TaskPolicy {
+  return { taskClass, safetyTier: 'low', dataClass: 'public' };
 }
 
 /**
@@ -164,17 +181,40 @@ export function buildFailoverDrillGateway(): OneKeyGatewayImpl {
 }
 
 /**
- * Run the failover drill.
- *
- * The drill exercises every tier of the ladder (0 -> 1 -> 2 -> 3 -> 4) and
- * records each transition, so the audit trail shows exactly how a learner was
- * kept in the loop when every provider failed.
+ * A drill gateway with NO offline tier and NO human-support tier, so the
+ * ladder must fail with a typed error instead of pretending a learner was
+ * served. This is the negative control for the other two scenarios.
  */
-export async function runFailoverDrill(opts: FailoverDrillOptions = {}): Promise<FailoverDrillResult> {
-  const gateway = opts.gateway ?? buildFailoverDrillGateway();
-  const policy = opts.policy ?? drillPolicy();
-  const request = opts.request ?? drillRequest();
-  const ctx = opts.ctx ?? drillContext(DRILL_REQUEST_ID);
+export function buildExhaustionDrillGateway(): OneKeyGatewayImpl {
+  const gateway = createOneKeyGateway({
+    policyVersion: 'failover-drill-v1',
+  });
+  gateway.register(createFailingProvider('drill-primary', 1), { locales: ['*'] });
+  gateway.register(createFailingProvider('drill-secondary', 2), { locales: ['*'] });
+  gateway.register(createFailingProvider('drill-local', 3), { locales: ['*'] });
+  return gateway;
+}
+
+/**
+ * Run ONE named failover scenario.
+ *
+ * The drill exercises a named ladder outcome and records every transition, so
+ * the audit trail shows exactly how a learner was kept in the loop — or why
+ * the request was deferred. Each scenario is decidable: the caller asserts the
+ * ordered transitions and the serving tier, not a narrative.
+ */
+export async function runFailoverScenario(
+  opts: FailoverDrillOptions = {},
+): Promise<FailoverDrillResult> {
+  const scenario = opts.scenario ?? 'offline-rescue';
+  const gateway =
+    opts.gateway ??
+    (scenario === 'exhausted' ? buildExhaustionDrillGateway() : buildFailoverDrillGateway());
+  const policy =
+    opts.policy ?? (scenario === 'offline-rescue' ? drillPolicy('explain') : drillPolicy('research'));
+  const request =
+    opts.request ?? (scenario === 'offline-rescue' ? tutoringRequest() : researchRequest());
+  const ctx = opts.ctx ?? drillContext(`${DRILL_REQUEST_ID}-${scenario}`);
 
   const decision = await gateway.route(policy, request, ctx);
 
@@ -209,5 +249,47 @@ export async function runFailoverDrill(opts: FailoverDrillOptions = {}): Promise
     decision,
     ...(result ? { result } : {}),
     ...(error ? { error } : {}),
+  };
+}
+
+/**
+ * The documented failover drill: every scenario, in one report.
+ *
+ * WHY a report and not one scenario: the Phase 5 exit criterion says all five
+ * tiers are exercised "including the §6.6 procedure end to end". A single
+ * ladder cannot show both the Tier 0 rescue and the Tier 4 deferral, so the
+ * drill runs the three documented outcomes and reports the union of the tiers
+ * it actually reached. The gate reads this report; a report that omits a tier
+ * or a scenario is a failure, not a smaller drill.
+ */
+export interface FailoverDrillReport {
+  scenarios: {
+    'offline-rescue': FailoverDrillResult;
+    'human-deferral': FailoverDrillResult;
+    exhausted: FailoverDrillResult;
+  };
+  /** Every tier reached by at least one scenario, ascending. */
+  tiersExercised: FallbackTier[];
+}
+
+export async function runFailoverDrill(): Promise<FailoverDrillReport> {
+  const rescue = await runFailoverScenario({ scenario: 'offline-rescue' });
+  const deferral = await runFailoverScenario({ scenario: 'human-deferral' });
+  const exhausted = await runFailoverScenario({ scenario: 'exhausted' });
+
+  const tiers = new Set<FallbackTier>();
+  for (const run of [rescue, deferral, exhausted]) {
+    for (const transition of run.transitions) {
+      tiers.add(transition.tier);
+    }
+  }
+
+  return {
+    scenarios: {
+      'offline-rescue': rescue,
+      'human-deferral': deferral,
+      exhausted,
+    },
+    tiersExercised: [...tiers].sort((a, b) => a - b),
   };
 }

@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { FALLBACK_TIER_ROLE } from '@edugenesis/contracts';
 import { createBudgetLedger } from './budget.js';
 import { createCircuitBreaker } from './circuit-breaker.js';
 import { createKillSwitch } from './kill-switch.js';
@@ -181,4 +182,23 @@ test('routing: a provider disabled in the registry is not a candidate', async ()
 
   assert.equal(decision.providerId, 'active-provider');
   assert.match(decision.reason, /disabled/i);
+});
+
+test('routing: the contract names a role for every tier, and tier 0 needs no provider', () => {
+  // The five tiers are the promise made to the learner and to the sponsor.
+  // The contract publishes what each one is FOR, so the ladder can be read
+  // without reading the implementation.
+  assert.deepEqual(
+    Object.keys(FALLBACK_TIER_ROLE).sort(),
+    ['0', '1', '2', '3', '4'],
+    'every tier in the ladder must have a published role',
+  );
+
+  const tierZero = FALLBACK_TIER_ROLE[0];
+  assert.match(
+    tierZero,
+    /no model provider required/i,
+    'tier 0 is the offline floor — it must not be describable as needing a provider',
+  );
+  assert.match(FALLBACK_TIER_ROLE[4], /human/i, 'the last rung must be a person, not a model');
 });

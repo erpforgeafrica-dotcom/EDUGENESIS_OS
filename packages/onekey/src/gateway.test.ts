@@ -6,12 +6,18 @@ import {
   ContractViolation,
   ProviderUnavailableError,
 } from '@edugenesis/contracts';
+import { createAccessibilityGuardian, createAccessibilityValidator } from '@edugenesis/accessibility';
 import { createBudgetLedger } from './budget.js';
 import { createOneKeyGateway } from './gateway.js';
 import { createLocalEchoProvider } from './providers/local-echo.js';
 import { createTierZeroProvider } from './providers/tier-zero.js';
-import { createBlockingGuardian, createContext, createMockAdapter, createPolicy, createRequest } from './testing/support.js';
+import { createBlockingGuardian, createContext, createMockAdapter, createPolicy, createRequest, createSource } from './testing/support.js';
 import type { OneKeyGatewayImpl } from './gateway.js';
+
+/** The real interception point a learner's request runs. */
+function realGuardian() {
+  return createAccessibilityGuardian(createAccessibilityValidator());
+}
 
 /** A request the offline curriculum bundle CAN answer. */
 const OFFLINE_PROMPT = 'Explain curriculum:algebra/linear-eq';
@@ -58,7 +64,7 @@ test('gateway: on provider failure it walks the fallback chain down the tiers', 
   assert.deepEqual(outcomes, ['0:no-offline-content', '1:failed', '2:served']);
 });
 
-test('gateway: with every paid tier failing, tier 0 serves the request and the learner still gets an answer', async () => {
+test('gateway: with every paid tier failing, tier 0 serves the learner — after the models were really tried', async () => {
   const g = gateway();
   const t1 = createMockAdapter({ id: 'p1', tier: 1, failWith: new ProviderUnavailableError('p1', 'boom') });
   const t2 = createMockAdapter({ id: 'p2', tier: 2, failWith: new ProviderUnavailableError('p2', 'boom') });
@@ -67,20 +73,31 @@ test('gateway: with every paid tier failing, tier 0 serves the request and the l
   g.register(t2.adapter);
   g.register(t3.adapter);
 
+  // LIVE_PROMPT carries no `curriculum:` reference, so Tier 0 misses first and
+  // the paid ladder genuinely runs. learnerFacing + the REAL guardian prove the
+  // learner-facing path rather than bypassing it.
   const result = await g.complete(
     createPolicy(),
-    createRequest({ prompt: OFFLINE_PROMPT }),
-    createContext(),
+    createRequest({ prompt: LIVE_PROMPT }),
+    createContext({ learnerFacing: true, guardian: realGuardian() }),
   );
 
+  assert.equal(t1.calls(), 1, 'the primary must actually be called');
+  assert.equal(t2.calls(), 1, 'the secondary must actually be called');
+  assert.equal(t3.calls(), 1, 'the local tier must actually be called');
   assert.ok(result.text.length > 0, 'the learner must still get an answer');
   assert.equal(result.meta.tier, 0);
   assert.equal(result.meta.servedOffline, true);
   assert.equal(result.meta.providerId, 'tier-zero');
+  assert.deepEqual(
+    g.attemptsFor('req-test').map((a) => `${a.tier}:${a.outcome}`),
+    ['0:no-offline-content', '1:failed', '2:failed', '3:failed', '0:served'],
+    'Tier 0 must be missed first and serve last, in that order',
+  );
 });
 
-test('gateway: with every paid tier failing and nothing cached, the failure is typed, never silent', async () => {
-  const g = gateway();
+test('gateway: with every paid tier failing and no offline tier, the failure is typed, never silent', async () => {
+  const g = gateway({ tierZero: false });
   g.register(createMockAdapter({ id: 'p1', tier: 1, failWith: new ProviderUnavailableError('p1', 'boom') }).adapter);
   g.register(createMockAdapter({ id: 'p2', tier: 2, failWith: new ProviderUnavailableError('p2', 'boom') }).adapter);
   g.register(createMockAdapter({ id: 'p3', tier: 3, failWith: new ProviderUnavailableError('p3', 'boom') }).adapter);
@@ -96,7 +113,7 @@ test('gateway: with every paid tier failing and nothing cached, the failure is t
   );
 });
 
-test('gateway: with the budget at zero, complete() still returns a tier 0 answer', async () => {
+test('gateway: with the budget at zero, the real learner path still returns a tier 0 lesson', async () => {
   const g = gateway();
   const paid = createMockAdapter({ id: 'p1', tier: 1 });
   g.register(paid.adapter);
@@ -105,14 +122,61 @@ test('gateway: with the budget at zero, complete() still returns a tier 0 answer
 
   const result = await g.complete(
     createPolicy(),
-    createRequest({ prompt: OFFLINE_PROMPT }),
-    createContext({ budget }),
+    // No `curriculum:` reference: the exact Tier 0 floor misses, so this
+    // exercises the last-resort rung a credit-exhausted learner depends on.
+    createRequest({ prompt: LIVE_PROMPT }),
+    createContext({ budget, learnerFacing: true, guardian: realGuardian() }),
   );
 
   assert.ok(result.text.length > 0, 'core learning must never be denied on credit exhaustion');
   assert.equal(result.meta.tier, 0);
   assert.equal(result.meta.servedOffline, true);
+  assert.ok(
+    result.sourceLineage.some((source) => source.sourceId === 'science/photosynthesis'),
+    'the served lesson must be the topically relevant entry, not an arbitrary one',
+  );
   assert.equal(paid.calls(), 0, 'a provider with no budget must not be called');
+});
+
+test('gateway: a real learner-facing emission passes the real validator and is delivered', async () => {
+  const g = gateway();
+  const text = 'Photosynthesis turns light energy into chemical energy inside the leaf.';
+  g.register(createMockAdapter({ id: 'p1', tier: 1, text }).adapter);
+
+  const result = await g.complete(
+    createPolicy(),
+    createRequest({ prompt: LIVE_PROMPT }),
+    createContext({ learnerFacing: true, guardian: realGuardian() }),
+  );
+
+  assert.equal(result.text, text, 'the real validator must not block a valid emission');
+  assert.equal(result.meta.tier, 1);
+});
+
+test('gateway: a rejecting equivalence verifier withholds the emission instead of claiming equivalence', async () => {
+  const g = createOneKeyGateway({
+    tierZero: createTierZeroProvider(),
+    policyVersion: 'policy-test-1',
+    equivalenceVerifier: () => ({ ok: false, missing: ['text path'] }),
+  });
+  g.register(createMockAdapter({ id: 'p1', tier: 1 }).adapter);
+
+  await assert.rejects(
+    () =>
+      g.complete(
+        createPolicy(),
+        createRequest({ prompt: LIVE_PROMPT }),
+        createContext({ learnerFacing: true, guardian: realGuardian() }),
+      ),
+    (err: unknown) => {
+      assert.ok(err instanceof ContractViolation, 'expected a typed ContractViolation');
+      assert.ok(
+        err.violations.some((violation) => violation.id === 'ARC-I1'),
+        'ARC-I1 must name the failed equivalence claim',
+      );
+      return true;
+    },
+  );
 });
 
 test('gateway: a killed provider is never called again', async () => {
@@ -231,4 +295,27 @@ test('gateway: a provider that refuses on budget falls through to the next tier'
   const outcomes = g.attemptsFor('req-test').map((a) => `${a.tier}:${a.outcome}`);
   assert.deepEqual(outcomes, ['0:no-offline-content', '1:skipped', '2:served']);
   assert.equal(g.circuitState('p1'), 'closed', 'a budget refusal must not trip the provider circuit');
+});
+
+test('gateway: the provenance a provider reports reaches the caller unchanged', async () => {
+  // Where an answer came from is part of the answer. The gateway must not
+  // drop, rename or summarise a provider's source lineage on its way out.
+  const lineage = [
+    createSource({
+      sourceId: 'oer-solar-001',
+      locator: 'https://example.org/open-solar-guide',
+      licence: 'CC-BY-4.0',
+    }),
+  ];
+  const g = gateway();
+  g.register(createMockAdapter({ id: 'p1', tier: 1, sourceLineage: lineage }).adapter);
+
+  const result = await g.complete(
+    createPolicy(),
+    createRequest({ prompt: LIVE_PROMPT }),
+    createContext({ learnerFacing: true, guardian: realGuardian() }),
+  );
+
+  assert.deepEqual(result.sourceLineage, lineage, 'the source lineage must survive the routing');
+  assert.equal(result.sourceLineage[0]?.licence, 'CC-BY-4.0');
 });

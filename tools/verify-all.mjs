@@ -15,13 +15,15 @@
  * Usage:  node tools/verify-all.mjs
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pathToFileURL } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const VERIFICATION_ENTRY = join(ROOT, 'packages', 'verification', 'dist', 'index.js');
+const ARTIFACTS_DIR = join(ROOT, 'artifacts');
+const REPORT_PATH = join(ARTIFACTS_DIR, 'verify-report.json');
 
 /** A row of the report table. */
 function row(id, title, severity, passed, detail) {
@@ -85,6 +87,45 @@ function padLeft(value, width) {
   return text.length >= width ? text : ' '.repeat(width - text.length) + text;
 }
 
+/**
+ * Write the machine-readable report that `tools/attest.mjs` binds.
+ *
+ * WHY a file and not just stdout: an attestation over "the gate table looked
+ * green in a terminal" is unfalsifiable. This file is the artefact — the
+ * attestation stores its digest, so a later edit to the result is detectable.
+ * The report carries no timestamp or hostname: it describes the build, and two
+ * runs of an unchanged tree must produce identical bytes.
+ */
+function writeReport(allRows, blockerFailures, warningFailures) {
+  const report = {
+    tool: 'tools/verify-all.mjs',
+    schemaVersion: 1,
+    result: blockerFailures.length === 0 ? 'PASS' : 'FAIL',
+    gates: allRows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      severity: r.severity,
+      result: r.passed ? 'PASS' : r.severity === 'blocker' ? 'FAIL' : 'WARN',
+      detail: r.detail,
+    })),
+    counts: {
+      gates: allRows.length,
+      passed: allRows.filter((r) => r.passed).length,
+      blockersFailed: blockerFailures.length,
+      warnings: warningFailures.length,
+    },
+  };
+
+  mkdirSync(ARTIFACTS_DIR, { recursive: true });
+  writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+  return report;
+}
+
+/** The report path as a repository-relative posix path, for the console. */
+function relativeReportPath() {
+  return REPORT_PATH.slice(ROOT.length + 1).split('\\').join('/');
+}
+
 /* -------------------------------------------------------------------------- */
 
 async function main() {
@@ -104,8 +145,10 @@ async function main() {
 
   const contrast = runTool('verify-contrast.mjs', 'token-contrast');
   const portability = runTool('verify-portability.mjs', 'path-portability-runtime');
+  const coverage = runTool('verify-coverage.mjs', 'guardian-coverage');
+  const repoint = runTool('verify-repoint.mjs', 'provider-repoint');
 
-  const allRows = [...rows, contrast.row, portability.row];
+  const allRows = [...rows, contrast.row, portability.row, coverage.row, repoint.row];
 
   const idWidth = Math.max(...allRows.map((r) => r.id.length), 10);
   const titleWidth = Math.max(...allRows.map((r) => r.title.length), 10);
@@ -124,10 +167,13 @@ async function main() {
   const blockerFailures = allRows.filter((r) => !r.passed && r.severity === 'blocker');
   const warningFailures = allRows.filter((r) => !r.passed && r.severity === 'warning');
 
+  const report = writeReport(allRows, blockerFailures, warningFailures);
+
   process.stdout.write('\n');
   process.stdout.write(
-    `gates: ${String(allRows.length)}   passed: ${String(allRows.filter((r) => r.passed).length)}   blockers failed: ${String(blockerFailures.length)}   warnings: ${String(warningFailures.length)}\n`,
+    `gates: ${String(report.counts.gates)}   passed: ${String(report.counts.passed)}   blockers failed: ${String(report.counts.blockersFailed)}   warnings: ${String(report.counts.warnings)}\n`,
   );
+  process.stdout.write(`report: ${relativeReportPath()}\n`);
 
   if (blockerFailures.length > 0) {
     process.stdout.write('\nBLOCKER FAILURES\n');
