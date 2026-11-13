@@ -13,8 +13,8 @@
   "subjects": [
     {
       "name": "artifacts/verify-report.json",
-      "sha256": "c4baef6355b37b6be844258b63f908db59c8ce08a196d1518a7fa2c527346280",
-      "bytes": 4225
+      "sha256": "7eeb94407c973cb58f6558c9869bb0f230d1ebadcbc94fce5f24da21c07820df",
+      "bytes": 4246
     },
     {
       "name": "artifacts/sbom.cdx.json",
@@ -23,7 +23,7 @@
     },
     {
       "name": "artifacts/checksums.sha256",
-      "sha256": "6274b448858af043801e8123ed123e7c98f7e16cc3de701e773d3b33236a894d",
+      "sha256": "2b2a190bcbc9e38773d1db37940bfd19b258e6c9e34e40365b49f22581032407",
       "bytes": 18179
     }
   ],
