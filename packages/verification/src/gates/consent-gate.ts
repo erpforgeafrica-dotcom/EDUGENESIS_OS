@@ -49,8 +49,52 @@ function asConsent(candidate: unknown, label: string): ConsentLike | undefined {
   };
 }
 
-/** Resolve the consent service by capability. */
-export function resolveConsent(exports: Record<string, unknown>): ConsentLike | undefined {
+/** The transition the gate observed. */
+export interface ConsentTransition {
+  readonly shareBefore: boolean;
+  readonly shareAfter: boolean;
+  readonly mayLearn: boolean;
+}
+
+/** The verdict on that transition. */
+export interface ConsentTransitionVerdict {
+  readonly passed: boolean;
+  readonly detail: string;
+}
+
+/**
+ * Judge the observed consent transition.
+ *
+ * WHY NON-VACUITY IS PART OF THE VERDICT: a service that never shares anything
+ * trivially "stops sharing" on withdrawal. The exit criterion is a transition,
+ * so a false pre-state is a failure of the gate, not a pass.
+ */
+export function assessConsentTransition(observed: ConsentTransition): ConsentTransitionVerdict {
+  if (observed.shareBefore !== true) {
+    return {
+      passed: false,
+      detail: 'sharing was not active before withdrawal, so no transition was observed',
+    };
+  }
+  if (observed.shareAfter !== false) {
+    return {
+      passed: false,
+      detail: 'consent withdrawal did NOT block the sharing surface',
+    };
+  }
+  if (observed.mayLearn !== true) {
+    return {
+      passed: false,
+      detail: 'consent withdrawal BLOCKED core learning - the Phase 1 exit criterion is broken',
+    };
+  }
+  return {
+    passed: true,
+    detail: 'sharing was active, withdrawal blocked it, and core learning still works',
+  };
+}
+
+/** Resolve the consent service by capability. */export function resolveConsent(exports: Record<string, unknown>): ConsentLike | undefined {
   const candidates = findExports(exports, (name) => /consent/i.test(name));
   for (const { name, value } of candidates) {
     const asObject = asConsent(value, name);
@@ -150,21 +194,13 @@ export const consentGate: Gate = {
     evidence.push(`after withdrawal: mayLearn=${String(mayLearn)}`);
     evidence.push(`after withdrawal: mayShare(${otherScope})=${String(otherScopeAfter)}`);
 
-    if (shareAfter !== false) {
+    const verdict = assessConsentTransition({ shareBefore, shareAfter, mayLearn });
+    if (!verdict.passed) {
       return {
         id: GATE_ID,
         passed: false,
         severity: 'blocker',
-        detail: 'consent withdrawal did NOT block the sharing surface',
-        evidence,
-      };
-    }
-    if (mayLearn !== true) {
-      return {
-        id: GATE_ID,
-        passed: false,
-        severity: 'blocker',
-        detail: 'consent withdrawal BLOCKED core learning — the Phase 1 exit criterion is broken',
+        detail: verdict.detail,
         evidence,
       };
     }
@@ -173,7 +209,7 @@ export const consentGate: Gate = {
       id: GATE_ID,
       passed: true,
       severity: 'blocker',
-      detail: 'sharing blocked by withdrawal, core learning still permitted',
+      detail: verdict.detail,
       evidence,
     };
   },

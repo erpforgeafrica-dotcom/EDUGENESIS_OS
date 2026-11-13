@@ -20,6 +20,7 @@ import { hexTokenGate } from './hex-token-gate.js';
 import { contractsBaselineGate, parseAmendments } from './contracts-baseline-gate.js';
 import { pwaLightDefaultGate } from './pwa-light-default-gate.js';
 import { adrGovernanceGate } from './adr-governance-gate.js';
+import { assessConsentTransition } from './consent-gate.js';
 
 /** Create a throwaway project root with one file at `relPath`. */
 function treeWith(relPath: string, content: string): string {
@@ -564,4 +565,27 @@ test('contracts-baseline gate: an unlisted change under packages/contracts FAILS
   } finally {
     removeTree(root);
   }
+});
+
+test('consent gate: a false pre-state is a failure, not a vacuous pass', () => {
+  const verdict = assessConsentTransition({ shareBefore: false, shareAfter: false, mayLearn: true });
+  assert.equal(verdict.passed, false, 'a service that never shares cannot demonstrate withdrawal');
+  assert.match(verdict.detail, /no transition was observed/);
+});
+
+test('consent gate: sharing that survives withdrawal fails', () => {
+  const verdict = assessConsentTransition({ shareBefore: true, shareAfter: true, mayLearn: true });
+  assert.equal(verdict.passed, false, 'withdrawal that does not stop sharing must fail');
+  assert.match(verdict.detail, /did NOT block/);
+});
+
+test('consent gate: withdrawal that blocks learning fails', () => {
+  const verdict = assessConsentTransition({ shareBefore: true, shareAfter: false, mayLearn: false });
+  assert.equal(verdict.passed, false, 'the core-learning guarantee is part of the gate');
+  assert.match(verdict.detail, /BLOCKED core learning/);
+});
+
+test('consent gate: a real transition passes', () => {
+  const verdict = assessConsentTransition({ shareBefore: true, shareAfter: false, mayLearn: true });
+  assert.equal(verdict.passed, true);
 });

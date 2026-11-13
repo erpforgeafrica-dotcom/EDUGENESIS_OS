@@ -15,6 +15,7 @@ import {
   listConfigFiles,
   listToolsDir,
   listWorkspaceSrcDirs,
+  readSourceFiles,
 } from '../paths.js';
 import { findAbsolutePathViolations } from '../scan.js';
 
@@ -31,7 +32,9 @@ export const pathPortabilityGate: Gate = {
       ...listAssetsDir(ctx.root),
     ];
     const sourceFiles = collectSourceFiles(ctx.root, sourceDirs);
-    const configFiles = collectSourceFiles(ctx.root, listConfigFiles(ctx.root));
+    // Named files need a named-file reader: `collectSourceFiles` walks
+    // directories, and handing it a file path made the config scan empty.
+    const configFiles = readSourceFiles(ctx.root, listConfigFiles(ctx.root));
 
     if (sourceFiles.length === 0 && configFiles.length === 0) {
       return {

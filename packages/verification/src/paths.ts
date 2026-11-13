@@ -190,7 +190,10 @@ export function listScannableDirs(root: string): string[] {
  */
 export function listConfigFiles(root: string): string[] {
   const out: string[] = [];
-  const candidates = ['package.json', 'tsconfig.base.json', 'tsconfig.json'];
+  // `render.yaml` is a shipped deployment config: an absolute path in it breaks
+  // the portability law exactly like one in a tsconfig, so the scanner must
+  // read it. It was previously named nowhere.
+  const candidates = ['package.json', 'tsconfig.base.json', 'tsconfig.json', 'render.yaml'];
   for (const rel of candidates) {
     if (existsSync(join(root, rel))) out.push(rel);
   }
@@ -272,6 +275,39 @@ export function collectSourceFiles(root: string, relDirs: readonly string[]): So
         continue;
       }
       files.push({ relPath: relativePosix(root, absPath), absPath, content });
+    }
+  }
+  files.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0));
+  return files;
+}
+
+/**
+ * Read NAMED files, given as project-relative paths.
+ *
+ * WHY THIS EXISTS SEPARATELY: `collectSourceFiles` walks DIRECTORIES, so passing
+ * it a file path makes `readdirSync` throw `ENOTDIR`, which `walk` swallows — a
+ * caller that handed it `package.json` got an empty list and a silent pass. The
+ * round-4 audit found the path-portability gate had scanned zero config files
+ * since it was written, for exactly that reason. Named files need a reader that
+ * opens them.
+ *
+ * The extension filter is deliberately NOT applied: this exists for config
+ * files, and a config file's extension is whatever its format says it is.
+ */
+export function readSourceFiles(root: string, relFiles: readonly string[]): SourceFile[] {
+  const files: SourceFile[] = [];
+  for (const rel of relFiles) {
+    const absPath = join(root, rel);
+    try {
+      const stats = statSync(absPath);
+      if (!stats.isFile() || stats.size > MAX_FILE_BYTES) continue;
+      files.push({
+        relPath: toPosix(rel),
+        absPath,
+        content: readFileSync(absPath, 'utf8'),
+      });
+    } catch {
+      continue;
     }
   }
   files.sort((a, b) => (a.relPath < b.relPath ? -1 : a.relPath > b.relPath ? 1 : 0));
