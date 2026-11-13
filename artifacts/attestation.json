@@ -18,19 +18,19 @@
     },
     {
       "name": "artifacts/sbom.cdx.json",
-      "sha256": "dddc716d3f72e7a29907818b29f01d8197c03be78bd1bf42c4eec9379d1c03f2",
+      "sha256": "76c04d202eaf0aa7d5d51eecb46a143f946a4bcc47f411b2b76deecc0c68ffa9",
       "bytes": 7285
     },
     {
       "name": "artifacts/checksums.sha256",
-      "sha256": "75ac05cf83297d6a2edd8f9f12838bde596b4b8a33cc18838a67fbe749bb2212",
+      "sha256": "12ce6b192a43b73acd70f31bf01cc85a8120890f3772adaa767c1d489824335a",
       "bytes": 18387
     }
   ],
   "source": {
-    "gitHead": "7eb9dce1267821a9ce01785e7a6f01fd5bce4787",
+    "gitHead": "3e44d5d1bf4a83189b867253f846559b931423f7",
     "gitDirty": true,
-    "timestamp": "2026-11-13T14:16:50.000Z"
+    "timestamp": "2026-11-13T14:28:30.000Z"
   },
   "toolchain": {
     "node": "v24.19.0",
