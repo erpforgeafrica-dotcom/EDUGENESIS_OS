@@ -36,7 +36,7 @@
       "title": "no-pii-in-source",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no personal data found in 132 source file(s)"
+      "detail": "no personal data found in 134 source file(s)"
     },
     {
       "id": "no-provider-leak",
@@ -50,14 +50,14 @@
       "title": "path-portability",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no absolute path in 159 shipped file(s)"
+      "detail": "no absolute path in 161 shipped file(s)"
     },
     {
       "id": "design-token-governance",
       "title": "design-token-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no raw colour literal in 132 source file(s)"
+      "detail": "no raw colour literal in 134 source file(s)"
     },
     {
       "id": "contracts-baseline",
@@ -120,7 +120,7 @@
       "title": "guardian-coverage",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "RESULT: PASS — every learner-facing delivery path is guarded exactly once."
+      "detail": "RESULT: PASS — every learner-facing delivery path in the registry is guarded exactly once."
     },
     {
       "id": "provider-repoint",
