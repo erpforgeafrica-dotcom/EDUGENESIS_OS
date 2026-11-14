@@ -476,3 +476,47 @@ Verified: `npm run build` exit 0; **505/505 tests** (29 suites, 0 fail); full
 **159 shipped file(s)** with no absolute path (source + config + docs), secrets scan
 0 findings over 179 files, manifest 181 files, attestation PASS. The residual doc probe
 over the real detector set reports **0 violations across 165 files**.
+
+## 15. Round-4 close-out - F6-R4-02 + F6-R4-03 (2026-11-13)
+
+Owner chose the two remaining unblocked internal blockers. Both were executed test-first
+(`test-driven-development`: the failing test was written and watched fail before any
+implementation code).
+
+1. **F6-R4-03 - the coverage gate is registry-driven.** The six gateway delivery paths moved out
+   of `tools/verify-coverage.mjs` into a **delivery-path registry** declared in the package that
+   owns the gateway: `packages/onekey/src/testing/delivery-paths.ts`. Six learner-facing paths
+   (tier-0 exact, tier-1 primary, tier-2 fallback, tier-3 local, tier-0 last resort, tier-4
+   human deferral) plus the operator control; each entry declares the ladder rung it proves.
+   The gate imports the registry, drives every entry through a real gateway with the real
+   guardian, and now holds **no path knowledge of its own**. The ladder comes from
+   `FALLBACK_TIER_ROLE` in the contracts, so `registryTierCoverage` fails the gate when a rung
+   loses its only learner path, and the gate fails when an entry serves from a tier other than
+   the one it declares. The driver (`runDeliveryPath`) lives with the registry, so the gate and
+   the tests share one implementation. Locked by 5 tests
+   (`packages/onekey/src/testing/delivery-paths.test.ts`) that drive every entry end to end.
+2. **F6-R4-02 - the secrets scan has no blind spot.** `tools/secrets-scan.mjs` now scans the
+   published `artifacts/` directory **and every blob reachable from any ref**: `git rev-list
+   --objects --all` enumerates, `git cat-file --batch-check` types and sizes, identical content
+   is deduplicated by blob hash, each blob is read with `git cat-file blob`. Path exclusions do
+   not apply to the history surface - whatever was once committed was once published - so a
+   secret that was committed and later deleted is still named. Findings are attributed to
+   `history/<path> @ <short-sha>` with a salted fingerprint; no secret value is printed. The
+   canary self-test now plants a canary in a **file** and in a **blob** and refuses to pass
+   unless the same detection code finds both.
+
+Verified: `npm run build` exit 0; **510/510 tests** (30 suites, 0 fail); `npm run verify`
+exit 0 - **18/18 gates PASS**, **0 unverified**, path gate **161 shipped file(s)**, secrets scan
+**185 tree files + 351 history blobs, 0 findings**, manifest **183 files**, attestation PASS,
+`guardian-coverage` **6/6 = 100%** driven by the registry.
+
+Documentation closed out in the same commit: `docs/gap-register.json` (both IDs moved to
+`closed_after_round4`; `open_after_round4` is now empty; the combined open count moves from 94
+to **92 - 2 blockers, 34 majors, 56 minors**) and `docs/AUDIT_ROUND4.md` (the two findings, the
+corpus counts, the authoritative-run evidence, and the "git history was not scanned" caveat that
+is no longer true).
+
+**Still open.** Owner decisions **D-1..D-4**; the product blockers **F0-01** (no learner route)
+and **F0-03** (no production enrolment caller) - the real release gate; the runtime
+accessibility claim (no browser or screen-reader run); and the fact that this repository has
+**no git remote**, so nothing can be pushed or deployed from it.

@@ -7,18 +7,29 @@
  *   exactly once, on every delivery path — not just on the happy path a unit
  *   test happens to exercise.
  *
+ * WHERE THE PATHS COME FROM (F6-R4-03)
+ *   The path list used to be a literal array in this script, so a new
+ *   learner-facing delivery path added to the gateway was never counted. The
+ *   list now comes from the DELIVERY-PATH REGISTRY exported by
+ *   `packages/onekey/src/testing/delivery-paths.ts` — declared in the package
+ *   that owns the gateway and the ladder, covered by its own unit test
+ *   (`delivery-paths.test.ts`), and checked here against `FALLBACK_TIER_ROLE`
+ *   from the contracts: every rung of the ladder must keep at least one
+ *   learner-facing path, and every entry must serve from the tier its name
+ *   claims. This script carries no path knowledge of its own any more.
+ *
  * WHY A COUNTING WRAPPER AND NOT A UNIT TEST
  *   A unit test asserts that ONE path calls the guardian. It cannot tell you
  *   that a path was added later which forgot to. This gate wraps the REAL
- *   guardian in a counter, drives every delivery path the gateway can produce,
- *   and compares two numbers that must agree:
+ *   guardian in a counter, drives every delivery path in the registry, and
+ *   compares two numbers that must agree:
  *
  *       deliveries   — `complete()` resolved, so text reached a caller
  *       interceptions — the guardian's `intercept()` was entered
  *
- *   deliveries === interceptions === 1 per path, or the gate fails.
+ *   deliveries === interceptions === 1 per learner path, or the gate fails.
  *
- * WHY THE OPERATOR CONTROL IS IN THE REPORT
+ * WHY THE OPERATOR CONTROL IS IN THE REGISTRY
  *   `learnerFacing: false` is the operator path, where the guardian is not
  *   applicable by design. Running it proves the counter counts INTERCEPTIONS
  *   rather than counting requests: if it incremented there too, a 100% score
@@ -36,6 +47,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ONEKEY = join(ROOT, 'packages', 'onekey', 'dist');
 const CONTRACTS = join(ROOT, 'packages', 'contracts', 'dist');
 const ACCESSIBILITY = join(ROOT, 'packages', 'accessibility', 'dist');
+const REGISTRY = join(ONEKEY, 'testing', 'delivery-paths.js');
 
 function die(message) {
   process.stdout.write(`RESULT: FAIL — ${message}\n`);
@@ -50,192 +62,84 @@ for (const [label, entry] of [
   if (!existsSync(entry)) die(`${label} is not built. Run "npm run build" first.`);
 }
 
-const onekey = await import(pathToFileURL(join(ONEKEY, 'index.js')).href);
-const support = await import(pathToFileURL(join(ONEKEY, 'testing', 'support.js')).href);
-const contracts = await import(pathToFileURL(join(CONTRACTS, 'index.js')).href);
-const accessibility = await import(pathToFileURL(join(ACCESSIBILITY, 'index.js')).href);
-
-const { createOneKeyGateway, createTierZeroProvider } = onekey;
-const { createContext, createMockAdapter, createPolicy, createRequest } = support;
-const { ProviderUnavailableError } = contracts;
-const { createAccessibilityGuardian, createAccessibilityValidator } = accessibility;
-
-/** A request the offline curriculum bundle can answer exactly. */
-const OFFLINE_PROMPT = 'Explain curriculum:algebra/linear-eq';
-/** A request the offline bundle has no exact entry for. */
-const LIVE_PROMPT = 'Explain photosynthesis in simple terms';
-
-/** Wrap the real guardian so every interception is counted. */
-function countingGuardian(real, sink) {
-  return {
-    async intercept(emission, ctx) {
-      sink.interceptions += 1;
-      return real.intercept(emission, ctx);
-    },
-  };
+if (!existsSync(REGISTRY)) {
+  die('the delivery-path registry is not built. Run "npm run build" first.');
 }
 
-/** One delivery path, driven end to end through a real gateway. */
-async function runPath(spec) {
-  const real = createAccessibilityGuardian(createAccessibilityValidator());
-  const sink = { interceptions: 0 };
-  const guardian = countingGuardian(real, sink);
-  const gateway = createOneKeyGateway(spec.gatewayOptions ?? {});
-  for (const adapter of spec.adapters ?? []) gateway.register(adapter);
-
-  const ctx = createContext({ learnerFacing: spec.learnerFacing, guardian });
-  const request = createRequest({ prompt: spec.prompt });
-
-  let delivered = false;
-  let tier = null;
-  let bytes = 0;
-  let failure = null;
-  try {
-    const result = await gateway.complete(createPolicy(), request, ctx);
-    delivered = true;
-    tier = result.meta.tier;
-    bytes = result.text.length;
-  } catch (error) {
-    failure = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  }
-
-  return {
-    name: spec.name,
-    learnerFacing: spec.learnerFacing,
-    delivered,
-    tier,
-    bytes,
-    interceptions: sink.interceptions,
-    failure,
-  };
-}
-
-const failing = (id, tier) => createMockAdapter({ id, tier, failWith: new ProviderUnavailableError(id, 'simulated outage') });
-
-/** Every learner-facing delivery path the gateway can produce. */
-const learnerPaths = [
-  {
-    name: 'tier-0-exact',
-    learnerFacing: true,
-    prompt: OFFLINE_PROMPT,
-    gatewayOptions: { tierZero: createTierZeroProvider() },
-  },
-  {
-    name: 'tier-1-primary',
-    learnerFacing: true,
-    prompt: LIVE_PROMPT,
-    gatewayOptions: { tierZero: createTierZeroProvider() },
-    adapters: [createMockAdapter({ id: 'p1', tier: 1 }).adapter],
-  },
-  {
-    name: 'tier-2-fallback',
-    learnerFacing: true,
-    prompt: LIVE_PROMPT,
-    gatewayOptions: { tierZero: createTierZeroProvider() },
-    adapters: [failing('p1', 1).adapter, createMockAdapter({ id: 'p2', tier: 2 }).adapter],
-  },
-  {
-    name: 'tier-3-local',
-    learnerFacing: true,
-    prompt: LIVE_PROMPT,
-    gatewayOptions: { tierZero: createTierZeroProvider() },
-    adapters: [
-      failing('p1', 1).adapter,
-      failing('p2', 2).adapter,
-      createMockAdapter({ id: 'p3', tier: 3 }).adapter,
-    ],
-  },
-  {
-    name: 'tier-0-last-resort',
-    learnerFacing: true,
-    prompt: LIVE_PROMPT,
-    gatewayOptions: { tierZero: createTierZeroProvider() },
-    adapters: [failing('p1', 1).adapter, failing('p2', 2).adapter, failing('p3', 3).adapter],
-  },
-  {
-    name: 'tier-4-human-deferral',
-    learnerFacing: true,
-    prompt: LIVE_PROMPT,
-    gatewayOptions: {
-      // No offline tier, so the ladder must reach the human rung.
-      tierFour: {
-        async serve() {
-          return {
-            text: 'A human tutor will reply within one working day.',
-            providerId: 'tier-four',
-            modelId: 'human-support',
-            usage: { inputTokens: 0, outputTokens: 0 },
-            latencyMs: 0,
-            sourceLineage: [],
-          };
-        },
-      },
-    },
-    adapters: [failing('p1', 1).adapter, failing('p2', 2).adapter, failing('p3', 3).adapter],
-  },
-];
-
-/**
- * The negative control: an operator path, where the guardian is not applicable
- * by design. If this reports an interception, the counter is counting requests
- * and the coverage figure below is meaningless.
- */
-const operatorControl = {
-  name: 'operator-not-learner-facing',
-  learnerFacing: false,
-  prompt: LIVE_PROMPT,
-  gatewayOptions: { tierZero: createTierZeroProvider() },
-  adapters: [createMockAdapter({ id: 'p1', tier: 1 }).adapter],
-};
+const registry = await import(pathToFileURL(REGISTRY).href);
+const { DELIVERY_PATHS, registryTierCoverage, runDeliveryPath } = registry;
 
 process.stdout.write('EDUGENESIS OS — guardian coverage gate\n\n');
 
-const learner = [];
-for (const spec of learnerPaths) learner.push(await runPath(spec));
-const control = await runPath(operatorControl);
+const entries = DELIVERY_PATHS ?? [];
+if (entries.length === 0) {
+  die('the delivery-path registry is empty — the gate has no paths to drive, so it proves nothing.');
+}
+
+const runs = [];
+for (const entry of entries) {
+  runs.push(await runDeliveryPath(entry.build()));
+}
 
 const pad = (value, width) => String(value).padEnd(width);
 
 process.stdout.write(`${pad('path', 26)}${pad('tier', 6)}${pad('delivered', 11)}${pad('guarded', 9)}bytes\n`);
 process.stdout.write(`${'-'.repeat(26 + 6 + 11 + 9 + 8)}\n`);
-for (const row of learner) {
+for (const run of runs) {
   process.stdout.write(
-    `${pad(row.name, 26)}${pad(row.tier ?? '-', 6)}${pad(row.delivered ? 'yes' : 'NO', 11)}${pad(row.interceptions, 9)}${row.bytes}\n`,
+    `${pad(run.name, 26)}${pad(run.servedTier ?? '-', 6)}${pad(run.delivered ? 'yes' : 'NO', 11)}${pad(run.interceptions, 9)}${run.bytes}\n`,
   );
 }
+
+const learner = runs.filter((run) => run.learnerFacing);
+const controls = runs.filter((run) => !run.learnerFacing);
 
 const problems = [];
 
-for (const row of learner) {
-  if (!row.delivered) {
-    problems.push(`${row.name}: the path did not deliver, so it proves nothing (${row.failure ?? 'no error recorded'})`);
+/* The registry must still cover the whole ladder (F6-R4-03). */
+const coverage = registryTierCoverage(entries);
+if (coverage.missing.length > 0) {
+  problems.push(
+    `the delivery-path registry does not cover tier(s) ${coverage.missing.join(', ')} — a ladder rung lost its only learner path`,
+  );
+}
+
+for (const run of learner) {
+  if (!run.delivered) {
+    problems.push(`${run.name}: the path did not deliver, so it proves nothing (${run.failure ?? 'no error recorded'})`);
     continue;
   }
-  if (row.interceptions === 0) {
-    problems.push(`${row.name}: delivered without the guardian — an unguarded learner-facing emission`);
+  if (run.servedTier !== run.declaredTier) {
+    problems.push(
+      `${run.name}: served from tier ${String(run.servedTier)} but the registry declares tier ${String(run.declaredTier)} — the registry must not lie about the path it names`,
+    );
+  }
+  if (run.interceptions === 0) {
+    problems.push(`${run.name}: delivered without the guardian — an unguarded learner-facing emission`);
     continue;
   }
-  if (row.interceptions !== 1) {
-    problems.push(`${row.name}: the guardian ran ${row.interceptions} times for one delivery — expected exactly once`);
+  if (run.interceptions !== 1) {
+    problems.push(`${run.name}: the guardian ran ${run.interceptions} times for one delivery — expected exactly once`);
   }
 }
 
-const delivered = learner.filter((row) => row.delivered).length;
-const guarded = learner.filter((row) => row.delivered && row.interceptions === 1).length;
+for (const control of controls) {
+  if (control.delivered && control.interceptions === 0) {
+    process.stdout.write(
+      `\ncontrol: ${control.name} delivered tier ${String(control.servedTier)} with 0 interceptions — the counter measures interception, not requests.\n`,
+    );
+  } else if (!control.delivered) {
+    problems.push(`${control.name}: the operator control did not deliver (${control.failure ?? 'no error recorded'}), so the counter is unproven`);
+  } else {
+    problems.push(`${control.name}: the operator control was intercepted ${control.interceptions} times — the counter cannot distinguish learner from operator paths`);
+  }
+}
+
+const delivered = learner.filter((run) => run.delivered).length;
+const guarded = learner.filter((run) => run.delivered && run.interceptions === 1).length;
 const percent = delivered === 0 ? 0 : Math.round((guarded / delivered) * 1000) / 10;
 
-process.stdout.write('\n');
-if (control.delivered && control.interceptions === 0) {
-  process.stdout.write(
-    `control: ${control.name} delivered tier ${control.tier} with 0 interceptions — the counter measures interception, not requests.\n`,
-  );
-} else if (!control.delivered) {
-  problems.push(`the operator control did not deliver (${control.failure ?? 'no error recorded'}), so the counter is unproven`);
-} else {
-  problems.push(`the operator control was intercepted ${control.interceptions} times — the counter cannot distinguish learner from operator paths`);
-}
-
-process.stdout.write(`coverage: ${guarded}/${delivered} learner-facing deliveries guarded exactly once = ${percent}%\n`);
+process.stdout.write(`\ncoverage: ${guarded}/${delivered} learner-facing deliveries guarded exactly once = ${percent}%\n`);
 
 if (delivered !== learner.length) {
   problems.push(`${learner.length - delivered} of ${learner.length} learner-facing paths never delivered`);
@@ -248,5 +152,5 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-process.stdout.write('\nRESULT: PASS — every learner-facing delivery path is guarded exactly once.\n');
+process.stdout.write('\nRESULT: PASS — every learner-facing delivery path in the registry is guarded exactly once.\n');
 process.exit(0);

@@ -1,24 +1,36 @@
 /**
  * tools/secrets-scan.mjs
  *
- * Scans the tree that a commit would publish for likely secrets:
+ * Scans EVERY surface a secret could reach the outside world through:
+ *
+ *   1. the tree a commit would publish ("tracked plus not ignored"), which
+ *      since F6-R4-02 INCLUDES the published `artifacts/` directory;
+ *   2. every blob reachable from any ref in the git history — a secret that
+ *      was once committed and later deleted is still in every clone, so the
+ *      working tree alone was a blind spot (round-4 finding F6-R4-02).
+ *
+ * What it looks for:
  *
  *   - AWS access key ids (AKIA / ASIA) and AWS secret access keys
  *   - PEM / OpenSSH private key headers
  *   - `sk-`, `ghp_` and `xoxb-` credential prefixes
  *   - `apiKey = "..."` style assignments
- *   - a non-empty `apiKeys` value in a tracked settings file
+ *   - a non-empty `apiKeys` value in a settings file (any historical version
+ *     included — a settings file that was once committed with a real key is
+ *     exactly the leak this scan exists to name)
  *
- * It NEVER prints a secret. A finding is reported as file, line number and a
- * redacted fingerprint (a salted SHA-256 prefix plus the length).
+ * It NEVER prints a secret. A finding is reported as surface, file/commit,
+ * line number and a redacted fingerprint (a salted SHA-256 prefix plus the
+ * length).
  *
  * Exit code 0 = clean. Exit code 1 = at least one finding.
  *
- * The scanned set is "tracked plus not ignored", which is exactly what a
- * commit would publish. `node_modules`, `dist`, `.git`, `artifacts`, the local
- * settings override and the portable toolchain are excluded.
+ * The tree scan excludes what is never published: `node_modules`, `dist`,
+ * `.git`, the local settings override and the portable toolchain. The
+ * HISTORY scan excludes nothing by path — whatever was once committed was
+ * once published — only blobs that are oversized or binary.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,7 +44,6 @@ const SKIP_DIRECTORIES = new Set([
   '.git',
   'node_modules',
   'dist',
-  'artifacts',
   '.toolchain',
   '.edugenesis-data',
   'coverage',
@@ -233,6 +244,80 @@ function scanText(relativePath, text) {
 }
 
 /**
+ * Scan one historical blob.
+ *
+ * WHY the settings rule still fires: `scanText` is called with the blob's
+ * ORIGINAL path (so `settings/*.json` apiKeys are checked for every
+ * historical version too), and the finding is then re-attributed to the
+ * history surface — `history/<path> @ <short-sha>` — so a report line names
+ * the commit that carried the leak without printing the leak.
+ */
+function scanBlobContent(path, sha, buffer) {
+  if (buffer.includes(0)) return []; // binary blob
+  const found = scanText(path, buffer.toString('utf8'));
+  const label = `history/${path || sha.slice(0, 12)} @ ${sha.slice(0, 12)}`;
+  for (const finding of found) {
+    finding.file = label;
+  }
+  return found;
+}
+
+/**
+ * Every blob reachable from any ref, deduplicated by content hash, with the
+ * first-seen path attached. Returns null when git is unavailable.
+ *
+ * WHY deduplication by sha: `rev-list --objects` lists every historical
+ * version of every file once per reference; identical content is identical
+ * content — scanning it again changes nothing and doubles the runtime.
+ */
+function historyBlobs() {
+  let revs;
+  try {
+    const out = execFileSync('git', ['rev-list', '--objects', '--all'], {
+      cwd: ROOT,
+      encoding: 'buffer',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    revs = out.toString('utf8').split(/\r?\n/).filter((line) => line.length > 0);
+  } catch {
+    return null;
+  }
+  const pathBySha = new Map();
+  for (const line of revs) {
+    const spaceAt = line.indexOf(' ');
+    const sha = spaceAt === -1 ? line : line.slice(0, spaceAt);
+    const path = spaceAt === -1 ? '' : line.slice(spaceAt + 1);
+    if (!pathBySha.has(sha)) pathBySha.set(sha, path);
+  }
+  const shas = [...pathBySha.keys()];
+  if (shas.length === 0) return [];
+  const batch = spawnSync(
+    'git',
+    ['cat-file', '--batch-check=%(objectname) %(objecttype) %(objectsize)'],
+    {
+      cwd: ROOT,
+      input: Buffer.from(`${shas.join('\n')}\n`, 'utf8'),
+      encoding: 'buffer',
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  );
+  const blobs = [];
+  const batchOut = (batch.stdout ?? Buffer.alloc(0)).toString('utf8');
+  for (const line of batchOut.split(/\r?\n/)) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 3) continue;
+    const [sha, type, size] = parts;
+    if (type !== 'blob') continue;
+    const bytes = Number(size);
+    if (!Number.isFinite(bytes) || bytes <= 0) continue;
+    if (bytes > MAX_FILE_BYTES) continue; // not source; the tree scan skips these too
+    blobs.push({ sha, path: pathBySha.get(sha) ?? '' });
+  }
+  return blobs;
+}
+
+/**
  * The canary self-test.
  *
  * WHY THIS EXISTS: "no findings" is what a scanner that finds nothing also
@@ -259,9 +344,21 @@ function canarySelfTest() {
     if (found.length === 0) {
       return { ok: false, detail: 'the scanner did not detect its own canary token' };
     }
+    // The history phase: the SAME detector must find a planted canary in a
+    // BLOB — the shape every byte ever committed arrives in. A scanner that
+    // finds the canary in a working-tree file but not in a historical blob
+    // would leave the git-history blind spot the round-4 audit found open.
+    const blobCanary = ['sk', 'canaryHistoryBlob9988776655aabbccddeeff'].join('-');
+    const blobFound = scanBlobContent('src/history/canary.ts', 'f'.repeat(40), Buffer.from(`const credential = "${blobCanary}";\n`, 'utf8'));
+    if (blobFound.length === 0) {
+      return { ok: false, detail: 'the scanner did not detect its canary inside a historical blob' };
+    }
+    if (!blobFound[0].file.includes('history')) {
+      return { ok: false, detail: 'a history-blob finding must be attributed to the history, not to the working tree' };
+    }
     return {
       ok: true,
-      detail: `the scanner detected its canary (rule "${found[0]?.rule}") — the detector is live, not inert`,
+      detail: `the scanner detected its canary in a file and in a historical blob (rules "${found[0]?.rule}", "${blobFound[0]?.rule}") — the detector is live on both surfaces, not inert`,
     };
   } finally {
     try {
@@ -313,19 +410,61 @@ for (const relativePath of publishedFiles()) {
   findings.push(...scanText(relativePath, text));
 }
 
-if (findings.length > 0) {
-  console.error(`FAIL  ${findings.length} secret finding(s) in ${scanned} scanned file(s):\n`);
-  for (const finding of findings) {
+/*
+ * The history surface (F6-R4-02): every blob reachable from any ref. Path
+ * exclusions do NOT apply here — whatever was once committed was once
+ * published, which is precisely the blind spot this scan exists to close.
+ * Only oversized and binary blobs are skipped, and each says so in the count.
+ */
+let historyScanned = 0;
+let historySkipped = 0;
+const historyFindings = [];
+const gitAvailable = existsSync(join(ROOT, '.git'));
+if (gitAvailable) {
+  const blobs = historyBlobs();
+  if (blobs !== null) {
+    for (const blob of blobs) {
+      let buffer;
+      try {
+        buffer = execFileSync('git', ['cat-file', 'blob', blob.sha], {
+          cwd: ROOT,
+          encoding: 'buffer',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          maxBuffer: MAX_FILE_BYTES + 1024,
+        });
+      } catch {
+        historySkipped += 1;
+        continue;
+      }
+      if (buffer.includes(0)) {
+        historySkipped += 1;
+        continue;
+      }
+      historyScanned += 1;
+      historyFindings.push(...scanBlobContent(blob.path, blob.sha, buffer));
+    }
+  }
+}
+
+const allFindings = [...findings, ...historyFindings];
+
+if (allFindings.length > 0) {
+  console.error(
+    `FAIL  ${allFindings.length} secret finding(s) in ${scanned} tree file(s) and ${historyScanned} history blob(s):\n`,
+  );
+  for (const finding of allFindings) {
     const where = finding.line > 0 ? `${finding.file}:${finding.line}` : finding.file;
     console.error(`  ${where}  [${finding.rule}]  ${finding.fingerprint}`);
   }
-  console.error('\nNo secret value is printed. Rotate anything that is real, then remove it from the tree.');
+  console.error('\nNo secret value is printed. Rotate anything that is real, then purge it from the history.');
   process.exit(1);
 }
 
-console.log(`PASS  secrets scan: ${scanned} file(s) scanned, ${skipped} skipped, 0 findings.`);
+console.log(
+  `PASS  secrets scan: ${scanned} tree file(s) and ${historyScanned} history blob(s) scanned, ${skipped + historySkipped} skipped, 0 findings.`,
+);
 console.log(`PASS  canary self-test: ${selfTest.detail}.`);
-if (!existsSync(join(ROOT, '.git'))) {
-  console.log('note  git metadata was not available; the tree was walked instead of read from the index.');
+if (!gitAvailable) {
+  console.log('note  git metadata was not available; the tree was walked and history was not scanned.');
 }
 process.exit(0);

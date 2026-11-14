@@ -173,8 +173,27 @@ string-match. Three defects:
   (`tools/verify-repro.mjs`) runs the chain twice and fails on any artifact drift.
 - **F6-R4-02 (minor):** `secrets-scan.mjs:35` excludes `artifacts/` explicitly, and the scanner
   walks the working tree only — a secret in git history or in a published artifact is invisible.
+  **Closed (2026-11-13):** the scanner now reads every surface a secret can escape through. The
+  published `artifacts/` directory is inside the scanned tree, and every blob reachable from any
+  ref is scanned as history (`git rev-list --objects --all` enumerates, `git cat-file
+  --batch-check` types and sizes, identical content is deduplicated by blob hash, each blob is
+  read with `git cat-file blob`). Path exclusions deliberately do **not** apply to the history
+  surface: whatever was once committed was once published, so a secret that was committed and
+  later deleted — or a settings file that once carried a real key — is still named. A finding is
+  attributed to `history/<path> @ <short-sha>` with a salted fingerprint; no secret value is ever
+  printed. The canary self-test now plants a canary in a **file** and in a **blob** and refuses to
+  pass unless the same detection code finds both, so the history detector cannot be inert.
+  Measured over this repository's 31 commits: **185 tree files and 351 history blobs, 0 findings**.
 - **F6-R4-03 (minor):** `verify-coverage.mjs` enumerates six hard-coded gateway paths (F1-14);
   a new learner-facing path is not counted.
+  **Closed (2026-11-13):** the path list is now a **delivery-path registry** declared in the
+  package that owns the gateway (`packages/onekey/src/testing/delivery-paths.ts`) — six
+  learner-facing paths plus the operator control, each declaring the ladder rung it proves. The
+  gate imports the registry, drives every entry through a real gateway with the real guardian,
+  and holds **no path knowledge of its own**. The ladder is derived from `FALLBACK_TIER_ROLE` in
+  the contracts, so the gate fails when a rung loses its only learner path, and it also fails when
+  an entry serves from a tier other than the one it declares — a registry may not lie about its
+  own path. Locked by 5 tests that drive every entry end to end.
 - **F6-R4-04 (minor, found while fixing F6-02):** the manifest hashed gitignored
   `settings/settings.local.json` — machine-local learner overrides that may hold API keys — so
   two copies of the same commit produced different manifests, and a secret-bearing file
@@ -212,14 +231,17 @@ reconcile with the digests and is corrected here.
 **After the Batch A and evidence repairs in this tree** (derivation shown so it can be re-checked):
 - Round-3 corpus: **56 open of 85** — 2 blockers (F0-01, F0-03), 21 majors, 33 minors.
   `reconciliation.closed_ids` holds 29.
-- Round-4 first-hand corpus: **2 open of 6** — F6-R4-02 (the secrets scan skips `artifacts/` and
-  never reads git history) and F6-R4-03 (`verify-coverage` hard-codes six gateway paths), both
-  minor. Closed in this tree: F6-R4-01, F2-R4-01 (focus ring), F2-R4-02 (`aria-describedby`),
-  F6-R4-04 (machine-local settings in the manifest).
+- Round-4 first-hand corpus: **0 open of 6** — the two findings that were open (the secrets scan
+  skipping the published artifacts and never reading git history, and the coverage gate hard-coding
+  six gateway paths) are both closed; the other four were closed earlier. Closed in this tree:
+  F6-R4-01, F2-R4-01 (focus ring), F2-R4-02 (`aria-describedby`), F6-R4-04 (machine-local settings
+  in the manifest), and now F6-R4-02 (secrets-scan boundary: artifacts + whole git history) and
+  F6-R4-03 (coverage driven by the delivery-path registry).
 - Reviewer corpus: **36 open of 41** - 0 blockers, 13 majors, 23 minors. Closed: F6-02,
   F2-02, F2-03, and in this batch F6-03 (D-5 unverified-gate semantics) and F6-04 (detector
-  widening plus the documentation scope).
-- Combined: **94 open - 2 blockers, 34 majors, 58 minors** (56 + 2 + 36).
+  widening plus the documentation scope). The reviewer rows F6-05 and F6-08 duplicated F6-R4-02
+  and F6-R4-03; they were never counted as open and are resolved with their first-hand IDs.
+- Combined: **92 open - 2 blockers, 34 majors, 56 minors** (56 + 0 + 36).
 
 The machine record is `docs/gap-register.json` for the round-3 corpus and the six R4 IDs the
 register names; the 41 reviewer rows live in the two digest files cited above, and their bodies
@@ -362,25 +384,32 @@ Owner decisions (cannot be closed by code):
 - No deployment. No Render workspace was named, so no state-changing command was run.
 - No vendor SLA, price, quota or certification is asserted.
 - The hosted settings GET is confirmed unauthenticated by code reading, not by an external probe.
-- Git history was not scanned for secrets (the scanner cannot), so "no secret ever committed"
-  remains **UNVERIFIED**.
+- Git history **is** now scanned (F6-R4-02 closed): 351 historical blobs across this
+  repository's 31 commits, 0 findings, so "no secret ever committed" is now proven by the
+  scanner for the refs in this clone. The honest limit: the scan reaches objects reachable
+  from the refs of this clone — a secret in an unreachable, rewritten or force-pushed object
+  is outside it, and only a history rewrite (or a fresh clone with a clean filter) removes
+  a secret that was once published.
 
 ---
 
 ## 7. Batch A closure - executed 2026-11-13 (code-only security batch)
 
 Every item below was implemented, then proved by build + tests + the gate chain.
-The last authoritative run (after the Batch F detector widening and the D-5
-unverified-gate semantics): `npm run verify` -> build 0, **505/505 tests**, 29 suites,
-`18/18 gates PASS`, `0 blockers failed`, `0 unverified`, secrets
-scan `0 findings` (canary live, 179 files), SBOM 10 components, manifest **181 files**,
-attestation **PASS**.
+The last authoritative run (after the Batch F detector widening, the D-5 unverified-gate
+semantics and the F6-R4-02/F6-R4-03 boundary repairs): `npm run verify` -> build 0,
+**510/510 tests**, 30 suites, `18/18 gates PASS`, `0 blockers failed`, `0 unverified`,
+secrets scan `0 findings` (canary live in a file **and** in a blob; **185 tree files +
+351 history blobs**), SBOM 10 components, manifest **183 files**, attestation **PASS**.
 
 **Evidence chain, exactly as executed** (`npm run verify`, exit 0, 2026-11-13):
-`path-portability` scanned **159 shipped file(s)** — source, config and, since Batch F, the
-documentation that ships with the product;
-`secrets:scan` read 179 files, skipped 4, and its canary fired; the manifest hashed **181
-files**; the attestation reports 18 gates, 18 passed, 181 files verified, and prints
+`path-portability` scanned **161 shipped file(s)** — source, config and the documentation
+that ships with the product;
+`guardian-coverage` reported **6/6 learner-facing deliveries guarded exactly once = 100%**
+driven by the delivery-path registry;
+`secrets:scan` read **185 tree files and 351 history blobs**, skipped 0, and its canary fired
+on both surfaces; the manifest hashed **183
+files**; the attestation reports 18 gates, 18 passed, 183 files verified, and prints
 `git HEAD <current commit> (informational; the attestation names no commit)` plus
 `artifact tree: 4 regenerated path(s) (reported, never attested)`. `artifacts/attestation.json`
 contains **no `gitHead`, no `source` block (no dirty flag, no changed paths) and no `timestamp`
