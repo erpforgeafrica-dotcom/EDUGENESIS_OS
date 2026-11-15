@@ -100,7 +100,7 @@
       "source": "09 §12.2 exit criterion 6",
       "status": "owner-blocked",
       "owner": "Founder & CEO",
-      "reason": "Three roles are named in the approved architecture document and are recorded in docs/OFFICERS.md (Chief AI & Model Orchestrator: Marcus Thorne; Chief Inclusion & Accessibility Officer: Noni / Amara Diop; Chief Learning Scientist: Nelly / Dr. Elena Rostova). Chief Systems Architect, the accountable role named by ADR-0013 to ADR-0017, had no row in the register at all and now reads VACANT. The remaining eleven roles have no named person, and a build cannot invent an appointment.",
+      "reason": "Three roles are named in the approved architecture document and are recorded in docs/OFFICERS.md (Chief AI & Model Orchestrator: Marcus Thorne; Chief Inclusion & Accessibility Officer: Noni / Amara Diop; Chief Learning Scientist: Nelly / Dr. Elena Rostova). Chief Systems Architect, the accountable role named by ADR-0013 to ADR-0018, had no row in the register at all; by owner decision D-4 (2026-11-15) the Founder & CEO took that seat, so it now reads APPOINTED. The remaining nine roles have no named person, and a build cannot invent an appointment.",
       "unblock": "Founder & CEO appoints each vacant role in docs/OFFICERS.md; the gate re-reads the register and flips when no row reads VACANT."
     },
     {
@@ -116,7 +116,7 @@
           "minTests": 13
         }
       ],
-      "note": "Implemented branch: the guardian-consent-token path. The criterion is a disjunction - \"via passkey, OR via provisional identity plus guardian consent token\". The passkey CEREMONY is deferred by Slice 0 decision D-05, because it needs a browser and an authenticator; the seam is fixed and refuses with a typed error, and the attempt is recorded in the enrolment audit log. The path actually taken is recorded in the enrolment audit log, which is what the criterion asks to be verifiable."
+      "note": "Implemented branch: the guardian-consent-token path. The criterion is a disjunction - \"via passkey, OR via provisional identity plus guardian consent token\". The passkey CEREMONY is deferred by Slice 0 decision D-05, because it needs a browser and an authenticator; the seam is fixed and refuses with a typed error, and the attempt is recorded in the enrolment audit log. The path actually taken is recorded in the enrolment audit log, which is what the criterion asks to be verifiable. Since owner decision D-1 the path is also REACHABLE at runtime: POST /api/enrol runs the real enrolment service, and the decision is written to the durable, hash-chained audit trail (ADR-0018). A hosted demonstration instance refuses enrolment, so it never holds real learner data (ADR-0012)."
     },
     {
       "id": "P1-2",

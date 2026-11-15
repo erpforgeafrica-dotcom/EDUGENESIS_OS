@@ -571,3 +571,29 @@ locally verified tree.
 **Verified:** `npm run build` 0; **551/551 tests**; `npm run verify` exit 0 - 18/18 gates, 0
 unverified, 168 shipped files, 191-file manifest, attestation PASS; `npm run verify:repro`
 **4/4 `same`**.
+
+### 7. The truthfulness repairs (the build made old documents FALSE)
+
+Building the product falsified documents that had been true. Leaving them would have been the
+worst kind of bug: a README that tells a sponsor the opposite of what the code does.
+
+- **ADR-0017 contradicted the code.** It said "no source file imports `node:sqlite`" and that
+  every store is in-memory — both now false. It also says *an ADR that contradicts the code is a
+  FAIL*. So **ADR-0018** records the implemented decision (SQLite behind the existing seams +
+  the durable hash-chained audit trail), ADR-0017 is marked *Superseded by ADR-0018* with its
+  text preserved, and the index is updated. The chain ADR-0013 → ADR-0017 → ADR-0018 is not a
+  reversal: ADR-0013 decided the shape, ADR-0017 recorded that it was not built, ADR-0018 built it.
+- **The appointment register said Chief Systems Architect was VACANT.** By owner decision D-4 the
+  Founder & CEO took that seat, so the register now reads APPOINTED (four appointed, nine
+  vacant) and `docs/exit-criteria.json` P0-6 says so — still owner-blocked, because nine roles
+  have no named person.
+- **The README claimed "there is no learner runtime", "there is no durability" and "the
+  enrolment path is implemented but not yet wired".** All three were true when written and false
+  after the build. They now state what IS true, and what is still not true: the hosted
+  instance's filesystem is ephemeral, and a screen reader was never run.
+- **A hosted instance accepted enrolment.** The README claimed every `/api/` write is a 403 in
+  hosted mode; in fact only `/api/settings` was refused, so a PUBLIC demonstration instance would
+  have created guardian identities and learner records — real data about real people, on a
+  container that may be recycled. `/api/enrol` is now refused on a hosted instance, with the
+  reason stated; `/api/learn` stays open, because a learner asking a question is the product
+  and a question carries no identifier. Two tests lock both halves.

@@ -258,6 +258,34 @@ test('the audit route is refused on a hosted instance', async () => {
   });
 });
 
+test('a hosted instance refuses enrolment - a demonstration surface takes no real learner data', async () => {
+  await withServer({ hosted: true, adapters: [echoAdapter()] }, async (handle) => {
+    const response = await fetch(`${handle.url}/api/enrol`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'register-guardian', guardianId: 'g1', learnerId: 'l1' }),
+    });
+    assert.equal(response.status, 403);
+    const payload = (await response.json()) as { ok: boolean; error: string };
+    assert.equal(payload.ok, false);
+    assert.match(payload.error, /demonstration|learner data/i);
+  });
+});
+
+test('a hosted instance still answers a learner question - that is the product', async () => {
+  await withServer({ hosted: true, adapters: [echoAdapter()] }, async (handle) => {
+    const response = await fetch(`${handle.url}/api/learn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'Explain photosynthesis in simple terms' }),
+    });
+    assert.equal(response.status, 200);
+    const payload = (await response.json()) as { ok: boolean; guarded: boolean };
+    assert.equal(payload.ok, true);
+    assert.equal(payload.guarded, true);
+  });
+});
+
 test('the audit route is refused for a peer that is not loopback', () => {
   const verdict = authorizeAuditAccess(false, '10.0.0.5');
   assert.equal(verdict.allowed, false);

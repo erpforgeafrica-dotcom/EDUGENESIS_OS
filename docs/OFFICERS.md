@@ -8,7 +8,7 @@ whether a person has been appointed to it.
 |---|---|---|---|---|
 | Founder & CEO | — | VACANT — Founder & CEO | Board of Trustees | — |
 | Chief AI & Model Orchestrator | Marcus Thorne | APPOINTED | Founder & CEO | 2026-11-12 |
-| Chief Systems Architect | — | VACANT — Founder & CEO | Founder & CEO | — |
+| Chief Systems Architect | Founder & CEO | APPOINTED | Founder & CEO (the role holder took the seat — owner decision D-4) | 2026-11-15 |
 | Chief Inclusion & Accessibility Officer | Noni / Amara Diop | APPOINTED | Founder & CEO | 2026-11-12 |
 | Security Officer | — | VACANT — Founder & CEO | Founder & CEO | — |
 | Finance Lead | — | VACANT — Founder & CEO | Founder & CEO | — |
@@ -28,10 +28,25 @@ whether a person has been appointed to it.
   is the named authority who must fill it; the vacancy is not hidden behind a
   placeholder name, and no build may invent an appointment.
 
-The Phase 0 exit criterion is **owner-blocked**, not met: three roles are
-appointed and ten are vacant. `docs/exit-criteria.json` records the owner
+The Phase 0 exit criterion is **owner-blocked**, not met: four roles are
+appointed and nine are vacant. `docs/exit-criteria.json` records the owner
 (Founder & CEO), the reason and the unblock path, and the exit-criteria gate
 reports the shortfall as a warning rather than converting it into a pass.
+
+## The Chief Systems Architect seat (owner decision D-4, 2026-11-15)
+
+The Chief Systems Architect seat was the one vacancy that blocked a technical
+decision from being made by a person: ADR-0013 to ADR-0017 named it as the
+accountable role, and it read VACANT. **The Founder & CEO took the seat** —
+that is the owner's own decision, recorded here, not an appointment this build
+invented. Two consequences follow, and both are recorded rather than implied:
+
+1. **The ADR-0017 record is superseded by ADR-0018** (SQLite durability and the
+   durable audit trail), because the owner chose the durable adapter over the
+   in-memory seam ADR-0017 deferred.
+2. **The exit criterion stays owner-blocked.** Filling one of fourteen roles is
+   not the criterion: nine roles still have no named person, and the criterion
+   reads "no row reads VACANT".
 
 ## Why three names appear
 

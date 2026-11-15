@@ -460,6 +460,13 @@ not asserted:
 | The screen is quiet | browser console | **0 errors** |
 | It renders in the learner theme | screenshot | light theme, Aurora components (`.btn--primary`, `.card`, `.eg-status`) |
 
+**THE SAME RUN WAS MADE AGAINST THE DEPLOYED INSTANCE** —
+`https://edugenesis-web-yju6.onrender.com/learn`, commit `7be7730` — with the same results:
+both controls named, a `role="status"` live region, the dual focus ring on every focused
+element, a real submission returning a real lesson ("Your lesson is ready."), and **0 console
+errors**. So the evidence is about the artifact that is actually deployed, not only about the
+local tree.
+
 **WHAT IS STILL UNVERIFIED:** a SCREEN READER was not run. The accessibility tree is what a
 screen reader consumes, and the live region's `role="status" aria-live="polite"` is the
 mechanism — but no NVDA, JAWS, VoiceOver or Orca session has read this page, so the claim

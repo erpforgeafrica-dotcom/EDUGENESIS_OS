@@ -464,6 +464,24 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
 
     // ---- enrolment (D-1) ------------------------------------------------
     if (pathname === '/api/enrol') {
+      if (hosted) {
+        // A DEMONSTRATION SURFACE TAKES NO REAL LEARNER DATA.
+        //
+        // WHY THIS IS REFUSED AND WHY `/api/learn` IS NOT: a hosted instance
+        // is a public demonstration, its filesystem is ephemeral (the free tier
+        // recycles the container), and ADR-0012 forbids real learner data in a
+        // technical demonstration. Enrolment creates a guardian identity and a
+        // learner record - that is real data about a person. A learner asking a
+        // question is not: it is the product working, and it carries no
+        // identifier. So the question is answered and the enrolment is refused.
+        sendJson(response, 403, {
+          ok: false,
+          error:
+            'This is a demonstration instance: it answers questions but cannot enrol a learner, ' +
+            'so it never holds real learner data. Run the project locally to enrol.',
+        });
+        return;
+      }
       if (method !== 'POST') {
         sendJson(response, 405, { ok: false, error: 'Use POST.' });
         return;

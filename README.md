@@ -134,23 +134,33 @@ Every scanner that polices the tree also proves it can fail:
 
 ## What this slice is — and what it is not
 
-Genesis Slice 0 is a **library of contracts and invariants plus the gate suite that proves
-them**. It is not a running learner product, and it does not describe itself as one:
+Genesis Slice 0 is a **library of contracts and invariants, plus the gate suite that proves
+them, plus a learner surface that puts them on a route**. It does not describe itself as
+more than that:
 
-- **There is no learner runtime.** The shipped web app is the Settings UI and the PWA shell.
-  The served API exposes `/api/health` and `/api/settings` and nothing else. The OneKey
-  gateway, the Accessibility Guardian, the ledger, the consent service and the enrolment
-  service are reachable from the library and from the test suite — and from nowhere else.
-  The slice that first serves a learner wires them to a route.
-- **There is no durability.** Every store is in-memory behind a repository seam, so the
-  public ledger, the private store and the enrolment and consent audit trails are lost when
-  the process exits. See ADR-0017. Nothing here may be described as auditable across
-  restarts.
-- **The enrolment path is implemented but not yet wired.** `packages/identity` provides the
-  guardian-consent-token enrolment with its audit trail, and the passkey seam that refuses
-  with a typed error. No runtime route calls either yet.
+- **There IS a learner runtime.** The server serves the learner screen at `/learn` and answers a
+  question through `POST /api/learn`, which runs the REAL OneKey gateway with the REAL
+  Accessibility Guardian and counts the interception: an emission the guardian did not intercept
+  exactly once is refused, not shipped. The OneKey gateway, the Accessibility Guardian, the
+  ledger, the consent service and the enrolment service are therefore reachable from a learner,
+  not only from the library.
+- **There IS durability.** The private store and the audit trail are SQLite files behind the
+  existing seams, inside the gitignored `.edugenesis-data/` directory of the project (ADR-0018).
+  A record survives a restart — proved by a close-and-reopen test, not asserted. The frozen
+  contracts never moved: the durable store implements `PrivateStore` rather than replacing it.
+  What is NOT durable is the hosted demonstration: the Render free tier's filesystem is
+  ephemeral, so a deployed instance's data does not outlive its container.
+- **The enrolment path is wired.** `POST /api/enrol` runs the real enrolment service on the
+  guardian-consent-token path, with the single-use token and the credential check the library
+  always had. A response never carries a credential secret. The decision is written to the
+  durable, hash-chained audit trail.
 - **The passkey ceremony is deferred.** It needs a browser and an authenticator; the seam
   and the refusal are in place (Slice 0 decision D-05).
+- **The runtime accessibility claim is partly verified, not fully.** A real browser was driven
+  over the DevTools Protocol: the accessibility tree names both controls, the Tab order was
+  walked with real key presses, every focused element showed a visible dual focus ring, and a
+  real submission returned a real lesson with the live region announcing it. A SCREEN READER was
+  not run, so "a screen reader announces the answer" remains unverified.
 
 ## Deployment
 
@@ -162,13 +172,23 @@ them**. It is not a running learner product, and it does not describe itself as 
 | Host | `server.host` — `127.0.0.1` by default. |
 | Health | `GET /api/health` — the same path `render.yaml` declares as `healthCheckPath`. |
 | Read-only when hosted | In hosted mode every `/api/` write is refused with `403`, and a loopback peer is refused outright. |
-| Rollback | The service deploys from `main` with `autoDeployTrigger: checksPass`. To roll back, redeploy the previous known-good commit. There is no migration to reverse, because Slice 0 persists nothing. |
+| Rollback | The service deploys from `main` with `autoDeployTrigger: checksPass`. To roll back, redeploy the previous known-good commit. There is no schema migration to reverse: the durable stores create their tables on first use. |
 | Secrets | API keys live in the gitignored local settings file and are write-only over HTTP; they are never logged and never returned by the API. |
 
 The platform is **Render**, described in git by `render.yaml` (ADR-0009, proposal §9.4). The Blueprint
 declares **one** free web service, `edugenesis-web`, which runs `node apps/cli/dist/serve.js --hosted`.
 Hosted mode widens *who* may connect — the platform proxy is never a loopback peer — and makes every
-`/api/` write a `403`, so the public instance is a read-only demonstration.
+`/api/settings` write a `403`, so the public instance cannot be reconfigured from the internet.
+
+**What a hosted instance does and does not accept.** It answers a learner's question
+(`POST /api/learn` — that is the product working, and a question carries no identifier). It
+**refuses** enrolment (`POST /api/enrol`) and the audit trail (`GET /api/audit`): a demonstration
+surface must never hold real learner data (ADR-0012), and the audit trail is private evidence
+about a named learner and a named guardian. The refusal is a policy, not a configuration.
+
+**The deployed instance:** <https://edugenesis-web-yju6.onrender.com> — free tier, Frankfurt
+region, `autoDeployTrigger: checksPass`. It is a **demonstration**: the free tier's filesystem is
+ephemeral, so its data does not outlive its container, and it spins down after 15 idle minutes.
 
 The free tier's limits are load-bearing and are not worked around. **These are TARGET
 LIMITS quoted from Render's own published free-tier documentation, not limits this

@@ -42,7 +42,8 @@ later ADR, not edited in place.
 | [ADR-0014](ADR-0014-zero-runtime-dependencies.md) | Zero runtime dependencies | Accepted | Chief Systems Architect | This directory |
 | [ADR-0015](ADR-0015-node-test-as-the-test-runner.md) | `node:test` as the test runner | Accepted | Chief Systems Architect | This directory |
 | [ADR-0016](ADR-0016-versioned-json-settings-and-the-settings-ui.md) | Versioned JSON settings inside the project, edited by a local Settings UI served by `eg serve` | Accepted | Chief Systems Architect, with the Security Officer accountable for the secret handling rules | This directory |
-| [ADR-0017](ADR-0017-in-memory-storage-and-the-deferred-sqlite-adapter.md) | Storage is in-memory behind a repository seam in Slice 0; the `node:sqlite` adapter is deferred to Slice 1 | Accepted | Chief Systems Architect | This directory |
+| [ADR-0017](ADR-0017-in-memory-storage-and-the-deferred-sqlite-adapter.md) | Storage is in-memory behind a repository seam in Slice 0; the `node:sqlite` adapter is deferred to Slice 1 | Superseded by ADR-0018 | Chief Systems Architect | This directory |
+| [ADR-0018](ADR-0018-sqlite-durability-and-the-durable-audit-trail.md) | SQLite durability behind the existing seams, and a durable hash-chained audit trail | Accepted | Chief Systems Architect | This directory |
 
 ## ADR-0001 to ADR-0012
 
@@ -54,15 +55,22 @@ governing citations are mirrored above, and their prose remains the authority.
 They are not duplicated here because a decision record that exists in two
 places is a decision record that will drift.
 
-## ADR-0013 to ADR-0017
+## ADR-0013 to ADR-0018
 
-These five record the foundation choices of this repository: the runtime, the
+These six record the foundation choices of this repository: the runtime, the
 dependency policy, the test runner, the settings surface and the storage seam.
 Together they are what makes the product law — *this folder runs identically on any
 machine it is copied to* — true rather than aspirational.
 
-ADR-0013 is **superseded** by ADR-0017. The decision it recorded — persistence
-through a `node:sqlite` adapter behind a repository interface — was not implemented
-in Slice 0: no source file imports `node:sqlite`, and every store in the build is
-in-memory. The decision text in ADR-0013 is preserved unchanged; ADR-0017 records
-what is actually true and what is deferred.
+ADR-0013 is **superseded** by ADR-0017, and ADR-0017 is **superseded** by ADR-0018.
+The chain reads like a decision that was reversed and then re-decided; it is not.
+ADR-0013 decided that persistence would go through a repository interface with a
+`node:sqlite` implementation behind it. ADR-0017 recorded that Slice 0 did not
+implement it — no source file imported `node:sqlite`, and every store was
+in-memory. ADR-0018 **implements it**: the owner chose the durable adapter
+(decision D-2) and the durable audit trail (decision D-3), the learner runtime
+arrived (decision D-1), and `packages/ledger/src/sqlite-private-store.ts` and
+`packages/ledger/src/durable-audit-log.ts` now import `node:sqlite` behind the
+**existing** seams — the frozen contracts never moved. The decision text of each
+superseded record is preserved unchanged, because a decision record that is edited
+in place cannot be audited.

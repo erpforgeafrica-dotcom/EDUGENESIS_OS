@@ -1,8 +1,9 @@
 # ADR-0017 — Storage is in-memory behind a repository seam in Slice 0; the `node:sqlite` adapter is deferred to Slice 1
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0018
 - **Owner:** Chief Systems Architect
 - **Date:** 2026-11-13
+- **Superseded by:** ADR-0018 — *SQLite durability behind the existing seams, and a durable hash-chained audit trail* (2026-11-15). The decision below was correct for Slice 0 and was **implemented** afterwards: the owner chose the durable adapter (decision D-2) and the durable audit trail (decision D-3), the learner runtime arrived (decision D-1), and `packages/ledger/src/sqlite-private-store.ts` and `packages/ledger/src/durable-audit-log.ts` now import `node:sqlite` behind the existing seams. The decision text is preserved unchanged, because a decision record that is edited in place cannot be audited.
 - **Governed by:** Product law — the project must run identically on any Windows PC it is copied to (GLOBAL.md §9, portability law); and REVIEW_RUBRIC.md C13 — *an ADR that contradicts the code is a FAIL*.
 - **Supersedes:** ADR-0013 (TypeScript on Node 24 with `node:sqlite` behind a repository interface).
 
