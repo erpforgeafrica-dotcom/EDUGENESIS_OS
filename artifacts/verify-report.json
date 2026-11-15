@@ -50,7 +50,7 @@
       "title": "path-portability",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no absolute path in 168 shipped file(s)"
+      "detail": "no absolute path in 169 shipped file(s)"
     },
     {
       "id": "design-token-governance",
@@ -99,7 +99,7 @@
       "title": "adr-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "17 ADR index rows agree with their records, and every owner is a registered role"
+      "detail": "18 ADR index rows agree with their records, and every owner is a registered role"
     },
     {
       "id": "token-contrast",
