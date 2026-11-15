@@ -162,6 +162,18 @@ body {
   margin-top: var(--eg-space-8);
 }
 
+/*
+ * A section that directly follows an actions row needs air above it.
+ *
+ * WHY THE SIBLING SELECTOR: the learner screen puts its answer section right
+ * after the "Ask" button, and without this the heading crowds the button. The
+ * rule is scoped to that adjacency, so the settings page - where no section
+ * follows an actions row - is untouched.
+ */
+.eg-actions + .eg-section {
+  margin-top: var(--eg-space-8);
+}
+
 .eg-status {
   margin: 0;
   font-size: var(--eg-text-caption);

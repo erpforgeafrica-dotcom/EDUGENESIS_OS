@@ -1,21 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>EduGenesis OS — ask a question</title>
     <!--
-      The Aurora design tokens. Every colour and every focus ring comes from
-      here, so the learner screen can never drift away from the design system.
+      The Aurora design tokens. Every colour, every focus ring and every
+      component style comes from here, so the learner screen cannot drift away
+      from the design system.
     -->
     <link rel="stylesheet" href="/assets/edugenesis-tokens.css" />
     <link rel="stylesheet" href="/app.css" />
+    <!-- The browser asks for this by itself; naming it here keeps the console clean. -->
+    <link rel="icon" href="/icon.svg" />
   </head>
   <body>
-    <a class="skip-link" href="#ask">Skip to the question</a>
+    <a class="skip-link" href="#ask-form">Skip to the question</a>
 
-    <main id="main">
-      <header class="page-header">
+    <main class="eg-main" id="main">
+      <header class="eg-header">
         <h1>Ask a question</h1>
         <p class="lede">
           Type anything you want to learn. Every answer is checked for accessibility before it
@@ -25,39 +28,41 @@
 
       <form id="ask-form" novalidate>
         <div class="field">
-          <label for="question">Your question</label>
+          <label class="label" for="question">Your question</label>
           <input
             id="question"
             name="question"
             type="text"
             autocomplete="off"
             aria-describedby="hint-question"
-            placeholder="Explain photosynthesis in simple terms"
+            placeholder="Explain curriculum:algebra/linear-eq"
           />
           <p class="hint" id="hint-question">
             A specific question gets a specific lesson. For example: “Explain curriculum:algebra/linear-eq”.
           </p>
         </div>
 
-        <div class="actions">
-          <button id="ask-button" type="submit">Ask</button>
+        <div class="eg-actions">
+          <button class="btn btn--primary" id="ask-button" type="submit">Ask</button>
         </div>
 
-        <!--
-          The live region. The answer is written here, and `role="status"`
-          makes a screen reader announce it without the learner having to
-          hunt for it.
-        -->
-        <section id="answer-section" aria-labelledby="answer-heading">
+        <section class="eg-section" id="answer-section" aria-labelledby="answer-heading">
           <h2 id="answer-heading">Your lesson</h2>
+          <!--
+            The live region. The answer is announced here: `role="status"` with
+            `aria-live="polite"` means a screen reader speaks the result when it
+            arrives, without the learner hunting for it.
+          -->
           <p id="status" class="eg-status" role="status" aria-live="polite"></p>
-          <pre id="answer" class="lesson" hidden></pre>
+          <div class="card" id="answer" hidden>
+            <p id="answer-text"></p>
+          </div>
         </section>
       </form>
 
-      <p class="footnote">
-        <a href="/">Settings</a>
-      </p>
+      <footer class="eg-footer">
+        <p><a href="/">Settings</a></p>
+      </footer>
     </main>
 
     <script>
@@ -69,16 +74,22 @@
         var button = document.getElementById('ask-button');
         var status = document.getElementById('status');
         var answer = document.getElementById('answer');
+        var answerText = document.getElementById('answer-text');
 
-        function say(message) {
+        function say(message, tone) {
           status.textContent = message;
+          if (tone) {
+            status.setAttribute('data-tone', tone);
+          } else {
+            status.removeAttribute('data-tone');
+          }
         }
 
         form.addEventListener('submit', function (event) {
           event.preventDefault();
           var question = input.value.trim();
           if (question.length === 0) {
-            say('Type a question first.');
+            say('Type a question first.', 'error');
             input.focus();
             return;
           }
@@ -97,17 +108,22 @@
             })
             .then(function (result) {
               if (!result.ok) {
-                say(result.payload && result.payload.error ? result.payload.error : 'A lesson is not available right now.');
+                say(
+                  result.payload && result.payload.error
+                    ? result.payload.error
+                    : 'A lesson is not available right now.',
+                  'error',
+                );
                 answer.hidden = true;
-                answer.textContent = '';
+                answerText.textContent = '';
                 return;
               }
-              answer.textContent = result.payload.text;
+              answerText.textContent = result.payload.text;
               answer.hidden = false;
-              say('Your lesson is ready.');
+              say('Your lesson is ready.', 'ok');
             })
             .catch(function () {
-              say('A lesson is not available right now. Please try again shortly.');
+              say('A lesson is not available right now. Please try again shortly.', 'error');
             })
             .then(function () {
               button.disabled = false;

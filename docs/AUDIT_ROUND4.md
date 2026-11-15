@@ -407,6 +407,23 @@ the secret never reaches it. Two properties were preserved deliberately:
 - **The withdrawal CASCADE is durable too** — every dependent scope that got locked is part of
   the evidence, not just the scope the learner acted on.
 
+### The deployment (2026-11-13, owner decision "push + deploy")
+
+- **Repository:** `https://github.com/erpforgeafrica-dotcom/EDUGENESIS_OS` (public). The whole
+  history was pushed; the secrets scanner had already proven 0 findings across the tree and
+  351 historical blobs, so nothing secret left the machine.
+- **Service:** `https://edugenesis-web-yju6.onrender.com` — Render Blueprint `exs-…` from the
+  repository's own `render.yaml`, one free web service in Frankfurt, health check
+  `/api/health`, `autoDeployTrigger: checksPass`.
+- **Verified live, not assumed:** `GET /api/health` → 200 (`hosted: true`); `GET /learn` → 200
+  with the live region and the labelled control; `POST /api/learn` → a real curriculum lesson
+  (`tier 0`, `guarded: true`); and **`GET /api/audit` → 403** — *"The audit trail is private
+  evidence and is never exposed on a hosted instance."* The private-evidence rule holds on a
+  public instance, and that was checked from the outside, not from the code.
+- **The workspace is the KORA team** (`tea-…`), because Render's MCP cannot create a workspace
+  and the other two teams belong to other products. Moving the service to a dedicated
+  EduGenesis workspace is a dashboard action for the owner.
+
 ---
 
 ## 6. What is NOT verified
@@ -424,6 +441,40 @@ the secret never reaches it. Two properties were preserved deliberately:
   from the refs of this clone — a secret in an unreachable, rewritten or force-pushed object
   is outside it, and only a history rewrite (or a fresh clone with a clean filter) removes
   a secret that was once published.
+
+### The runtime accessibility claim — NOW PARTLY VERIFIED (2026-11-13, owner decision "go ahead")
+
+For four audit rounds this repository could say only: "every gate reads source; no browser
+has ever been run." That is now partly false. A real Chrome (HeadlessChrome 157.0.0.0) was
+driven over the DevTools Protocol against the running server, and the following was MEASURED,
+not asserted:
+
+| Claim | How it was measured | Result |
+|---|---|---|
+| The question field has an accessible name | `Accessibility.getFullAXTree` | textbox, accessible name **"Your question"** |
+| The button has an accessible name | same | button, accessible name **"Ask"** |
+| The answer is announced | accessibility tree | a node with role **status** exists |
+| Keyboard order | real `Tab` key presses | skip link → question input → Ask button → links → (repeats) |
+| The focus ring is VISIBLE | computed style of each focused element, from the live cascade | **every** focused element: `outline: 3px solid rgb(143,168,255)`, `outline-offset: 2px`, plus a second ring `box-shadow 0 0 0 5px` — a dual ring, as the design system specifies |
+| A question really gets answered | typed and submitted through the real UI | the live region read **"Your lesson is ready."** and the card carried a real curriculum lesson (152 characters) |
+| The screen is quiet | browser console | **0 errors** |
+| It renders in the learner theme | screenshot | light theme, Aurora components (`.btn--primary`, `.card`, `.eg-status`) |
+
+**WHAT IS STILL UNVERIFIED:** a SCREEN READER was not run. The accessibility tree is what a
+screen reader consumes, and the live region's `role="status" aria-live="polite"` is the
+mechanism — but no NVDA, JAWS, VoiceOver or Orca session has read this page, so the claim
+"a screen reader announces the answer" remains **UNVERIFIED**. The `browse` extension path
+(the owner's own Chrome, where a real screen reader could be attached) could not be used:
+the relay on this machine fails to start ("browse relay did not start"), and no browser is
+paired with it. The claim is therefore narrowed, not overstated.
+
+**ALSO NOTE — the deployment is not CI-gated yet.** The Render service deploys on
+`checksPass`, but the GitHub account is **billing-locked** ("The job was not started because
+your account is locked due to a billing issue"), so no CI run can start and the guardrail
+cannot fire. The first deploy was applied by hand on a locally verified tree (551/551 tests,
+18/18 gates, repro 4/4 `same`). The blueprint was NOT weakened to `commit` — the guardrail is
+still declared; it is the account that cannot run it. Fix the billing issue and the
+guardrail works again.
 
 ---
 

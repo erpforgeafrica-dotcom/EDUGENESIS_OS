@@ -520,3 +520,54 @@ is no longer true).
 and **F0-03** (no production enrolment caller) - the real release gate; the runtime
 accessibility claim (no browser or screen-reader run); and the fact that this repository has
 **no git remote**, so nothing can be pushed or deployed from it.
+
+## 16. The learner surface, durability and the deployment (2026-11-13)
+
+The owner answered all six questions and chose: **build the learner route now**, **SQLite
+durability**, **a durable tamper-proof audit trail**, **the Founder & CEO takes the Chief
+Systems Architect seat**, **run the real-browser accessibility check**, and **push + deploy to
+Render**. F0-01 and F0-03 - the last two open blockers in the round-3 corpus - are now closed
+in code.
+
+1. **The learner surface (D-1).** `apps/cli/src/learner.ts` wires the REAL OneKey gateway, the
+   REAL accessibility guardian, the REAL identity/consent/enrolment services and the durable
+   stores. `apps/cli/src/serve.ts` grew `startServer()` (the whole server minus the process
+   wiring, so the real routes can be driven over a real socket), `GET /learn`,
+   `POST /api/learn`, `POST /api/enrol` and the private `GET /api/audit`.
+   - `/api/learn` counts the guardian's interceptions: an emission the guardian did not
+     intercept exactly once is REFUSED, not shipped.
+   - `/api/enrol` never returns a credential secret; the guardian's secret is shown once,
+     when the token is issued.
+   - `/api/audit` is refused on a hosted instance and refused for any non-loopback peer.
+2. **Durability (D-2).** `packages/ledger/src/sqlite-private-store.ts` and
+   `durable-audit-log.ts` put the private records and the audit log in SQLite files under the
+   gitignored `.edugenesis-data/` inside the project. Both implement the EXISTING seams, so
+   the frozen contracts are UNCHANGED.
+3. **The durable audit trail (D-3).** `packages/identity/src/audit-sink.ts` describes the sink
+   structurally (no new package dependency). The sink mirrors the in-memory trail exactly: a
+   guardian grant refused for lack of authority still leaves NO trace, and the withdrawal
+   cascade is recorded too.
+4. **The gates were widened, not relaxed.** The form-semantics gate now assesses EVERY
+   shipped page (`listPublicPages`) instead of one named file, so the new learner page is
+   inside the gate's scope. Two negative fixtures lock it.
+5. **The real-browser accessibility check.** The `browse` extension path was unusable on this
+   machine (the relay fails to start and no browser is paired), so real Chrome was driven
+   directly over the DevTools Protocol: the accessibility tree named both controls, the Tab
+   order was walked with real key presses, every focused element showed a visible dual ring
+   (3px solid + 2px offset + a 5px shadow), and a real submission returned a real lesson with
+   the live region reading "Your lesson is ready." A SCREEN READER was not run, so that claim
+   stays UNVERIFIED - it is narrowed in the audit doc, not overstated.
+6. **Published and deployed.** `github.com/erpforgeafrica-dotcom/EDUGENESIS_OS` (public) and
+   `https://edugenesis-web-yju6.onrender.com`, deployed from the repository's own
+   `render.yaml` and verified from the outside: health 200, the learner screen 200, a real
+   lesson with `guarded: true`, and `/api/audit` **403** on the public instance.
+
+**A BLOCKER OUTSIDE THIS REPOSITORY:** the GitHub account is **billing-locked** ("The job was
+not started because your account is locked due to a billing issue"), so no CI job can start.
+The blueprint still declares `autoDeployTrigger: checksPass` - the guardrail was NOT weakened -
+but it cannot fire until the billing issue is fixed. The first deploy was applied by hand on a
+locally verified tree.
+
+**Verified:** `npm run build` 0; **551/551 tests**; `npm run verify` exit 0 - 18/18 gates, 0
+unverified, 168 shipped files, 191-file manifest, attestation PASS; `npm run verify:repro`
+**4/4 `same`**.
