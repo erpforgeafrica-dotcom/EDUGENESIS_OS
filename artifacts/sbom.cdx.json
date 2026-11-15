@@ -1,7 +1,7 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:1d9e8639-6fd1-52c4-86ac-be929cc779d8",
+  "serialNumber": "urn:uuid:9173ccc1-49f6-51b8-b2c1-9da533ab3b67",
   "version": 1,
   "metadata": {
     "timestamp": null,
@@ -239,7 +239,11 @@
     {
       "ref": "pkg:npm/@edugenesis/cli@0.1.0",
       "dependsOn": [
-        "pkg:npm/@edugenesis/contracts@0.1.0"
+        "pkg:npm/@edugenesis/accessibility@0.1.0",
+        "pkg:npm/@edugenesis/contracts@0.1.0",
+        "pkg:npm/@edugenesis/identity@0.1.0",
+        "pkg:npm/@edugenesis/ledger@0.1.0",
+        "pkg:npm/@edugenesis/onekey@0.1.0"
       ]
     },
     {

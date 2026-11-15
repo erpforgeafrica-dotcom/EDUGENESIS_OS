@@ -36,28 +36,28 @@
       "title": "no-pii-in-source",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no personal data found in 134 source file(s)"
+      "detail": "no personal data found in 142 source file(s)"
     },
     {
       "id": "no-provider-leak",
       "title": "no-provider-leak",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no provider reference outside packages/onekey in 103 source file(s)"
+      "detail": "no provider reference outside packages/onekey in 111 source file(s)"
     },
     {
       "id": "path-portability",
       "title": "path-portability",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no absolute path in 161 shipped file(s)"
+      "detail": "no absolute path in 168 shipped file(s)"
     },
     {
       "id": "design-token-governance",
       "title": "design-token-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no raw colour literal in 134 source file(s)"
+      "detail": "no raw colour literal in 142 source file(s)"
     },
     {
       "id": "contracts-baseline",
@@ -92,7 +92,7 @@
       "title": "form-semantics",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "every control is named, every hint is referenced, and status feedback is announced"
+      "detail": "every control on all 2 shipped page(s) is named, every hint is referenced, and status feedback is announced"
     },
     {
       "id": "adr-governance",
