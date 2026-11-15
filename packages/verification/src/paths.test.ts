@@ -14,7 +14,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { collectSourceFiles, readSourceFiles } from './paths.js';
+import { collectSourceFiles, listPublicPages, readSourceFiles } from './paths.js';
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'edugenesis-paths-'));
@@ -28,6 +28,32 @@ function fixture(): string {
   writeFileSync(join(root, 'packages', 'alpha', 'index.ts'), 'export const a = 1;\n', 'utf8');
   return root;
 }
+
+/**
+ * A tree with the shipped browser pages.
+ *
+ * WHY TWO PAGES: a gate that names ONE page and claims to police "the shipped
+ * UI" reports PASS when a second page ships and breaks every rule it enforces.
+ */
+function pagesFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'edugenesis-pages-'));
+  const publicDir = join(root, 'apps', 'cli', 'public');
+  mkdirSync(publicDir, { recursive: true });
+  writeFileSync(join(root, 'package.json'), '{"name":"edugenesis-os"}\n', 'utf8');
+  writeFileSync(join(publicDir, 'index.html'), '<!doctype html><html lang="en"></html>\n', 'utf8');
+  writeFileSync(join(publicDir, 'learn.html'), '<!doctype html><html lang="en"></html>\n', 'utf8');
+  writeFileSync(join(publicDir, 'app.js'), 'console.log(1);\n', 'utf8');
+  writeFileSync(join(publicDir, 'app.css'), ':root {}\n', 'utf8');
+  return root;
+}
+
+test('the public page list holds EVERY html page under apps/*/public, and nothing else', () => {
+  const root = pagesFixture();
+
+  const pages = listPublicPages(root);
+
+  assert.deepEqual(pages, ['apps/cli/public/index.html', 'apps/cli/public/learn.html']);
+});
 
 test('readSourceFiles reads a NAMED file, which a directory walker cannot', () => {
   const root = fixture();

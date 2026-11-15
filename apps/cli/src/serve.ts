@@ -11,8 +11,19 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
+import type { ProviderAdapter } from '@edugenesis/contracts';
 import { flagBoolean, flagString, parseArgs } from './args.js';
-import { displayPath, isMainModule, localOverridePath, PROJECT_ROOT, PUBLIC_DIR, TOKENS_PATH } from './paths.js';
+import { createLearnerServices, type LearnerServices } from './learner.js';
+import {
+  DATA_DIR,
+  displayPath,
+  ensureDataDir,
+  isMainModule,
+  localOverridePath,
+  PROJECT_ROOT,
+  PUBLIC_DIR,
+  TOKENS_PATH,
+} from './paths.js';
 import {
   deepMerge,
   describeApiKeys,
@@ -38,6 +49,10 @@ const CONTENT_TYPES: Record<string, string> = {
 const STATIC_ROUTES: Record<string, string> = {
   '/': 'index.html',
   '/index.html': 'index.html',
+  // The learner screen (owner decision D-1): a learner asks a question and
+  // receives a lesson.
+  '/learn': 'learn.html',
+  '/learn.html': 'learn.html',
   '/app.css': 'app.css',
   '/app.js': 'app.js',
   // The service worker must be served from the origin root: its scope is its
@@ -105,6 +120,37 @@ export function isHostedWriteRefused(
   pathname: string,
 ): boolean {
   return hosted && (method === 'POST' || method === 'PUT') && pathname.startsWith('/api/');
+}
+
+/**
+ * Decide whether a request may read the DURABLE AUDIT TRAIL.
+ *
+ * WHY THIS IS STRICTER THAN THE SETTINGS SURFACE
+ *   The settings endpoint is a configuration surface. The audit trail is
+ *   EVIDENCE about a named learner and a named guardian — who consented, when,
+ *   and on what authority. It is private-only evidence (Module-Perfection Law
+ *   §12.4): a public visitor must never see it, and a hosted instance — which
+ *   is on the open internet — must never serve it at all, not even to a
+ *   loopback peer, because a hosted instance's "loopback" is the platform
+ *   proxy's own loopback.
+ *
+ * Pure and exported so the policy is unit-tested without opening a socket.
+ */
+export function authorizeAuditAccess(
+  hosted: boolean,
+  remoteAddress: string | undefined,
+): { allowed: boolean; reason?: string } {
+  if (hosted) {
+    return {
+      allowed: false,
+      reason: 'The audit trail is private evidence and is never exposed on a hosted instance.',
+    };
+  }
+  if (isLoopback(remoteAddress)) return { allowed: true };
+  return {
+    allowed: false,
+    reason: 'The audit trail is private evidence: only a loopback client may read it.',
+  };
 }
 
 /** The request facts a settings-write decision is made from. */
@@ -273,20 +319,51 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(raw);
 }
 
-/** Start the local server. Resolves when the server stops. */
-export async function main(argv: readonly string[]): Promise<number> {
-  const args = parseArgs(argv);
+/** Options for `startServer`. */
+export interface ServeOptions {
+  readonly host?: string;
+  readonly port?: number;
+  readonly hosted?: boolean;
+  /** Where the durable stores live. Created if absent. */
+  readonly dataDir?: string;
+  /** Provider adapters to register on the learner gateway. */
+  readonly adapters?: readonly ProviderAdapter[];
+  /** A ready-made learner surface. Supplied by tests; built here otherwise. */
+  readonly learnerServices?: LearnerServices;
+}
+
+/** A running server. */
+export interface ServeHandle {
+  readonly host: string;
+  readonly port: number;
+  readonly url: string;
+  /** Stop the server and release the durable stores. */
+  close(): Promise<void>;
+}
+
+/**
+ * Start the server.
+ *
+ * WHY IT IS SEPARATE FROM `main`: a route that can only be reached by running
+ * the CLI cannot be tested. `startServer` is the whole server minus the
+ * process wiring, so a test can drive the REAL routes over a REAL socket on
+ * an ephemeral port — the only way to prove that a learner question really
+ * reaches the gateway and really comes back through the guardian.
+ */
+export async function startServer(options: ServeOptions = {}): Promise<ServeHandle> {
+  const hosted = options.hosted ?? false;
+  const host = options.host ?? '127.0.0.1';
+  const port = options.port ?? 0;
+  const dataDir = ensureDataDir(options.dataDir ?? DATA_DIR);
+  const ownsLearner = options.learnerServices === undefined;
+  const learner =
+    options.learnerServices ??
+    createLearnerServices({ dataDir, adapters: options.adapters ?? [] });
   const loaded = loadSettings();
   // Hosted mode exists for the Render deployment. It widens WHO may connect
-  // (the platform's proxy is never loopback) and narrows WHAT may be written
+  // (the platform proxy is never loopback) and narrows WHAT may be written
   // (settings become read-only). It is opt-in, so a laptop is never exposed by
   // accident.
-  const hosted = flagBoolean(args, 'hosted') || process.env['EDUGENESIS_HOSTED'] === '1';
-  const envPort = process.env['PORT'];
-  const host = flagString(args, 'host') ?? (hosted ? '0.0.0.0' : loaded.settings.server.host);
-  const port = Number(
-    flagString(args, 'port') ?? (hosted && envPort ? envPort : String(loaded.settings.server.port)),
-  );
   // The only file this process may write. Named through the accessor rather
   // than the constant so the rule has one definition (see paths.ts).
   const writeTarget = localOverridePath();
@@ -331,6 +408,148 @@ export async function main(argv: readonly string[]): Promise<number> {
         settingsFile,
         settingsSchemaVersion: schemaVersion,
         time: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // ---- the learner question (D-1) -------------------------------------
+    if (pathname === '/api/learn') {
+      if (method !== 'POST') {
+        sendJson(response, 405, { ok: false, error: 'Use POST.' });
+        return;
+      }
+      let body: unknown;
+      try {
+        body = await readBody(request);
+      } catch (error) {
+        sendJson(response, 400, {
+          ok: false,
+          error: `Could not read the request body: ${(error as Error).message}`,
+        });
+        return;
+      }
+      const prompt = isPlainObject(body) ? String(body['prompt'] ?? '') : '';
+      if (prompt.trim().length === 0) {
+        sendJson(response, 400, { ok: false, error: 'Ask a question to get a lesson.' });
+        return;
+      }
+      try {
+        const answer = await learner.answer(prompt.trim());
+        if (answer.blocked) {
+          // The guardian did not intercept the emission exactly once, so the
+          // text must NOT ship. A lesson that skipped the guardian is not a
+          // lesson this platform may deliver.
+          sendJson(response, 502, {
+            ok: false,
+            error: 'That answer could not be prepared for delivery. Please try again.',
+          });
+          return;
+        }
+        sendJson(response, 200, {
+          ok: true,
+          text: answer.text,
+          tier: answer.tier,
+          guarded: answer.guarded,
+        });
+      } catch {
+        // The learner must never see an operations term: no provider name, no
+        // quota, no credit, no outage (Doc 16 §6.6).
+        sendJson(response, 502, {
+          ok: false,
+          error: 'A lesson is not available right now. Please try again shortly.',
+        });
+      }
+      return;
+    }
+
+    // ---- enrolment (D-1) ------------------------------------------------
+    if (pathname === '/api/enrol') {
+      if (method !== 'POST') {
+        sendJson(response, 405, { ok: false, error: 'Use POST.' });
+        return;
+      }
+      let body: unknown;
+      try {
+        body = await readBody(request);
+      } catch (error) {
+        sendJson(response, 400, {
+          ok: false,
+          error: `Could not read the request body: ${(error as Error).message}`,
+        });
+        return;
+      }
+      const payload = isPlainObject(body) ? body : {};
+      const action = String(payload['action'] ?? '');
+      try {
+        if (action === 'register-guardian') {
+          const guardianId = String(payload['guardianId'] ?? '');
+          const learnerId = String(payload['learnerId'] ?? '');
+          if (guardianId.length === 0 || learnerId.length === 0) {
+            sendJson(response, 400, {
+              ok: false,
+              error: 'A guardian id and a learner id are required.',
+            });
+            return;
+          }
+          const guardian = learner.registerGuardian(guardianId);
+          const issued = learner.issueConsentToken(guardianId, learnerId);
+          // The secrets are shown ONCE, to the guardian who owns them. They are
+          // never stored, never logged, and never returned by an enrolment.
+          sendJson(response, 200, {
+            ok: true,
+            guardianId: guardian.guardianId,
+            token: issued.token,
+            secret: issued.secret,
+          });
+          return;
+        }
+        if (action === 'enrol') {
+          const learnerId = String(payload['learnerId'] ?? '');
+          const token = payload['token'];
+          const secret = String(payload['secret'] ?? '');
+          if (learnerId.length === 0 || token === undefined || secret.length === 0) {
+            sendJson(response, 400, {
+              ok: false,
+              error: 'A learner id, a consent token and its secret are required.',
+            });
+            return;
+          }
+          const outcome = await learner.enrol(learnerId, token, secret);
+          sendJson(response, 200, {
+            ok: true,
+            provisional: outcome.provisional,
+            method: outcome.method,
+            grantedScopes: outcome.grantedScopes,
+          });
+          return;
+        }
+        sendJson(response, 400, { ok: false, error: 'Unknown enrolment action.' });
+      } catch (error) {
+        const refusal = error instanceof Error ? error.message : String(error);
+        sendJson(response, 400, { ok: false, error: refusal });
+      }
+      return;
+    }
+
+    // ---- the private audit trail (D-3) ----------------------------------
+    if (pathname === '/api/audit') {
+      const auditAccess = authorizeAuditAccess(hosted, request.socket.remoteAddress);
+      if (!auditAccess.allowed) {
+        sendJson(response, 403, {
+          ok: false,
+          error: auditAccess.reason ?? 'This request may not read the audit trail.',
+        });
+        return;
+      }
+      if (method !== 'GET') {
+        sendJson(response, 405, { ok: false, error: 'Use GET.' });
+        return;
+      }
+      const trail = learner.auditTrail();
+      sendJson(response, 200, {
+        ok: true,
+        verification: trail.verification,
+        events: trail.events,
       });
       return;
     }
@@ -457,15 +676,52 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   const address = server.address();
   const actualPort = typeof address === 'object' && address !== null ? address.port : port;
-  process.stdout.write(`EduGenesis OS — local server listening on http://${host}:${actualPort}\n`);
-  process.stdout.write(`Settings UI: http://${host}:${actualPort}/\n`);
-  process.stdout.write(`Settings written to: ${displayPath(writeTarget)}\n`);
+
+  return {
+    host,
+    port: actualPort,
+    url: `http://${host}:${actualPort}`,
+    async close(): Promise<void> {
+      await new Promise<void>((resolvePromise) => {
+        server.close(() => resolvePromise());
+      });
+      if (ownsLearner) learner.close();
+    },
+  };
+}
+
+/**
+ * `eg serve` — the CLI entry point.
+ *
+ * WHY IT IS SEPARATE FROM `startServer`: the CLI owns the process (flags,
+ * environment, signals, the message the operator reads); `startServer` owns
+ * the routes. A test drives `startServer`; a human runs `main`.
+ */
+export async function main(argv: readonly string[]): Promise<number> {
+  const args = parseArgs(argv);
+  const loaded = loadSettings();
+  // Hosted mode exists for the Render deployment. It widens WHO may connect
+  // (the platform proxy is never loopback) and narrows WHAT may be written
+  // (settings become read-only). It is opt-in, so a laptop is never exposed by
+  // accident.
+  const hosted = flagBoolean(args, 'hosted') || process.env['EDUGENESIS_HOSTED'] === '1';
+  const envPort = process.env['PORT'];
+  const host = flagString(args, 'host') ?? (hosted ? '0.0.0.0' : loaded.settings.server.host);
+  const port = Number(
+    flagString(args, 'port') ?? (hosted && envPort ? envPort : String(loaded.settings.server.port)),
+  );
+
+  const server = await startServer({ host, port, hosted });
+  process.stdout.write(`EduGenesis OS — local server listening on ${server.url}\n`);
+  process.stdout.write(`Settings UI: ${server.url}/\n`);
+  process.stdout.write(`Learner screen: ${server.url}/learn\n`);
+  process.stdout.write(`Settings written to: ${displayPath(localOverridePath())}\n`);
   process.stdout.write('Press Ctrl+C to stop.\n');
 
   await new Promise<void>((resolvePromise) => {
     const stop = (): void => {
       process.stdout.write('\nStopping the local server.\n');
-      server.close(() => resolvePromise());
+      void server.close().then(() => resolvePromise());
     };
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);

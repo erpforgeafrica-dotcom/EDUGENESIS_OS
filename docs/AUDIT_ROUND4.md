@@ -229,8 +229,8 @@ duplicate = 16 (4 major, 12 minor); F6 33−3 duplicates−5 verdicts = 25 (3 bl
 reconcile with the digests and is corrected here.
 
 **After the Batch A and evidence repairs in this tree** (derivation shown so it can be re-checked):
-- Round-3 corpus: **56 open of 85** — 2 blockers (F0-01, F0-03), 21 majors, 33 minors.
-  `reconciliation.closed_ids` holds 29.
+- Round-3 corpus: **54 open of 85** — 0 blockers, 21 majors, 33 minors.
+  `reconciliation.closed_ids` holds 31.
 - Round-4 first-hand corpus: **0 open of 6** — the two findings that were open (the secrets scan
   skipping the published artifacts and never reading git history, and the coverage gate hard-coding
   six gateway paths) are both closed; the other four were closed earlier. Closed in this tree:
@@ -241,7 +241,25 @@ reconcile with the digests and is corrected here.
   F2-02, F2-03, and in this batch F6-03 (D-5 unverified-gate semantics) and F6-04 (detector
   widening plus the documentation scope). The reviewer rows F6-05 and F6-08 duplicated F6-R4-02
   and F6-R4-03; they were never counted as open and are resolved with their first-hand IDs.
-- Combined: **92 open - 2 blockers, 34 majors, 56 minors** (56 + 0 + 36).
+- Combined: **90 open - 0 blockers, 34 majors, 56 minors** (54 + 0 + 36).
+
+**AND NOW THE PRODUCT BLOCKERS ARE CLOSED TOO (owner decision D-1, 2026-11-13 — "build it
+now").** F0-01 and F0-03 were the last two open blockers in the round-3 corpus: the server
+exposed a health check and a settings API and nothing else, and the enrolment service had no
+runtime caller. Both are now closed in code:
+- **F0-01** — the server serves a learner runtime. `GET /learn` serves the learner screen;
+  `POST /api/learn` runs the REAL OneKey gateway with the REAL accessibility guardian and counts
+  the interception (an emission the guardian did not intercept exactly once is refused, not
+  shipped). Proven by a test that drives the real route over a real socket.
+- **F0-03** — the enrolment service has a runtime caller. `POST /api/enrol` registers a guardian,
+  issues the single-use consent token and enrols the learner; the response never carries a
+  credential secret, and the decision is written to the durable audit log (D-3).
+- The accessibility gates were widened at the same time, so the NEW page is inside their scope
+  rather than beside it.
+
+**THEREFORE: no audit finding in this register remains open at BLOCKER severity.** What remains
+open is 34 majors and 56 minors, plus the two claims no source review can settle (runtime
+accessibility, and the runtime experience itself).
 
 The machine record is `docs/gap-register.json` for the round-3 corpus and the six R4 IDs the
 register names; the 41 reviewer rows live in the two digest files cited above, and their bodies
@@ -365,13 +383,29 @@ Batch E — accessibility:
     11 wired by their owning control and 0 orphans, 18 distinct idref targets). Runtime claim
     (a screen reader announces the hint) stays UNVERIFIED — no screen-reader run.
 
-Owner decisions (cannot be closed by code):
-19. **D-1 Runtime:** build the learner route now, or hold for Slice 1 (recommended) with the
-    wiring as Slice 1's first exit criterion. Closes F0-01 + F0-03.
-20. **D-2 Durability:** `node:sqlite` adapter vs in-memory pilot — changes frozen contracts.
-    Closes F8-04, F5-01, and enables shared kill switch / circuit (F3-11, F8-11, F3-36).
-21. **D-3 Durable audit log** for consent and enrolment (Child Safeguarding + Legal).
-22. **D-4 Appoint Chief Systems Architect** (VACANT; Founder & CEO).
+Owner decisions (cannot be closed by code) — **ALL FOUR TAKEN 2026-11-13:**
+19. **D-1 Runtime: BUILD IT NOW.** The learner route and the enrolment path are wired into the
+    running server, not held for Slice 1. Closes F0-01 + F0-03.
+20. **D-2 Durability: `node:sqlite`.** A SQLite file behind the EXISTING repository seams — the
+    frozen contracts are UNCHANGED, because the durable store implements `PrivateStore` rather
+    than replacing it. Closes F8-04, F5-01, and enables the shared kill switch / circuit
+    (F3-11, F8-11, F3-36).
+21. **D-3 Durable audit log: YES.** An append-only, hash-chained audit log for consent and
+    enrolment, persisted to SQLite (Child Safeguarding + Legal).
+22. **D-4 Chief Systems Architect: THE FOUNDER & CEO TAKES THE SEAT.** The vacancy is filled by
+    the owner; the role is no longer an open blocker.
+
+**HOW D-3 IS WIRED, AND WHY IT MIRRORS THE IN-MEMORY TRAIL.** The identity package depends only
+on the contracts, so the durable log is described by a LOCAL structural interface (`AuditSink`)
+rather than a new package dependency. The sink receives the same events the service already
+records — opaque ids, a kind, a flat detail bag — and never a credential secret: a test asserts
+the secret never reaches it. Two properties were preserved deliberately:
+- **A guardian grant refused for lack of authority leaves NO trace, durable or not.** The
+  service authorises *before* it records, so a refusal cannot later be read as consent. A
+  hash-chained log is easier to read as evidence than an in-memory array, so writing refusals
+  into it would be MORE dangerous, not less.
+- **The withdrawal CASCADE is durable too** — every dependent scope that got locked is part of
+  the evidence, not just the scope the learner acted on.
 
 ---
 

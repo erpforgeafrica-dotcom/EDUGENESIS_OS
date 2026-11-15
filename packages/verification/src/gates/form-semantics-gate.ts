@@ -25,14 +25,21 @@
  * The runtime claim (a screen reader reads the hint) stays UNVERIFIED by this
  * gate; the audit records that separately.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import type { Gate, GateContext, GateResult } from '../types.js';
+import { listPublicPages } from '../paths.js';
 
 const GATE_ID = 'form-semantics';
 
-/** The settings page that ships with the local server. */
+/**
+ * The settings page that ships with the local server.
+ *
+ * KEPT FOR COMPATIBILITY ONLY: the gate no longer reads one named page — it
+ * discovers every shipped page (`listPublicPages`). Naming a page here is how
+ * the gate's scope used to shrink below its claim.
+ */
 export const SETTINGS_PAGE = 'apps/cli/public/index.html';
 
 export interface FormSemanticsAssessment {
@@ -210,30 +217,53 @@ export function assessFormSemantics(html: string): FormSemanticsAssessment {
 
 export const formSemanticsGate: Gate = {
   id: GATE_ID,
-  title: 'Every settings control is named, and every hint is announced with its control',
+  title: 'Every control on EVERY shipped page is named, and every hint is announced with its control',
   severity: 'blocker',
   async run(ctx: GateContext): Promise<GateResult> {
-    const abs = join(ctx.root, SETTINGS_PAGE);
-    if (!existsSync(abs)) {
+    // EVERY shipped page, discovered — never a named file.
+    //
+    // WHY: the gate used to read one page (the settings page) while its claim
+    // was about the shipped UI. The learner screen is the second page; a gate
+    // that reads only the first would report PASS while the new page breaks
+    // every rule the gate enforces. That is the same defect class as F6-R4-03
+    // (a coverage list that named paths instead of deriving them).
+    const pages = listPublicPages(ctx.root);
+    if (pages.length === 0) {
       return {
         id: GATE_ID,
         passed: false,
         severity: 'warning',
-        detail: `the settings page ${SETTINGS_PAGE} was not found, so form semantics cannot be evaluated`,
-        evidence: [`${SETTINGS_PAGE}: MISSING`],
+        detail: 'no shipped html page was found, so form semantics cannot be evaluated',
+        evidence: ['apps/*/public: no .html file found'],
       };
     }
 
-    const html = readFileSync(abs, 'utf8');
-    const assessment = assessFormSemantics(html);
+    const findings: string[] = [];
+    const evidence: string[] = [`shipped pages assessed: ${String(pages.length)}`];
 
-    if (!assessment.passed) {
+    for (const relPath of pages) {
+      const abs = join(ctx.root, relPath);
+      let html: string;
+      try {
+        html = readFileSync(abs, 'utf8');
+      } catch {
+        findings.push(`${relPath}: the page could not be read, so it could not be assessed`);
+        continue;
+      }
+      const assessment = assessFormSemantics(html);
+      for (const finding of assessment.findings) {
+        findings.push(`${relPath}: ${finding}`);
+      }
+      evidence.push(`${relPath}: ${assessment.evidence.join(', ')}`);
+    }
+
+    if (findings.length > 0) {
       return {
         id: GATE_ID,
         passed: false,
         severity: 'blocker',
-        detail: `${String(assessment.findings.length)} form-semantics requirement(s) are not met`,
-        evidence: [...assessment.evidence, ...assessment.findings.map((finding) => `FAIL: ${finding}`)],
+        detail: `${String(findings.length)} form-semantics requirement(s) are not met`,
+        evidence: [...evidence, ...findings.map((finding) => `FAIL: ${finding}`)],
       };
     }
 
@@ -241,8 +271,8 @@ export const formSemanticsGate: Gate = {
       id: GATE_ID,
       passed: true,
       severity: 'blocker',
-      detail: 'every control is named, every hint is referenced, and status feedback is announced',
-      evidence: assessment.evidence,
+      detail: `every control on all ${String(pages.length)} shipped page(s) is named, every hint is referenced, and status feedback is announced`,
+      evidence,
     };
   },
 };

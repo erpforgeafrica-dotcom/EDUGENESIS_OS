@@ -40,6 +40,8 @@ import type {
   Principal,
 } from '@edugenesis/contracts';
 
+import type { AuditSink } from './audit-sink.js';
+
 /** Every sharing surface the platform knows about. */
 export const CONSENT_SCOPES: readonly ConsentScope[] = [
   'progress_visible_to_guardian',
@@ -159,6 +161,18 @@ export interface ConsentServiceOptions {
    * refusal instead of a recorded grant.
    */
   readonly identity?: { get(id: string): Principal | undefined };
+  /**
+   * The DURABLE audit sink (owner decision D-3).
+   *
+   * WHY IT IS OPTIONAL: the in-memory trail below is the service's own record
+   * and always exists. The sink is the copy that survives a restart and can be
+   * verified as an unbroken chain. A deployment that wants durable evidence
+   * supplies a sink; a library consumer that does not is unaffected.
+   *
+   * WHY IT CARRIES NO SECRET: the sink receives opaque ids and a flat detail
+   * bag — never a name, an address, a telephone number or a credential.
+   */
+  readonly auditLog?: AuditSink;
 }
 
 export interface ConsentService extends ConsentServiceContract {
@@ -221,6 +235,7 @@ function transitiveDependents(scope: ConsentScope): readonly ConsentScope[] {
 export function createConsentService(opts: ConsentServiceOptions = {}): ConsentService {
   const actor = opts.actor ?? 'learner';
   const now = opts.now ?? (() => new Date());
+  const sink = opts.auditLog;
   const stateByLearner = new Map<string, Map<ConsentScope, ScopeState>>();
   const auditByLearner = new Map<string, ConsentAuditEvent[]>();
 
@@ -251,10 +266,11 @@ export function createConsentService(opts: ConsentServiceOptions = {}): ConsentS
     at: string,
     extra?: { cause?: ConsentScope; learnerAssent?: boolean },
   ): void {
+    const recordedAt = now().toISOString();
     const trail = auditByLearner.get(learnerId) ?? [];
     trail.push({
       at,
-      recordedAt: now().toISOString(),
+      recordedAt,
       learnerId,
       scope,
       event,
@@ -263,6 +279,32 @@ export function createConsentService(opts: ConsentServiceOptions = {}): ConsentS
       ...(extra?.learnerAssent === undefined ? {} : { learnerAssent: extra.learnerAssent }),
     });
     auditByLearner.set(learnerId, trail);
+
+    // The durable copy (owner decision D-3). The sink must never throw the
+    // decision away: a decision that cannot be recorded durably is still a
+    // decision, so a sink failure is swallowed rather than turned into a
+    // refusal — but the sink itself is expected to report its own failure.
+    if (sink) {
+      try {
+        sink.append(`consent.${event}`, {
+          actorId: eventActor === 'guardian' ? (opts.actorId ?? learnerId) : learnerId,
+          subjectId: learnerId,
+          detail: {
+            scope,
+            event,
+            actor: eventActor,
+            at,
+            recordedAt,
+            ...(extra?.cause ? { cause: extra.cause } : {}),
+            ...(extra?.learnerAssent === undefined ? {} : { learnerAssent: extra.learnerAssent }),
+          },
+        });
+      } catch {
+        // The in-memory trail above already holds the evidence. A durable sink
+        // that fails is a deployment problem, reported by the sink's own
+        // health check — not a reason to pretend the consent did not happen.
+      }
+    }
   }
 
   /**

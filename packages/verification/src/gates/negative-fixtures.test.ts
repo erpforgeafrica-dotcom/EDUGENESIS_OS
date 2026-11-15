@@ -22,7 +22,7 @@ import { pwaLightDefaultGate } from './pwa-light-default-gate.js';
 import { adrGovernanceGate } from './adr-governance-gate.js';
 import { assessConsentTransition } from './consent-gate.js';
 import { assessFocusVisibility } from './keyboard-focus-gate.js';
-import { assessFormSemantics } from './form-semantics-gate.js';
+import { assessFormSemantics, formSemanticsGate } from './form-semantics-gate.js';
 
 /** Create a throwaway project root with one file at `relPath`. */
 function treeWith(relPath: string, content: string): string {
@@ -723,4 +723,47 @@ test('form-semantics gate: a page with no live region fails', () => {
 test('form-semantics gate: the complete settings page passes', () => {
   const verdict = assessFormSemantics(GOOD_FORM_HTML);
   assert.equal(verdict.passed, true, `unexpected findings: ${verdict.findings.join(' | ')}`);
+});
+
+/**
+ * A tree with TWO shipped pages.
+ *
+ * WHY TWO: the gate used to name ONE page (the settings page) while its claim
+ * was about "the shipped UI". The moment a second page ships, a gate that
+ * reads only the first reports PASS while the new page breaks every rule the
+ * gate enforces. These fixtures lock the widened scope.
+ */
+function treeWithTwoPages(goodPage: string, secondPage: string): string {
+  const root = mkdtempSync(join(tmpdir(), 'edugenesis-pages-'));
+  const publicDir = join(root, 'apps', 'cli', 'public');
+  mkdirSync(publicDir, { recursive: true });
+  writeFileSync(join(root, 'package.json'), '{"name":"edugenesis-os"}\n', 'utf8');
+  writeFileSync(join(publicDir, 'index.html'), goodPage, 'utf8');
+  writeFileSync(join(publicDir, 'learn.html'), secondPage, 'utf8');
+  return root;
+}
+
+test('form-semantics gate: a SECOND shipped page that breaks the rules fails the gate', async () => {
+  const broken = GOOD_FORM_HTML.replace(' aria-describedby="hint-server-port"', '');
+  const root = treeWithTwoPages(GOOD_FORM_HTML, broken);
+
+  const result = await formSemanticsGate.run({ root });
+
+  assert.equal(result.passed, false, 'a broken second page must fail the gate');
+  assert.ok(
+    result.evidence.some((line) => line.includes('learn.html')),
+    `the gate must name the broken page: ${result.evidence.join(' | ')}`,
+  );
+});
+
+test('form-semantics gate: every shipped page passes when every shipped page is good', async () => {
+  const root = treeWithTwoPages(GOOD_FORM_HTML, GOOD_FORM_HTML);
+
+  const result = await formSemanticsGate.run({ root });
+
+  assert.equal(result.passed, true, `unexpected findings: ${result.evidence.join(' | ')}`);
+  assert.ok(
+    result.evidence.some((line) => line.includes('learn.html')),
+    'the evidence must show that the second page was assessed too',
+  );
 });

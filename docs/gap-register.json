@@ -37,8 +37,10 @@
       "evidence": "grep -n \"pathname ===|pathname.startsWith\" apps/cli/src/serve.ts -> 3 matches (/api/health:217, /api/settings:247, /assets/edugenesis-tokens.css:310); grep -rn \"@edugenesis/(onekey|ledger|identity|accessibility)\" apps/ -> 4 matches, all in apps/cli/src/selftest.ts",
       "failure_mode": "Every learner-path guarantee in this build is a property of a library that no learner can reach. A reviewer or sponsor who reads the proposal and then runs the product finds a settings page.",
       "fix": "Disclose the slice boundary in the README (done) and open a named Slice 1 item to wire the gateway to a route. Do not claim a learner runtime for Slice 0.",
-      "closable": null,
-      "status": "PROVEN",
+      "closable": "code",
+      "status": "CLOSED",
+      "closure": "CLOSED by owner decision D-1 (2026-11-13, 'build it now'): the server now serves a LEARNER RUNTIME. GET /learn serves the learner screen (apps/cli/public/learn.html); POST /api/learn runs the REAL OneKey gateway with the REAL accessibility guardian and counts the interception - an emission the guardian did not intercept exactly once is REFUSED, not shipped; the answer carries the tier that served it. The route is driven end to end in apps/cli/src/serve.test.ts over a real socket ('a learner question is answered by the real gateway, guarded exactly once'). The accessibility gates now assess EVERY shipped page rather than one named file, so the new page cannot slip past them.",
+      "closure_evidence": "apps/cli/src/learner.ts (the learner surface), apps/cli/src/serve.ts (startServer + the /api/learn route), apps/cli/public/learn.html (the screen), apps/cli/src/serve.test.ts (the live route tests).",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
@@ -57,8 +59,10 @@
       "evidence": "grep -rn 'createEnrolmentService|enrolWithGuardianConsent|issueGuardianConsentToken' -> 46 matches, every one inside packages/identity/src/enrolment.ts or its test file",
       "failure_mode": "The criterion is satisfied at library level and not at system level. A learner cannot enrol because there is no enrolment route to call.",
       "fix": "Disclosed in the README (done). The route is a Slice 1 item and is named as one.",
-      "closable": null,
-      "status": "PROVEN",
+      "closable": "code",
+      "status": "CLOSED",
+      "closure": "CLOSED by owner decision D-1 (2026-11-13, 'build it now'): the enrolment service now HAS a runtime caller. POST /api/enrol registers a guardian, issues the single-use consent token and enrols the learner through the REAL createEnrolmentService - the presented token is matched against the issued one, the guardian's credential is verified, and the enrolment lands with the scopes the guardian authorised. The response NEVER carries a credential secret: the guardian's secret is shown once, when the token is issued, and an enrolment response carries only the provisional flag, the method and the granted scopes. The enrolment decision is written to the DURABLE audit log (owner decision D-3), so the record of who consented, when and on what authority survives a restart.",
+      "closure_evidence": "apps/cli/src/learner.ts (registerGuardian, issueConsentToken, enrol), apps/cli/src/serve.ts (the /api/enrol route), apps/cli/src/serve.test.ts ('the enrolment route enrols a learner on a guardian consent token' - which also asserts the response carries no secret).",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
@@ -1778,7 +1782,9 @@
     "at": "2026-11-13",
     "head": "677f415fddc1b680a089c211cd696ea8f105aabc",
     "closed_ids": [
+      "F0-01",
       "F0-02",
+      "F0-03",
       "F0-07",
       "F1-01",
       "F1-02",
@@ -1809,15 +1815,12 @@
       "F8-10"
     ],
     "open_counts": {
-      "blocker": 2,
+      "blocker": 0,
       "major": 21,
       "minor": 33,
-      "total": 56
+      "total": 54
     },
-    "open_blockers": [
-      "F0-01",
-      "F0-03"
-    ],
+    "open_blockers": [],
     "superseded": {
       "F3-12": "F8-06 (destination, not scheme)",
       "F1-01": "F6-R4-01 (reproducibility)",

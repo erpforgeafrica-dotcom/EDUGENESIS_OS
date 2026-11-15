@@ -7,7 +7,7 @@
  * from the project root discovered by walking up from it. No absolute path,
  * user name or drive letter is ever written into a source file.
  */
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -49,6 +49,28 @@ export const SETTINGS_DIR = join(PROJECT_ROOT, 'settings');
 
 /** The committed default settings file. The CLI never writes to it. */
 export const DEFAULT_SETTINGS_PATH = join(SETTINGS_DIR, 'settings.json');
+
+/**
+ * `.edugenesis-data/` — the runtime data directory (owner decision D-2).
+ *
+ * WHY IT IS INSIDE THE PROJECT: the portability law (GLOBAL.md §9) requires a
+ * copy of this folder to run anywhere, with no machine-specific path. A data
+ * directory beside the code is portable; a directory under the user's profile
+ * is not. It is gitignored, because it holds learner records.
+ */
+export const DATA_DIR = join(PROJECT_ROOT, '.edugenesis-data');
+
+/**
+ * Create the runtime data directory if it does not exist, and return it.
+ *
+ * WHY IT IS CREATED ON DEMAND: the server may run on a fresh copy of the
+ * folder, and a missing directory must never be the reason a learner gets no
+ * answer.
+ */
+export function ensureDataDir(dir: string = DATA_DIR): string {
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
 
 /** The untracked local override. This is where the CLI writes. */
 export const LOCAL_SETTINGS_PATH = join(SETTINGS_DIR, 'settings.local.json');

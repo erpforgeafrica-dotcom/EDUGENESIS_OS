@@ -281,6 +281,32 @@ function walk(dir: string, out: string[]): void {
 }
 
 /**
+ * EVERY html page the product ships to a browser.
+ *
+ * WHY THIS EXISTS: a gate that names ONE page while its claim is about "the
+ * shipped UI" reports PASS the moment a second page ships. The learner screen
+ * is the second page, so the page list must be DISCOVERED, never named.
+ *
+ * The result is the repo-relative POSIX path of every `.html` file under
+ * `apps/*\/public`, sorted, so a report line is stable across runs.
+ */
+export function listPublicPages(root: string): string[] {
+  const out: string[] = [];
+  for (const publicDir of listWorkspacePublicDirs(root)) {
+    const absDir = join(root, publicDir);
+    if (!existsSync(absDir)) continue;
+    const candidates: string[] = [];
+    walk(absDir, candidates);
+    for (const absPath of candidates) {
+      if (!absPath.toLowerCase().endsWith('.html')) continue;
+      out.push(relativePosix(root, absPath));
+    }
+  }
+  out.sort();
+  return out;
+}
+
+/**
  * Read every scannable source file under the given project-relative folders.
  */
 export function collectSourceFiles(root: string, relDirs: readonly string[]): SourceFile[] {

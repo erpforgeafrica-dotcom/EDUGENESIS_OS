@@ -47,6 +47,7 @@ import { randomBytes } from 'node:crypto';
 
 import type { ConsentScope, Principal, Role } from '@edugenesis/contracts';
 
+import type { AuditSink } from './audit-sink.js';
 import type { ConsentService } from './consent.js';
 import type { LocalIdentityService } from './identity.js';
 
@@ -192,6 +193,18 @@ export interface EnrolmentServiceOptions {
    * recorded as unverified and never becomes an authorisation attribute.
    */
   readonly ageAssurance?: AgeAssurance;
+  /**
+   * The DURABLE audit sink (owner decision D-3).
+   *
+   * WHY IT IS OPTIONAL: `auditTrail()` above is the service's own in-process
+   * record and always exists. The sink is the copy that survives a restart and
+   * can be verified as an unbroken chain.
+   *
+   * WHY IT CARRIES NO SECRET: the event carries opaque ids, the method, the
+   * outcome and the reason — never the guardian's credential secret and never
+   * the issued token's secret.
+   */
+  readonly auditLog?: AuditSink;
 }
 
 /** The age-assurance seam. The ceremony itself is a Slice 1 integration. */
@@ -238,6 +251,7 @@ function parseStringList(value: unknown): string[] {
 export function createEnrolmentService(options: EnrolmentServiceOptions): EnrolmentService {
   const { identity, consent } = options;
   const clock = options.now ?? ((): Date => new Date());
+  const sink = options.auditLog;
 
   const audit: EnrolmentAuditEvent[] = [];
   /**
@@ -256,6 +270,34 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
 
   function record(event: EnrolmentAuditEvent): void {
     audit.push(event);
+
+    // The durable copy (owner decision D-3). The event carries opaque ids, the
+    // method, the outcome and the reason — never a credential secret and never
+    // the issued token's secret.
+    if (sink) {
+      try {
+        sink.append(
+          event.outcome === 'enrolled' ? 'enrolment.enrolled' : 'enrolment.refused',
+          {
+            actorId: event.guardianId ?? event.subjectId,
+            subjectId: event.subjectId,
+            detail: {
+              method: event.method,
+              outcome: event.outcome,
+              provisional: event.provisional,
+              at: event.at,
+              reason: event.detail,
+              ...(event.guardianId ? { guardianId: event.guardianId } : {}),
+              ...(event.consentTokenId ? { consentTokenId: event.consentTokenId } : {}),
+            },
+          },
+        );
+      } catch {
+        // The in-memory trail above already holds the evidence. A durable sink
+        // that fails is a deployment problem, reported by the sink's own health
+        // check — not a reason to pretend the enrolment did not happen.
+      }
+    }
   }
 
   function refuse(reason: string, method: EnrolmentMethod, subjectId: string, extra?: Partial<EnrolmentAuditEvent>): never {

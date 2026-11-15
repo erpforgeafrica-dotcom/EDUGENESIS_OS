@@ -9,13 +9,18 @@
  *                   published artefact
  *   ledger-store.ts the public, append-only, hash-chained ledger
  *   private-store.ts the private operational store and its de-identified view
+ *   sqlite-private-store.ts the DURABLE (file backed) private store
+ *   durable-audit-log.ts the DURABLE, hash-chained audit log for consent and
+ *                   enrolment events
  *   reinvestment.ts the 60 % reinvestment engine (integer minor units)
  *   sponsor-report.ts the aggregate, privacy-reviewed artefact the Anchor
  *                   Sponsor receives
  *
  * The public ledger and the private store never touch: there is no code path
  * from `private-store.ts` to `ledger-store.ts`, and `private-store.ts` does not
- * import it (Doc 2 §2.5, §15; Doc 16 §3.5).
+ * import it (Doc 2 §2.5, §15; Doc 16 §3.5). The same separation holds for the
+ * two durable modules: `sqlite-private-store.ts` and `durable-audit-log.ts`
+ * import neither `ledger-store.ts` nor each other's private data.
  */
 
 export {
@@ -63,6 +68,18 @@ export {
   type SponsorRedactionOptions,
   type SponsorRedactionRegion,
 } from './private-store.js';
+
+export {
+  createSqlitePrivateStore,
+  type SqlitePrivateStoreOptions,
+} from './sqlite-private-store.js';
+
+export {
+  createDurableAuditLog,
+  type DurableAuditEvent,
+  type DurableAuditLog,
+  type DurableAuditLogOptions,
+} from './durable-audit-log.js';
 
 export {
   createReinvestmentEngine,

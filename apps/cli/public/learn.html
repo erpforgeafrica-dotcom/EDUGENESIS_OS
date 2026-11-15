@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>EduGenesis OS — ask a question</title>
+    <!--
+      The Aurora design tokens. Every colour and every focus ring comes from
+      here, so the learner screen can never drift away from the design system.
+    -->
+    <link rel="stylesheet" href="/assets/edugenesis-tokens.css" />
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#ask">Skip to the question</a>
+
+    <main id="main">
+      <header class="page-header">
+        <h1>Ask a question</h1>
+        <p class="lede">
+          Type anything you want to learn. Every answer is checked for accessibility before it
+          reaches you.
+        </p>
+      </header>
+
+      <form id="ask-form" novalidate>
+        <div class="field">
+          <label for="question">Your question</label>
+          <input
+            id="question"
+            name="question"
+            type="text"
+            autocomplete="off"
+            aria-describedby="hint-question"
+            placeholder="Explain photosynthesis in simple terms"
+          />
+          <p class="hint" id="hint-question">
+            A specific question gets a specific lesson. For example: “Explain curriculum:algebra/linear-eq”.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button id="ask-button" type="submit">Ask</button>
+        </div>
+
+        <!--
+          The live region. The answer is written here, and `role="status"`
+          makes a screen reader announce it without the learner having to
+          hunt for it.
+        -->
+        <section id="answer-section" aria-labelledby="answer-heading">
+          <h2 id="answer-heading">Your lesson</h2>
+          <p id="status" class="eg-status" role="status" aria-live="polite"></p>
+          <pre id="answer" class="lesson" hidden></pre>
+        </section>
+      </form>
+
+      <p class="footnote">
+        <a href="/">Settings</a>
+      </p>
+    </main>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var form = document.getElementById('ask-form');
+        var input = document.getElementById('question');
+        var button = document.getElementById('ask-button');
+        var status = document.getElementById('status');
+        var answer = document.getElementById('answer');
+
+        function say(message) {
+          status.textContent = message;
+        }
+
+        form.addEventListener('submit', function (event) {
+          event.preventDefault();
+          var question = input.value.trim();
+          if (question.length === 0) {
+            say('Type a question first.');
+            input.focus();
+            return;
+          }
+          button.disabled = true;
+          say('Preparing your lesson…');
+
+          fetch('/api/learn', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: question }),
+          })
+            .then(function (response) {
+              return response.json().then(function (payload) {
+                return { ok: response.ok, payload: payload };
+              });
+            })
+            .then(function (result) {
+              if (!result.ok) {
+                say(result.payload && result.payload.error ? result.payload.error : 'A lesson is not available right now.');
+                answer.hidden = true;
+                answer.textContent = '';
+                return;
+              }
+              answer.textContent = result.payload.text;
+              answer.hidden = false;
+              say('Your lesson is ready.');
+            })
+            .catch(function () {
+              say('A lesson is not available right now. Please try again shortly.');
+            })
+            .then(function () {
+              button.disabled = false;
+            });
+        });
+      })();
+    </script>
+  </body>
+</html>

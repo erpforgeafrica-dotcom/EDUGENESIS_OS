@@ -16,6 +16,10 @@
     "clean": "tsc -b --clean"
   },
   "dependencies": {
-    "@edugenesis/contracts": "0.1.0"
+    "@edugenesis/accessibility": "0.1.0",
+    "@edugenesis/contracts": "0.1.0",
+    "@edugenesis/identity": "0.1.0",
+    "@edugenesis/ledger": "0.1.0",
+    "@edugenesis/onekey": "0.1.0"
   }
 }
