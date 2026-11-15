@@ -241,8 +241,10 @@
       "evidence": "packages/identity/src/consent.ts:165 'const auditByLearner = new Map<string, ConsentAuditEvent[]>();'; packages/identity/src/enrolment.ts:226 'const audit: EnrolmentAuditEvent[] = [];'",
       "failure_mode": "For a product sold on child safeguarding and sponsor accountability, the audit trail is a process-scoped array. Any claim of auditable enrolment or consent history is unsupported.",
       "fix": "Recorded in ADR-0017 as a named consequence. A durable audit log is a Slice 1 item and must be backed by the repository seam.",
-      "closable": null,
-      "status": "PROVEN",
+      "closable": "code",
+      "status": "CLOSED",
+      "closure": "CLOSED by owner decision D-3 (2026-11-15) and implemented in ADR-0018: the consent and enrolment audit trails are no longer process-scoped arrays. Both services now write through a structural AuditSink into a DURABLE, hash-chained log (packages/ledger/src/durable-audit-log.ts) persisted in SQLite under the gitignored .edugenesis-data/. The in-memory trail remains as the fast view of the SAME events - the durable copy mirrors it exactly, so a guardian grant refused for lack of authority still leaves NO trace. A close-and-reopen test proves the events survive a restart; a tampered row is detected at its seq.",
+      "closure_evidence": "packages/identity/src/audit-sink.ts (the seam), packages/ledger/src/durable-audit-log.ts (the durable log), packages/identity/src/audit-sink.test.ts (grant, withdrawal, refusal, enrolment, refusal-with-reason, and the 'the secret never reaches the sink' test), packages/ledger/src/durable-audit-log.test.ts (survives close+reopen; tamper detected at its seq).",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
@@ -621,8 +623,9 @@
       "evidence": "consent.ts:164-165 `const stateByLearner = new Map<...>(); const auditByLearner = new Map<string, ConsentAuditEvent[]>();`  /  enrolment.ts:226 `const audit: EnrolmentAuditEvent[] = [];`  /  ledger-store.ts:219 `const entries: LedgerEntry[] = [];`",
       "failure_mode": "A safeguarding incident is investigated after a restart: the consent withdrawal, the guardian consent and the enrolment path are gone. An insider who can restart the process can erase evidence with no residue. The trail cannot be handed to an auditor for independent verification because there is nothing to hand over.",
       "fix": "Persist the consent and enrolment audit trails to the (deferred) durable store with a per-record hash chain and an export/verify function; until then, state plainly in the exit criteria that the audit trail is process-local and NOT independently verifiable.",
-      "closable": null,
+      "closable": "code",
       "status": "PROVEN",
+      "partial": "PARTIALLY ADDRESSED (2026-11-15, owner decisions D-2 and D-3, ADR-0018) and STILL OPEN on one point. Closed now: the consent and enrolment audit trails are persisted in SQLite under the gitignored .edugenesis-data/, hash-chained per record, with an export and a verify() that reports the broken sequence rather than throwing - so a restart no longer erases the evidence and a third party CAN verify the chain. STILL OPEN: the PUBLIC LEDGER (packages/ledger/src/ledger-store.ts) still keeps `const entries: LedgerEntry[] = []` in memory, so a published, append-only record still dies with the process. Making the public ledger durable is a DESIGN decision (a file-backed append-only journal vs. a hosted ledger service), not a patch, so it is reported to the owner rather than half-built - see docs/PLAN_GAP_CLOSEOUT.md.",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
@@ -961,8 +964,9 @@
       "evidence": "ledger-store.ts:1-395 contains no `sqlite` usage; `entries` is in-memory (219) and mutated only in-process (252). README states \"Zero runtime dependencies: `node:crypto` and `node:sqlite` only\" but implementation uses only crypto/hash helpers; no persistence API is exposed.",
       "failure_mode": "Any claim of durable, auditable, append-only public record across restarts/crashes is untrue for this implementation; auditors cannot verify a chain after process loss, and there is no recoverable-on-disk ledger to truncate/corrupt-test.",
       "fix": "Either implement the contract on `node:sqlite` with append-only schema (INSERT-only, no UPDATE/DELETE), monotonic seq UNIQUE constraint, WAL mode, transactional append, and verification-on-open, or explicitly narrow docs/intent to an in-memory reference implementation and remove durable-ledger claims.",
-      "closable": null,
+      "closable": "code",
       "status": "PROVEN",
+      "partial": "PARTIALLY ADDRESSED (2026-11-15) and STILL OPEN. Closed now: the platform now persists through `node:sqlite` (ADR-0018), the private operational store and the consent/enrolment audit trail are durable, hash-chained and verifiable, and the durable stores live in the gitignored .edugenesis-data/ inside the project - so the portability law still holds and the audit trails survive a restart. STILL OPEN, and this finding is specifically about it: the PUBLIC ledger (packages/ledger/src/ledger-store.ts) is still an in-memory array - no SQLite file, no WAL/journal, no verification-on-open, no crash-recovery semantics. The finding's fix names the shape it wants (an INSERT-only SQLite schema with a UNIQUE seq, WAL mode, transactional append and verification on open); that is a real build, and it is scheduled in docs/PLAN_GAP_CLOSEOUT.md as a design decision for the owner rather than a silent half-patch.",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
@@ -1062,7 +1066,9 @@
       "failure_mode": "Coverage can silently drop below 100 % for a path nobody added to the array; the '100 %' claim is only as complete as a hand-maintained list.",
       "fix": "Derive the path list from the gateway's routing surface (or add a static check that every learnerFacing delivery calls ctx.guardian.intercept) and assert the list is non-empty and matches the gateway's exported scenarios.",
       "closable": "code",
-      "status": "PROVEN",
+      "status": "CLOSED",
+      "closure": "CLOSED (2026-11-15): the coverage gate no longer owns a path list at all. The delivery-path REGISTRY now lives in the package that owns the gateway (packages/onekey/src/testing/delivery-paths.ts) - six learner-facing paths plus the operator control, each declaring the ladder rung it proves. tools/verify-coverage.mjs imports the registry, drives every entry through a real gateway with the real guardian, and holds NO path knowledge of its own. The ladder comes from FALLBACK_TIER_ROLE in the contracts, so the gate fails when a rung loses its only learner path, and it also fails when an entry serves from a tier other than the one it declares - a registry may not lie about its own path.",
+      "closure_evidence": "packages/onekey/src/testing/delivery-paths.ts (the registry), packages/onekey/src/testing/delivery-paths.test.ts (5 tests driving every entry end to end), tools/verify-coverage.mjs (the gate, now registry-driven; coverage 6/6 = 100%).",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
@@ -1785,6 +1791,7 @@
       "F0-01",
       "F0-02",
       "F0-03",
+      "F0-04",
       "F0-07",
       "F1-01",
       "F1-02",
@@ -1794,6 +1801,7 @@
       "F1-06",
       "F1-08",
       "F1-11",
+      "F1-14",
       "F3-01",
       "F3-02",
       "F3-03",
@@ -1816,9 +1824,9 @@
     ],
     "open_counts": {
       "blocker": 0,
-      "major": 21,
-      "minor": 33,
-      "total": 54
+      "major": 20,
+      "minor": 32,
+      "total": 52
     },
     "open_blockers": [],
     "superseded": {
@@ -1874,6 +1882,6 @@
         "F6-04": "CLOSED (Batch F, 2026-11-13): beyond the repaired config scan (stat-before-read; four named root configs incl render.yaml, plus packages/* and apps/* tsconfig.json/package.json; locked by paths.test.ts), the scan.ts detectors now match both separator styles for the drive-letter, UNC-share, user-profile and POSIX-home classes (new rules abs-unc-posix and abs-home-profile); the UNC host token must be at least two alphanumeric characters (escaped-newline strings and the device namespace are not false positives) and a forward-slash share host must be dot-free (protocol-relative URLs are not); .md and .csv joined the scanned extensions, and shipped documentation joined the scanned scope via listDocumentationFiles. Locked by eight new fixtures in scan.test.ts. The literal spellings previously quoted here were rewritten into prose by owner decision."
       }
     },
-    "note": "Round-4 re-verification at HEAD 677f415, plus the Batch A authority repairs, the F6 gate/evidence repairs, the Batch E accessibility gate halves, Batch F + D-5 and the F6-R4-02/F6-R4-03 boundary repairs applied afterwards. Batch A + Batch E + Batch F + the boundary repairs closed with npm run verify green: 510/510 tests, 18/18 gates, 0 unverified, 161 shipped files scanned by the path gate (source + config + docs), 183-file manifest, attestation PASS; the secrets scan now covers 185 tree files AND 351 history blobs with 0 findings. open_counts covers the 85 round-3 findings only (56 open); the round-4 findings are in new_findings, open_after_round4 (now EMPTY - every first-hand round-4 finding is closed) and closed_after_round4, and the delegated reviewer counts are in reviewer_corpus. F6-03 is closed via owner decision D-5 (an unverified gate fails the strict chain) and F6-04 is closed via Batch F (detectors widened to both separator styles, .md/.csv read, shipped docs in scope; the doc evidence spellings were rewritten into prose by owner decision). F6-R4-02 (the secrets-scan boundary) and F6-R4-03 (the coverage path list) are CLOSED: the scanner reads the published artifacts and the whole git history, and the coverage gate is driven by the delivery-path registry in packages/onekey; the reviewer rows F6-05 and F6-08 that duplicated them are resolved with their first-hand IDs. The settings.local.json checksum fix is recorded as F6-R4-04. F2-R4-01 and F2-R4-02 are closed by the keyboard-focus and form-semantics gates. See docs/AUDIT_ROUND4.md sections 7-10."
+    "note": "Round-4 re-verification at HEAD 677f415, plus the Batch A authority repairs, the F6 gate/evidence repairs, the Batch E accessibility gate halves, Batch F + D-5, the F6-R4-02/F6-R4-03 boundary repairs and the learner-surface build applied afterwards (owner decisions D-1 to D-4, 2026-11-15). The tree closed with npm run verify green: 553/553 tests, 18/18 gates, 0 unverified, 169 shipped files scanned by the path gate, 191-file manifest, attestation PASS, repro 4/4 same; the secrets scan covers 185 tree files AND 351 history blobs with 0 findings. open_counts covers the 85 round-3 findings only (52 open: 0 blockers, 20 majors, 32 minors); the round-4 findings are in new_findings, open_after_round4 (now EMPTY - every first-hand round-4 finding is closed) and closed_after_round4, and the delegated reviewer counts are in reviewer_corpus. F6-03 is closed via owner decision D-5 and F6-04 via Batch F. F6-R4-02 (the secrets-scan boundary) and F6-R4-03 (the coverage path list) are closed: the scanner reads the published artifacts and the whole git history, and the coverage gate is driven by the delivery-path registry in packages/onekey. F0-01 and F0-03 are closed by owner decision D-1 (the learner route and the enrolment route are wired and deployed). F0-04 (the consent and enrolment audit trails were process-scoped arrays) and F1-14 (the coverage gate hard-coded six paths) are closed: the trails are durable and hash-chained, and the gate is registry-driven. F8-04 and F5-01 are PARTIALLY addressed and stay open on one point - the PUBLIC ledger is still in memory, which is a design decision scheduled in docs/PLAN_GAP_CLOSEOUT.md. The settings.local.json checksum fix is recorded as F6-R4-04. F2-R4-01 and F2-R4-02 are closed by the keyboard-focus and form-semantics gates. See docs/AUDIT_ROUND4.md sections 7-10 and docs/PLAN_GAP_CLOSEOUT.md."
   }
 }

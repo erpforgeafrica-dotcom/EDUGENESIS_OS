@@ -229,8 +229,8 @@ duplicate = 16 (4 major, 12 minor); F6 33−3 duplicates−5 verdicts = 25 (3 bl
 reconcile with the digests and is corrected here.
 
 **After the Batch A and evidence repairs in this tree** (derivation shown so it can be re-checked):
-- Round-3 corpus: **54 open of 85** — 0 blockers, 21 majors, 33 minors.
-  `reconciliation.closed_ids` holds 31.
+- Round-3 corpus: **52 open of 85** — 0 blockers, 20 majors, 32 minors.
+  `reconciliation.closed_ids` holds 33.
 - Round-4 first-hand corpus: **0 open of 6** — the two findings that were open (the secrets scan
   skipping the published artifacts and never reading git history, and the coverage gate hard-coding
   six gateway paths) are both closed; the other four were closed earlier. Closed in this tree:
@@ -241,7 +241,7 @@ reconcile with the digests and is corrected here.
   F2-02, F2-03, and in this batch F6-03 (D-5 unverified-gate semantics) and F6-04 (detector
   widening plus the documentation scope). The reviewer rows F6-05 and F6-08 duplicated F6-R4-02
   and F6-R4-03; they were never counted as open and are resolved with their first-hand IDs.
-- Combined: **90 open - 0 blockers, 34 majors, 56 minors** (54 + 0 + 36).
+- Combined: **88 open - 0 blockers, 33 majors, 55 minors** (52 + 0 + 36).
 
 **AND NOW THE PRODUCT BLOCKERS ARE CLOSED TOO (owner decision D-1, 2026-11-13 — "build it
 now").** F0-01 and F0-03 were the last two open blockers in the round-3 corpus: the server
