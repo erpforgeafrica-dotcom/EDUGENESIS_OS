@@ -590,3 +590,59 @@ Verified state after this batch (`npm run verify`, exit 0): **505/505 tests**, 2
 18/18 gates PASS, 0 unverified, path gate **159 shipped file(s)** with no absolute path,
 secrets scan 0 findings, attestation PASS. `git status` clean after the source/doc commit
 and the regenerated evidence commit.
+
+## 11. Wave close-out + answer-quality repair — executed 2026-11-16
+
+**Owner order:** use a skills-loaded swarm for the owner-gated tasks while Solo oversees and
+independently verifies; then proceed with Option A for the public ledger. Every agent result
+below was re-run by the orchestrator before being recorded — no agent report was certified as
+given.
+
+**Wave 1 (verified by me):** LEDGER F5-02/F5-03 — `createLedgerStore` owns its seq and its own
+record of what it wrote, reads refuse a broken chain while `verify()` still reports and `all()`
+stays raw; **103/103** ledger tests re-run. ONEKEY F3-11/13/14/17/20 — `KillSwitchStore` seam
+with hydrate/write-through, 429 is not a health failure, 401/403 revokes the credential,
+Tier-0 wording satisfies §6.6 step 6, and no handler means no deferral claim; **139/139**
+onekey tests re-run, all five fixes confirmed in code.
+
+**Wave 2 (verified by me):** `apps/cli` implements the store over the existing SQLite private
+store, wires the settings' primary provider into the Qwen adapter once at start, and puts ONE
+shared kill switch into the gateway. Hosted enrolment stays refused; the route's failure path
+is leak-free under route tests and a mutation check that briefly reintroduced the leak and
+watched the tests fail. **51/51** CLI tests re-run.
+
+**Owner-gated swarm:** the ops brief verified the GitHub billing lock live (`gh run list` —
+three CI runs failed in 3–4s; `render.yaml:35` still `checksPass`) and recommended keeping
+Frankfurt. The ledger-design brief recommended Option A; a **fresh-context Goldfish** returned
+**APPROVE-WITH-CHANGES** with one blocker (the brief's hook shape had no restore mechanism)
+and four majors, all folded into ADR-0019 and the code. The NVDA screen-reader agent died on
+an external free-model usage limit: **the screen-reader claim stays UNVERIFIED**, not passed.
+
+**Option A built (ADR-0019, owner decision):** an INSERT-only SQLite journal at
+`.edugenesis-data/ledger.sqlite` behind two optional `createLedgerStore` seams (file-first
+`persist` hook; `initialEntries` restore that never re-inserts). Restore skips the PII guard
+for already-published rows, never blocks boot on a broken chain, and every trust boundary
+refuses. The journal verifies on open against the auditor's own `computeEntryHash` AND the
+canonical stored text (key-reorder edits), runs the recorded rollback-journal + synchronous
+FULL defaults (no WAL — recorded departure from F5-01's fix text), and closes cleanly for
+quiescent backup. `render.yaml`'s false "persists NOTHING / ADR-0017" comment was rewritten,
+not appended to. **12 new journal tests; 115/115** ledger tests after the change.
+
+**Answer-quality defect (owner screenshots, 2026-11-16):** "what is an Agent" and "what is a
+EduGenesis?" both received the linear-equations lesson; the second even claimed "covers this
+topic" / "same topic". Root cause reproduced locally on current code (not only the stale
+deploy): `relevanceScore` counted stopwords ("a" in the lesson title) with no plural
+normalisation, and `serveFallback` served `candidates[0]` even at score zero. Fixed at the
+source: content-word matching with stopword filtering and simple singular forms, and an
+honest curriculum-gap lesson at score zero (names the real lessons available, claims no false
+lineage). "What is a fraction?" now reaches the fractions lesson, not linear equations. Tests:
+"an unrelated question is not answered with an unrelated subject lesson"; "a stopword match
+is not a topical match"; "a question using the singular of a lesson title finds that lesson".
+**142/142** onekey tests after the fix. This closes F3-04, whose finding row was also corrected
+(already in `closed_ids` from round 4 but still marked PROVEN).
+
+**Counts re-derived from the register, not estimated:** 43 open (0 blockers, 11 majors, 32
+minors). F3-15 is PARTIAL: the route is leak-free but no typed learner-facing gateway error
+was added. The public ledger is closed **at the code level**; on the Render free tier the
+filesystem is ephemeral, so the hosted ledger is demonstration-durable, not custody-durable
+(ADR-0019 records the persistent-disk upgrade path).

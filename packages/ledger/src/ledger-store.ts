@@ -30,6 +30,37 @@
  * anything about this implementation. `previousEntryHash` is the literal string
  * "genesis" for seq 1 and the previous entry's `entryHash` thereafter.
  *
+ * THE SEQUENCE BELONGS TO THE STORE
+ * A caller can never supply a seq, and — this is the part that is easy to get
+ * wrong — a caller can never STEAL one either. The seq comes from the store's
+ * own counter and the link comes from the store's own head, never from the
+ * length of an array the store happened to hand out. So two appends that
+ * overlap still take two different seq values and produce ONE chain: the
+ * append path is a critical section with no caller-supplied code inside it,
+ * and the entry is written before `append()` returns.
+ *
+ * The store also keeps its OWN RECORD of what it wrote. A caller that splices
+ * an entry into the live array can produce an entry whose own hash is
+ * perfectly valid — the hash links alone cannot see that — so the store
+ * compares the chain it is about to extend with the chain it wrote, and
+ * refuses to extend one that is not the same. A seq is never issued twice and
+ * an entry the store never wrote is never adopted.
+ *
+ * THE CHAIN IS VERIFIED ON READ AND ON WRITE
+ * A tamper-evident record that is only checked when somebody remembers to ask
+ * is not tamper evident at the moment it matters. So:
+ *
+ *   - the WRITE path verifies the chain before it extends it. A broken chain
+ *     must not grow: a compensation cannot repair a severed hash link.
+ *   - the TRUSTED reads — the public export and the merkle root — refuse a
+ *     broken chain with the contract's typed error, `LedgerTamperError`.
+ *   - `verify()` never throws. It REPORTS. An auditor must be able to read a
+ *     broken chain and be told exactly where it broke; that report is the
+ *     same one the refusals quote.
+ *   - `all()` is the RAW access and deliberately does not refuse: tamper
+ *     evidence needs an auditor to be able to reach the stored bytes of a
+ *     broken chain and see what was done to them.
+ *
  * PAYLOAD SHAPE
  * The frozen contract types a payload as `Record<string, string | number |
  * boolean | null>` — flat scalars only. The append path therefore accepts a
@@ -84,6 +115,58 @@ export interface LedgerStoreOptions {
    * field-name rule can never be switched off.
    */
   valueScan?: 'enforce' | 'off';
+  /**
+   * The durable sink behind the store (ADR-0019, owner decision 2026-11-16).
+   *
+   * THE CONSTRAINED HOOK CONTRACT. This hook is called inside the append
+   * critical section, BEFORE anything is written to memory (file first,
+   * memory second, as `sqlite-private-store.ts` puts it). It is therefore
+   * bound by rules stricter than an ordinary caller:
+   *
+   *   - SYNCHRONOUS. It must not return a promise; an append returns only
+   *     when the row is on disk.
+   *   - NON-REENTRANT. It must not call back into the store — the critical
+   *     section admits no reentry, or the seq discipline it guarantees
+   *     collapses.
+   *   - ATOMIC, COMMIT-OR-NOTHING. A hook that throws must not have
+   *     committed the row; a committed row with a thrown hook would wedge
+   *     the ledger on the next append (the UNIQUE seq catches it as a raw
+   *     error). The shipped journal is a single INSERT, which is atomic by
+   *     construction; custom sinks must honour the same rule.
+   *
+   * A hook that throws aborts the append with NOTHING in memory: no seq is
+   * consumed, the head does not move, and the error propagates to the
+   * caller typed by the sink (`LedgerPersistenceError` for the shipped
+   * journal). This is why the hook, though caller-supplied, may live inside
+   * the critical section the no-caller-code rule protects: it is
+   * construction-time infrastructure owned by the application (its own
+   * journal), not per-request caller code, and its failure is a clean
+   * abort rather than an interleaving window.
+   *
+   * Absent, the store behaves exactly as before — nothing durable happens.
+   */
+  persist?: (entry: LedgerEntry) => void;
+  /**
+   * The state restored from a durable journal at construction (ADR-0019).
+   *
+   * The rows are taken as the chain the store CONTINUES: `entries`, the
+   * store's own record, the head and the sequence counter are all rebuilt
+   * from them, and the `persist` hook is NOT fired for restored rows — a
+   * restart must never re-insert what is already on disk.
+   *
+   * THREE RESTORE RULES:
+   *   - the rows are NOT re-checked by the PII guard. Guard rules can
+   *     evolve after an entry was published; rehydration must not wedge
+   *     the boot on a rule that did not exist when the entry was appended.
+   *     Everything appended AFTER the restore is guarded as always.
+   *   - a broken restored chain is NOT fatal to boot (load, report, don't
+   *     refuse, as the durable audit log puts it): `verify()` reports the
+   *     break at its seq, the evidence stays readable through `all()`,
+   *     and every trust boundary — including the write path — refuses.
+   *   - the rows must be in seq order, ascending from the journal; the
+   *     journal guarantees it.
+   */
+  initialEntries?: readonly LedgerEntry[];
 }
 
 /** Thrown when a payload would put personal data into the public ledger. */
@@ -229,56 +312,85 @@ function assertTimestamp(at: string): void {
 export function createLedgerStore(options: LedgerStoreOptions = {}): LedgerStoreFacade {
   const now = options.now ?? ((): string => new Date().toISOString());
   const valueScan = options.valueScan ?? 'enforce';
+  // The durable sink, captured once at construction (ADR-0019). Undefined
+  // means the store is exactly as it was before durability: nothing changes.
+  const persist = options.persist;
+  /**
+   * THE LIVE VIEW: the array the store hands to callers through `all()`.
+   *
+   * It is live on purpose — see `all()`. It is NOT the store's record of the
+   * chain: a caller can reach it and alter it, which is exactly how tamper
+   * evidence is exercised.
+   */
   const entries: LedgerEntry[] = [];
 
-  const append = (type: LedgerEntryType, payload: Record<string, unknown>, at?: string): LedgerEntry => {
-    // LINE 1 of defence: forbidden field names, recursively (Doc 2 §2.5).
-    const violations: string[] = findForbiddenFieldPaths(payload).map(
-      (path) => `forbidden field name at "${path}"`,
-    );
-    // LINE 2 of defence: value shapes that identify a person.
-    if (valueScan === 'enforce') {
-      violations.push(...findPersonalDataValues(payload));
+  /**
+   * THE STORE'S OWN RECORD: the entries this store actually wrote, in order.
+   *
+   * The sequence counter, the head and this array belong to the STORE, not to
+   * the caller. A caller that splices the live view cannot make the store
+   * issue a seq twice, slide its sequence back, or adopt an entry the store
+   * never wrote.
+   */
+  const written: LedgerEntry[] = [];
+  /** The next seq the store will issue. The store's own counter, never `entries.length`. */
+  let nextSeq = 1;
+  /** The last entry the store wrote. The store's own head, never `entries[entries.length - 1]`. */
+  let head: LedgerEntry | undefined;
+
+  // ADR-0019 RESTORE: rebuild the store's whole state from the durable rows.
+  // The live view and the store's own record both start from the restored
+  // chain (a restored row IS a row the store wrote — the journal verified it
+  // on open), the head is the last restored row, and the counter continues
+  // from its seq. No guard re-check, no persist call, no boot refusal on a
+  // broken chain: the rules are stated on `LedgerStoreOptions.initialEntries`.
+  if (options.initialEntries !== undefined) {
+    for (const restored of options.initialEntries) {
+      entries.push(restored);
+      written.push(restored);
     }
-    if (violations.length > 0) {
-      throw new LedgerPiiError(violations);
+    const last = entries[entries.length - 1];
+    head = last;
+    nextSeq = last === undefined ? 1 : last.seq + 1;
+  }
+
+  /**
+   * Where the chain the caller can see stops being the chain the store wrote.
+   *
+   * The hash links alone cannot see an injected entry: an attacker who
+   * splices in an entry with a valid hash of its own produces a chain whose
+   * every link checks out. The store's own record is the only thing that can
+   * tell the difference, so the difference is checked.
+   */
+  const chainDivergence = (): { brokenAtSeq: number; detail: string } | undefined => {
+    const shared = Math.min(entries.length, written.length);
+    for (let index = 0; index < shared; index += 1) {
+      if (entries[index] !== written[index]) {
+        return {
+          brokenAtSeq: index + 1,
+          detail:
+            `the entry at position ${index + 1} is not the entry this store wrote; ` +
+            'the chain was altered outside the store',
+        };
+      }
     }
-
-    const flatPayload = canonicalisePayload(payload);
-    const timestamp = at ?? now();
-    assertTimestamp(timestamp);
-
-    const seq = entries.length + 1;
-    const previous = entries[entries.length - 1];
-    const previousEntryHash = previous ? previous.entryHash : GENESIS_HASH;
-    const preimage = entryHashPreimage({ seq, type, at: timestamp, payload: flatPayload, previousEntryHash });
-    const entryHash = sha256Hex(canonicalJson(preimage));
-
-    const entry: LedgerEntry = {
-      seq,
-      type,
-      at: timestamp,
-      payload: flatPayload,
-      previousEntryHash,
-      entryHash,
-    };
-    entries.push(entry);
-    return entry;
-  };
-
-  const all = (): LedgerEntry[] => {
-    // The LIVE entry array.
-    //
-    // WHY: the chain is tamper-EVIDENT, not tamper-resistant (Doc 2 §15). An
-    // auditor must be able to reach the stored bytes to try to alter them, and
-    // `verify()` must then report the break with the right seq. A copy here
-    // would make the tamper scenario untestable and would give a false sense
-    // of immutability.
-    //
-    // TREAT THE RESULT AS READ-ONLY. Do not sort, splice or push into it: the
-    // sequence numbers are the chain. `exportPublic()` is the safe,
-    // copy-returning accessor for anything you hand to somebody else.
-    return entries;
+    if (entries.length > written.length) {
+      return {
+        brokenAtSeq: written.length + 1,
+        detail:
+          `the chain holds ${entries.length} entries but this store wrote ${written.length}; ` +
+          'an entry was inserted into the chain',
+      };
+    }
+    if (entries.length < written.length) {
+      return {
+        brokenAtSeq: entries.length + 1,
+        detail:
+          `the chain holds ${entries.length} entries but this store wrote ${written.length}; ` +
+          'an entry was removed from the chain',
+      };
+    }
+    return undefined;
   };
 
   const verify = (): ChainVerification => {
@@ -318,11 +430,123 @@ export function createLedgerStore(options: LedgerStoreOptions = {}): LedgerStore
         };
       }
     }
+    // The store's own record is the last word: a chain that holds an entry
+    // the store never wrote — or is missing one it wrote — is broken, even
+    // when every hash in it is internally consistent.
+    const divergence = chainDivergence();
+    if (divergence) {
+      return {
+        ok: false,
+        entriesChecked: entries.length,
+        brokenAtSeq: divergence.brokenAtSeq,
+        detail: divergence.detail,
+      };
+    }
     return { ok: true, entriesChecked };
   };
 
-  const exportPublic = (): PublicProof[] =>
-    entries.map((entry) => ({
+  /**
+   * Refuse to act on a chain that does not verify.
+   *
+   * The same typed error the contract defines for exactly this condition, and
+   * the same seq and detail `verify()` reports — a caller never has to guess
+   * which chain it is looking at.
+   */
+  const assertChainVerifiable = (): void => {
+    const result = verify();
+    if (!result.ok) {
+      throw tamperError(result);
+    }
+  };
+
+  const append = (type: LedgerEntryType, payload: Record<string, unknown>, at?: string): LedgerEntry => {
+    // LINE 1 of defence: forbidden field names, recursively (Doc 2 §2.5).
+    const violations: string[] = findForbiddenFieldPaths(payload).map(
+      (path) => `forbidden field name at "${path}"`,
+    );
+    // LINE 2 of defence: value shapes that identify a person.
+    if (valueScan === 'enforce') {
+      violations.push(...findPersonalDataValues(payload));
+    }
+    if (violations.length > 0) {
+      throw new LedgerPiiError(violations);
+    }
+
+    const flatPayload = canonicalisePayload(payload);
+    const timestamp = at ?? now();
+    assertTimestamp(timestamp);
+
+    // THE CHAIN IS VERIFIED BEFORE IT IS EXTENDED. A broken chain must not
+    // grow: a compensating entry cannot repair a severed hash link, so
+    // extending one would bury the break under more evidence.
+    assertChainVerifiable();
+
+    // ---- THE CRITICAL SECTION ---------------------------------------------
+    // Nothing between here and the push may run per-request caller-supplied
+    // code. The seq comes from the store's own counter and the link from the
+    // store's own head, and the entry is written before `append()` returns.
+    // That is what makes two appends that OVERLAP take two different seq
+    // values and produce ONE chain: there is no window in which two writers
+    // can read the same head and claim the same seq.
+    //
+    // THE ONE EXEMPTION IS THE PERSIST HOOK (ADR-0019): it is supplied ONCE
+    // at construction by the application that owns the store (its own
+    // durable journal), never per request. It is bound by the constrained
+    // hook contract on `LedgerStoreOptions.persist` — synchronous,
+    // non-reentrant, atomic commit-or-nothing — and it runs FILE FIRST: a
+    // hook that throws aborts the append with nothing in memory, no seq
+    // consumed, the head unmoved. Its failure is a clean abort, not an
+    // interleaving window, which is what the no-caller-code rule exists to
+    // prevent.
+    const seq = nextSeq;
+    const previousEntryHash = head ? head.entryHash : GENESIS_HASH;
+    const preimage = entryHashPreimage({ seq, type, at: timestamp, payload: flatPayload, previousEntryHash });
+    const entryHash = sha256Hex(canonicalJson(preimage));
+
+    const entry: LedgerEntry = {
+      seq,
+      type,
+      at: timestamp,
+      payload: flatPayload,
+      previousEntryHash,
+      entryHash,
+    };
+    if (persist) persist(entry);
+    entries.push(entry);
+    written.push(entry);
+    head = entry;
+    nextSeq = seq + 1;
+    return entry;
+  };
+
+  const all = (): LedgerEntry[] => {
+    // The LIVE entry array.
+    //
+    // WHY: the chain is tamper-EVIDENT, not tamper-resistant (Doc 2 §15). An
+    // auditor must be able to reach the stored bytes to try to alter them, and
+    // `verify()` must then report the break with the right seq. A copy here
+    // would make the tamper scenario untestable and would give a false sense
+    // of immutability.
+    //
+    // THIS IS THE RAW ACCESS, NOT A TRUST BOUNDARY, and it deliberately does
+    // NOT refuse a broken chain: an auditor must be able to read the stored
+    // bytes of a broken chain and see exactly what was done to them. The
+    // TRUSTED reads are `exportPublic()` and `merkleRoot()`, and the write
+    // path is `append()`; those refuse with `LedgerTamperError`.
+    //
+    // TREAT THE RESULT AS READ-ONLY. Do not sort, splice or push into it: the
+    // sequence numbers are the chain, and the store keeps its own record of
+    // what it wrote, so an entry that is spliced in here is detected as one
+    // the store never wrote. `exportPublic()` is the safe, copy-returning
+    // accessor for anything you hand to somebody else.
+    return entries;
+  };
+
+  const exportPublic = (): PublicProof[] => {
+    // A public proof is published to a sponsor. Publishing one drawn from a
+    // broken chain would be a lie with a hash on it.
+    assertChainVerifiable();
+    return entries.map((entry) => ({
       seq: entry.seq,
       type: entry.type,
       at: entry.at,
@@ -330,8 +554,12 @@ export function createLedgerStore(options: LedgerStoreOptions = {}): LedgerStore
       entryHash: entry.entryHash,
       previousEntryHash: entry.previousEntryHash,
     }));
+  };
 
   const merkleRoot = (): string => {
+    // The merkle root is an anchor over the chain: a sponsor who pins it must
+    // be pinning the chain the store actually wrote.
+    assertChainVerifiable();
     if (entries.length === 0) return sha256Hex(MERKLE_EMPTY_DOMAIN);
     let level: Buffer[] = entries.map((entry) => Buffer.from(entry.entryHash, 'hex'));
     while (level.length > 1) {
@@ -395,6 +623,18 @@ export function appendCorrection(store: LedgerStore, input: CorrectionInput): Le
 }
 
 /**
+ * Build the contract's typed tamper error from a verification report.
+ *
+ * ONE error type for ONE condition. Every refusal — the write path, the
+ * public export, the merkle root and `assertChainIntact()` — quotes the seq
+ * the chain broke at and the detail `verify()` reports, so a caller is never
+ * left guessing which chain it refused.
+ */
+function tamperError(result: ChainVerification): LedgerTamperError {
+  return new LedgerTamperError(result.brokenAtSeq ?? 0, result.detail ?? 'chain verification failed');
+}
+
+/**
  * Throw `LedgerTamperError` when the chain does not verify.
  *
  * The frozen contract's error type exists for exactly this: a caller that must
@@ -403,6 +643,6 @@ export function appendCorrection(store: LedgerStore, input: CorrectionInput): Le
 export function assertChainIntact(store: LedgerStore): void {
   const result = store.verify();
   if (!result.ok) {
-    throw new LedgerTamperError(result.brokenAtSeq ?? 0, result.detail ?? 'chain verification failed');
+    throw tamperError(result);
   }
 }

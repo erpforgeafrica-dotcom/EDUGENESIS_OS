@@ -44,6 +44,7 @@ later ADR, not edited in place.
 | [ADR-0016](ADR-0016-versioned-json-settings-and-the-settings-ui.md) | Versioned JSON settings inside the project, edited by a local Settings UI served by `eg serve` | Accepted | Chief Systems Architect, with the Security Officer accountable for the secret handling rules | This directory |
 | [ADR-0017](ADR-0017-in-memory-storage-and-the-deferred-sqlite-adapter.md) | Storage is in-memory behind a repository seam in Slice 0; the `node:sqlite` adapter is deferred to Slice 1 | Superseded by ADR-0018 | Chief Systems Architect | This directory |
 | [ADR-0018](ADR-0018-sqlite-durability-and-the-durable-audit-trail.md) | SQLite durability behind the existing seams, and a durable hash-chained audit trail | Accepted | Chief Systems Architect | This directory |
+| [ADR-0019](ADR-0019-durable-public-ledger-journal.md) | Durable public sponsor ledger behind the existing store seams | Accepted | Chief Systems Architect | This directory |
 
 ## ADR-0001 to ADR-0012
 

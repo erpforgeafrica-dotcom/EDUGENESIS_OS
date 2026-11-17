@@ -25,6 +25,7 @@ import { createKillSwitch } from './kill-switch.js';
 import type { KillSwitch } from './kill-switch.js';
 import { createPolicyEngine, TIER_FOUR_PROVIDER_ID, TIER_ZERO_PROVIDER_ID } from './policy.js';
 import type { PolicyEngine } from './policy.js';
+import { isCredentialRevoked, isRateLimited } from './provider-errors.js';
 import { hasTierZeroFallback } from './tier-zero-fallback.js';
 import { createProviderRegistry } from './registry.js';
 import type { ProviderRegistry, RegisterMeta } from './registry.js';
@@ -49,7 +50,16 @@ import { redactSecret } from './redact.js';
 export interface GatewayAttempt {
   tier: FallbackTier;
   providerId: string;
-  outcome: 'served' | 'failed' | 'skipped' | 'deferred' | 'no-offline-content';
+  /**
+   * What happened on this rung.
+   *
+   * `governance-failed` is a failure of the CREDENTIAL, not of the provider:
+   * the provider rejected it, so it is dead and must never be used again. It
+   * is kept apart from `failed` because a governance failure is an incident
+   * for a human, while a `failed` rung is a provider the ladder may retry
+   * elsewhere (audit findings F3-13, F3-14).
+   */
+  outcome: 'served' | 'failed' | 'skipped' | 'deferred' | 'no-offline-content' | 'governance-failed';
   reason: string;
   at: string;
 }
@@ -95,15 +105,43 @@ export interface OneKeyGatewayImpl extends OneKeyGateway {
  *
  * WHY it is a hook and not built in: queueing a request for a human mentor is
  * an operational decision that belongs to the deployment, not to the gateway.
- * With no handler configured, tier 4 records the deferral and the gateway
+ * With no handler configured, tier 4 records the failure and the gateway
  * raises AllTiersExhaustedError with the full trail.
+ *
+ * WHY `accept` is separate from `serve`: "a human took the question" and "a
+ * human answered now" are DIFFERENT facts. Only the first may be recorded as
+ * a deferral (Doc 16 §6.6; audit finding F3-20), and only the second is
+ * something the learner can be given. Before this split, a handler that
+ * could not answer produced the same trail as one that had taken the work,
+ * so the audit trail could not tell a real deferral from a refusal.
  */
 export interface TierFourHandler {
+  /**
+   * Answer the request now.
+   *
+   * Return the result to serve the learner, or `null` when this tier has no
+   * answer right now.
+   */
   serve(
     policy: TaskPolicy,
     req: CompletionRequest,
     ctx: RequestContext,
   ): Promise<CompletionResult | null>;
+  /**
+   * Accept the work for a later answer.
+   *
+   * Return `true` when a human took the request; the gateway then records
+   * the deferral honestly. Return `false` (or omit this method) when the work
+   * was NOT taken — the request failed, and the trail says so.
+   *
+   * WHY optional: a deployment whose human tier always answers now implements
+   * nothing extra, and omitting the method means "this tier never defers".
+   */
+  accept?(
+    policy: TaskPolicy,
+    req: CompletionRequest,
+    ctx: RequestContext,
+  ): Promise<boolean>;
 }
 
 /**
@@ -285,6 +323,35 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
             );
             continue;
           }
+          if (isCredentialRevoked(err)) {
+            // A 401/403 is a CREDENTIAL failure, not an outage (audit finding
+            // F3-14). The provider is not sick: its credential is dead. The
+            // rung is skipped for this request — the credential is never
+            // retried — and the health circuit is NOT tripped, because
+            // counting a governance failure as an outage would take a healthy
+            // provider out of routing for a reason the circuit cannot fix.
+            // The attempt is recorded as a GOVERNANCE failure so the incident
+            // is visible in the audit trail.
+            record(
+              candidate.tier,
+              candidate.providerId,
+              'governance-failed',
+              `the provider credential was revoked: ${describeError(err)}`,
+            );
+            continue;
+          }
+          if (isRateLimited(err)) {
+            // A 429 is a rate limit on a HEALTHY provider (audit finding
+            // F3-13). The provider is busy, not sick: it must not open the
+            // health circuit, and the request falls through to the next tier.
+            record(
+              candidate.tier,
+              candidate.providerId,
+              'skipped',
+              `the provider is rate limited: ${describeError(err)}`,
+            );
+            continue;
+          }
           breaker.recordFailure(candidate.providerId, describeError(err));
           record(candidate.tier, candidate.providerId, 'failed', `the provider failed: ${describeError(err)}`);
           continue;
@@ -400,12 +467,31 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
       // provider was eligible (no budget, data class, safety tier), a human
       // response is not a learning answer, so the request fails with a typed
       // error instead of pretending the learner was served.
-      if (tierFour && paidAttempted) {
-        const deferred = await tierFour.serve(policy, req, ctx);
-        if (deferred) {
+      //
+      // WHY three outcomes and not one: the trail is the audit evidence for
+      // the sponsor, and only a human tier that ACTUALLY TOOK the work may be
+      // recorded as a deferral (Doc 16 §6.6; audit finding F3-20). A request
+      // nobody took was denied, and the trail has to say exactly that.
+      if (!tierFour) {
+        record(
+          4,
+          TIER_FOUR_PROVIDER_ID,
+          'failed',
+          'no human-support tier is configured; the request could not be served',
+        );
+      } else if (!paidAttempted) {
+        record(
+          4,
+          TIER_FOUR_PROVIDER_ID,
+          'failed',
+          'no model tier was attempted; there was nothing for human support to take',
+        );
+      } else {
+        const answer = await tierFour.serve(policy, req, ctx);
+        if (answer) {
           record(4, TIER_FOUR_PROVIDER_ID, 'served', 'the request was deferred to human support');
           return await deliver({
-            result: deferred,
+            result: answer,
             policy,
             req,
             ctx,
@@ -418,8 +504,26 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
             verify: verifyEquivalence,
           });
         }
+        // No answer now: did a human take the work? Only then is a deferral
+        // true. `accept` is optional, and an absent method means "this tier
+        // never defers".
+        const accepted = tierFour.accept ? await tierFour.accept(policy, req, ctx) : false;
+        if (accepted) {
+          record(
+            4,
+            TIER_FOUR_PROVIDER_ID,
+            'deferred',
+            'the human-support tier accepted the request; the answer will follow',
+          );
+        } else {
+          record(
+            4,
+            TIER_FOUR_PROVIDER_ID,
+            'failed',
+            'the human-support tier could not accept the request',
+          );
+        }
       }
-      record(4, TIER_FOUR_PROVIDER_ID, 'deferred', 'every model tier failed; the request is deferred to human support');
       throw new AllTiersExhaustedError(
         attempts.map((attempt) => ({
           tier: attempt.tier,

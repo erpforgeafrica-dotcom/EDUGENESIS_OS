@@ -202,12 +202,13 @@
       "failure_mode": "A learner asking about the water cycle is handed a linear-equation lesson prefixed with a false statement that it covers their topic. The gateway marks it tier 0 / servedOffline and the drill calls it a successful rescue, so the wrong answer is indistinguishable from a right one in every audit record.",
       "fix": "Refuse the fallback below a relevance threshold (return null -> Tier 4 deferral) instead of serving an arbitrary entry; score against the body as well; never emit the 'covers this topic' wording unless the score cleared the threshold.",
       "closable": null,
-      "status": "PROVEN",
+      "status": "CLOSED",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F3:F3-04"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16): the Tier-0 last-resort no longer serves an unrelated cached lesson. Relevance now ignores stopwords and normalises plurals, and a zero score serves an honest curriculum-gap lesson (states the gap, names the real lessons available, claims no false lineage) instead of a subject lesson with a disclaimer. Owner screenshots 2026-11-16 (\"what is an Agent\", \"what is a EduGenesis?\") reproduced the defect and were re-run after the fix. Tests: \"tier zero: an unrelated question is not answered with an unrelated subject lesson\"; \"tier zero: a stopword match is not a topical match\"; \"tier zero: a question using the singular of a lesson title finds that lesson\". NOTE: this ID was already present in reconciliation.closed_ids from round 4 but its finding row still said PROVEN; the row is now corrected."
     },
     {
       "surface": "F0",
@@ -424,12 +425,13 @@
       "failure_mode": "During a sponsor quota window the primary provider is excluded for the whole cooldown, routing every learner to the secondary or offline tier - the outage the ladder exists to absorb is manufactured by the breaker itself.",
       "fix": "Introduce a typed non-health error (e.g. QuotaExceededError) and exclude it from recordFailure, exactly as BudgetExceededError is excluded; keep the circuit for 5xx/timeout only.",
       "closable": null,
-      "status": "PROVEN",
+      "status": "CLOSED",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F3:F3-13"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16): a 429 is a rate limit on a HEALTHY provider, never a health failure; the circuit stays closed. Tests: \"qwen: a 429 is a rate limit on a healthy provider, not an outage\"; \"gateway: a 429 leaves the circuit closed - a rate limit is not a health failure\"."
     },
     {
       "surface": "F3",
@@ -464,12 +466,13 @@
       "failure_mode": "The audit trail asserts that a human was asked for help when the learner was simply denied; incident review and the sponsor drill both read this trail and would conclude a human fallback exists.",
       "fix": "Record the tier-4 outcome only when a handler exists; otherwise record 'no human-support tier is configured'.",
       "closable": null,
-      "status": "PROVEN",
+      "status": "CLOSED",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F3:F3-20"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16): the trail says \"deferred to human support\" only when a Tier 4 handler existed AND accepted the work; with no handler or a declined handler it says failed. Tests: \"failover drill: no-human-support - with no human tier the trail records a failure, not a deferral\"; \"gateway: a tier 4 handler that declines the work records a failure, not a deferral\"; \"gateway: a tier 4 handler that accepts the work records the deferral\"."
     },
     {
       "surface": "F3",
@@ -489,7 +492,8 @@
       "corroboration_count": 0,
       "all_ids": [
         "F3:F3-15"
-      ]
+      ],
+      "partial": "PARTIALLY ADDRESSED (2026-11-16): the CLI route projects a generic leak-free 502 (tests prove no provider name, key, quota or status code in learner-facing output), and the adapter maps errors to typed failures. STILL OPEN: no typed learner-facing error class exists at the gateway boundary, and AllTiersExhaustedError still carries the raw attempt chain; the finding asked for a named neutral outcome alongside the audit-grade error."
     },
     {
       "surface": "F3",
@@ -504,12 +508,13 @@
       "failure_mode": "In the containerised/multi-replica deployment the spec describes, a safety-incident kill stops traffic on one replica only; the provider keeps serving learners - with a safeguarding or data-residency breach - on the others. The kill-switch tests only exercise the local object, never a deployment.",
       "fix": "Back the kill switch and breaker with a shared store (the platform ledger/config service) and poll/subscribe; prove it with a two-instance test.",
       "closable": null,
-      "status": "PROVEN",
+      "status": "CLOSED",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F3:F3-11"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16): packages/onekey/src/kill-switch.ts gained the KillSwitchStore seam (hydrate at construction, write through on kill and revive), and apps/cli/src/kill-switch-store.ts implements it over the existing SQLite private store; one shared switch is wired into the gateway and survives a restart. Tests: \"kill switch: a kill issued through one switch stops another switch that shares the store\"; \"kill switch persists across restart\" (apps/cli); \"with a store present the switch hydrates from it at construction\"."
     },
     {
       "surface": "F3",
@@ -564,12 +569,13 @@
       "failure_mode": "The learner is told they are being served from an 'offline library' rather than that core learning continues, which is exactly the degraded framing the spec forbids, and the sponsor-notification half of the requirement is simply absent.",
       "fix": "Implement the §6.6 step-6 wording and assert it in the drill, including the 'core learning continues' and sponsor-notification clauses.",
       "closable": null,
-      "status": "PROVEN",
+      "status": "CLOSED",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F3:F3-17"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16): the Tier-0 message states that core learning continues and that sponsors are notified, in learner language with no operations vocabulary, no apology and no false coverage claim. Tests: \"failover drill: the Tier 0 lesson states that core learning continues and that sponsors are notified\"; \"tier zero: the message for a lesson on the topic reads like a lesson, not like an apology\"; \"tier zero: the message for a lesson with no topical match claims no coverage\"."
     },
     {
       "surface": "F5",
@@ -584,12 +590,13 @@
       "failure_mode": "Consumers that trust `all()`, `exportPublic()` payloads, or derived artifacts without explicit verification can act on a tampered/broken chain; a mid-life in-memory mutation (or corrupted future persistence) remains silently served until someone calls `verify()`.",
       "fix": "Verify chain (or at least tail linkage invariants) on load/open and before high-trust exports/reports; consider having `exportPublic`/report builders assert integrity or return verification status alongside data and require callers to handle failure.",
       "closable": null,
-      "status": "PROVEN",
+      "status": "CLOSED",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F5:F5-03"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16): a tampered entry now makes a READ throw, the merkle root and the write path refuse a broken chain, and verify() still reports (never throws) with the same seq and detail; all() stays raw auditor access. Tests: \"a tampered entry makes a read throw\"; \"the write path refuses to extend a tampered chain\"; \"all() still hands out the raw chain after a break: the auditor must be able to read it\"."
     },
     {
       "surface": "F5",
@@ -624,13 +631,14 @@
       "failure_mode": "A safeguarding incident is investigated after a restart: the consent withdrawal, the guardian consent and the enrolment path are gone. An insider who can restart the process can erase evidence with no residue. The trail cannot be handed to an auditor for independent verification because there is nothing to hand over.",
       "fix": "Persist the consent and enrolment audit trails to the (deferred) durable store with a per-record hash chain and an export/verify function; until then, state plainly in the exit criteria that the audit trail is process-local and NOT independently verifiable.",
       "closable": "code",
-      "status": "PROVEN",
+      "status": "CLOSED",
       "partial": "PARTIALLY ADDRESSED (2026-11-15, owner decisions D-2 and D-3, ADR-0018) and STILL OPEN on one point. Closed now: the consent and enrolment audit trails are persisted in SQLite under the gitignored .edugenesis-data/, hash-chained per record, with an export and a verify() that reports the broken sequence rather than throwing - so a restart no longer erases the evidence and a third party CAN verify the chain. STILL OPEN: the PUBLIC LEDGER (packages/ledger/src/ledger-store.ts) still keeps `const entries: LedgerEntry[] = []` in memory, so a published, append-only record still dies with the process. Making the public ledger durable is a DESIGN decision (a file-backed append-only journal vs. a hosted ledger service), not a patch, so it is reported to the owner rather than half-built - see docs/PLAN_GAP_CLOSEOUT.md.",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F8:F8-04"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16, code level): the last open point of this finding was the PUBLIC ledger, now durable under ADR-0019 (INSERT-only SQLite journal, file-first hook, verified restore, byte-level canonical-text check). The consent and enrolment trails were already durable under ADR-0018. Same hosting caveat as F5-01 applies."
     },
     {
       "surface": "F8",
@@ -765,12 +773,13 @@
       "failure_mode": "A leaked or expired credential stays live and is retried indefinitely (once per 30s cooldown, on every request that reaches the provider), instead of being revoked on first use.",
       "fix": "On 401/403: clear the adapter's credential, mark the registry entry disabled, emit an incident event for the Security Officer, and refuse further calls until the key is rotated.",
       "closable": null,
-      "status": "PROVEN",
+      "status": "CLOSED",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F3:F3-14"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16): a 401/403 revokes the credential at the adapter (it is never sent again) and the gateway records a governance-typed failure, never a health failure. Tests: \"qwen: a 401 revokes the credential - it is never sent again\"; \"gateway: a revoked credential is a governance failure, never a health failure\"."
     },
     {
       "surface": "F5",
@@ -965,13 +974,14 @@
       "failure_mode": "Any claim of durable, auditable, append-only public record across restarts/crashes is untrue for this implementation; auditors cannot verify a chain after process loss, and there is no recoverable-on-disk ledger to truncate/corrupt-test.",
       "fix": "Either implement the contract on `node:sqlite` with append-only schema (INSERT-only, no UPDATE/DELETE), monotonic seq UNIQUE constraint, WAL mode, transactional append, and verification-on-open, or explicitly narrow docs/intent to an in-memory reference implementation and remove durable-ledger claims.",
       "closable": "code",
-      "status": "PROVEN",
+      "status": "CLOSED",
       "partial": "PARTIALLY ADDRESSED (2026-11-15) and STILL OPEN. Closed now: the platform now persists through `node:sqlite` (ADR-0018), the private operational store and the consent/enrolment audit trail are durable, hash-chained and verifiable, and the durable stores live in the gitignored .edugenesis-data/ inside the project - so the portability law still holds and the audit trails survive a restart. STILL OPEN, and this finding is specifically about it: the PUBLIC ledger (packages/ledger/src/ledger-store.ts) is still an in-memory array - no SQLite file, no WAL/journal, no verification-on-open, no crash-recovery semantics. The finding's fix names the shape it wants (an INSERT-only SQLite schema with a UNIQUE seq, WAL mode, transactional append and verification on open); that is a real build, and it is scheduled in docs/PLAN_GAP_CLOSEOUT.md as a design decision for the owner rather than a silent half-patch.",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F5:F5-01"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16, code level): the PUBLIC sponsor ledger is now a file-backed, INSERT-only SQLite journal at .edugenesis-data/ledger.sqlite (ADR-0019, owner decision Option A): UNIQUE seq, transactional append, verify-on-open, typed refusals on every trust boundary. No WAL by recorded decision (single writer; node:sqlite rollback journal + synchronous FULL). Hosting caveat: the Render free-tier filesystem is ephemeral, so a hosted ledger survives crashes/restarts but not a redeploy; a persistent disk on a paid plan upgrades it with zero code change."
     },
     {
       "surface": "F1",
@@ -1006,12 +1016,13 @@
       "failure_mode": "Two writers interleaved around the same head can both compute entries with identical `previousEntryHash`/seq assumptions in a shared persistent/concurrent context, forking or duplicating sequence logic; in durable DB form this would require explicit serialization/constraints to prevent.",
       "fix": "For durable implementation use a transaction with serialized write (e.g. BEGIN IMMEDIATE), derive seq from MAX(seq)+1 inside tx, enforce UNIQUE(seq) and FK/consistency checks, and commit atomically. For in-memory, document single-writer assumption or add an async mutex if multi-producer use is possible.",
       "closable": null,
-      "status": "PROVEN",
+      "status": "CLOSED",
       "corroborating_surfaces": [],
       "corroboration_count": 0,
       "all_ids": [
         "F5:F5-02"
-      ]
+      ],
+      "closed": "CLOSED (2026-11-16): packages/ledger/src/ledger-store.ts owns its sequence counter and its own record of what it wrote; two same-tick appends take distinct seq values and one unbroken chain; an entry spliced into the live array is refused, not adopted. Tests: \"two appends in the same tick produce two distinct seq values and one unbroken chain\"; \"the sequence belongs to the store: an entry injected into the chain is refused, not adopted\". 103/103 ledger tests then 115/115 after the journal wave."
     },
     {
       "surface": "F0",
@@ -1820,13 +1831,22 @@
       "F8-05",
       "F8-06",
       "F8-08",
-      "F8-10"
+      "F8-10",
+      "F5-02",
+      "F5-03",
+      "F3-11",
+      "F3-13",
+      "F3-14",
+      "F3-17",
+      "F3-20",
+      "F5-01",
+      "F8-04"
     ],
     "open_counts": {
       "blocker": 0,
-      "major": 20,
+      "major": 11,
       "minor": 32,
-      "total": 52
+      "total": 43
     },
     "open_blockers": [],
     "superseded": {
@@ -1873,15 +1893,30 @@
     "reviewer_corpus": {
       "source": "delegated digests, F2-round4.json (17 rows) and F6-round4.json (33 rows)",
       "net_new": 41,
-      "severity_of_net_new": { "blocker": 3, "major": 15, "minor": 23 },
-      "closed": ["F6-02", "F2-02", "F2-03", "F6-03", "F6-04"],
-      "open": { "blocker": 0, "major": 13, "minor": 23, "total": 36 },
+      "severity_of_net_new": {
+        "blocker": 3,
+        "major": 15,
+        "minor": 23
+      },
+      "closed": [
+        "F6-02",
+        "F2-02",
+        "F2-03",
+        "F6-03",
+        "F6-04"
+      ],
+      "open": {
+        "blocker": 0,
+        "major": 13,
+        "minor": 23,
+        "total": 36
+      },
       "open_blockers": [],
       "blocker_detail": {
         "F6-03": "CLOSED (owner decision D-5, 2026-11-13): a warning-severity result now derives a third state 'unverified' via gateStatus(); summarise() fails the run on any unverified gate; the verify report is schemaVersion 2 with result PASS/FAIL/INCOMPLETE and a counted unverified field; verify-all.mjs exits non-zero on unverified; attest.mjs refuses a chain naming an unverified gate. An unrunnable gate can no longer be a pass or an exit 0. Locked by 3 tests in gates.test.ts.",
         "F6-04": "CLOSED (Batch F, 2026-11-13): beyond the repaired config scan (stat-before-read; four named root configs incl render.yaml, plus packages/* and apps/* tsconfig.json/package.json; locked by paths.test.ts), the scan.ts detectors now match both separator styles for the drive-letter, UNC-share, user-profile and POSIX-home classes (new rules abs-unc-posix and abs-home-profile); the UNC host token must be at least two alphanumeric characters (escaped-newline strings and the device namespace are not false positives) and a forward-slash share host must be dot-free (protocol-relative URLs are not); .md and .csv joined the scanned extensions, and shipped documentation joined the scanned scope via listDocumentationFiles. Locked by eight new fixtures in scan.test.ts. The literal spellings previously quoted here were rewritten into prose by owner decision."
       }
     },
-    "note": "Round-4 re-verification at HEAD 677f415, plus the Batch A authority repairs, the F6 gate/evidence repairs, the Batch E accessibility gate halves, Batch F + D-5, the F6-R4-02/F6-R4-03 boundary repairs and the learner-surface build applied afterwards (owner decisions D-1 to D-4, 2026-11-15). The tree closed with npm run verify green: 553/553 tests, 18/18 gates, 0 unverified, 169 shipped files scanned by the path gate, 191-file manifest, attestation PASS, repro 4/4 same; the secrets scan covers 185 tree files AND 351 history blobs with 0 findings. open_counts covers the 85 round-3 findings only (52 open: 0 blockers, 20 majors, 32 minors); the round-4 findings are in new_findings, open_after_round4 (now EMPTY - every first-hand round-4 finding is closed) and closed_after_round4, and the delegated reviewer counts are in reviewer_corpus. F6-03 is closed via owner decision D-5 and F6-04 via Batch F. F6-R4-02 (the secrets-scan boundary) and F6-R4-03 (the coverage path list) are closed: the scanner reads the published artifacts and the whole git history, and the coverage gate is driven by the delivery-path registry in packages/onekey. F0-01 and F0-03 are closed by owner decision D-1 (the learner route and the enrolment route are wired and deployed). F0-04 (the consent and enrolment audit trails were process-scoped arrays) and F1-14 (the coverage gate hard-coded six paths) are closed: the trails are durable and hash-chained, and the gate is registry-driven. F8-04 and F5-01 are PARTIALLY addressed and stay open on one point - the PUBLIC ledger is still in memory, which is a design decision scheduled in docs/PLAN_GAP_CLOSEOUT.md. The settings.local.json checksum fix is recorded as F6-R4-04. F2-R4-01 and F2-R4-02 are closed by the keyboard-focus and form-semantics gates. See docs/AUDIT_ROUND4.md sections 7-10 and docs/PLAN_GAP_CLOSEOUT.md."
+    "note": "Round-4 re-verification at HEAD 677f415, plus the Batch A authority repairs, the F6 gate/evidence repairs, the Batch E accessibility gate halves, Batch F + D-5, the F6-R4-02/F6-R4-03 boundary repairs and the learner-surface build applied afterwards (owner decisions D-1 to D-4, 2026-11-15). The tree closed with npm run verify green: 553/553 tests, 18/18 gates, 0 unverified, 169 shipped files scanned by the path gate, 191-file manifest, attestation PASS, repro 4/4 same; the secrets scan covers 185 tree files AND 351 history blobs with 0 findings. open_counts covers the 85 round-3 findings only (52 open: 0 blockers, 20 majors, 32 minors); the round-4 findings are in new_findings, open_after_round4 (now EMPTY - every first-hand round-4 finding is closed) and closed_after_round4, and the delegated reviewer counts are in reviewer_corpus. F6-03 is closed via owner decision D-5 and F6-04 via Batch F. F6-R4-02 (the secrets-scan boundary) and F6-R4-03 (the coverage path list) are closed: the scanner reads the published artifacts and the whole git history, and the coverage gate is driven by the delivery-path registry in packages/onekey. F0-01 and F0-03 are closed by owner decision D-1 (the learner route and the enrolment route are wired and deployed). F0-04 (the consent and enrolment audit trails were process-scoped arrays) and F1-14 (the coverage gate hard-coded six paths) are closed: the trails are durable and hash-chained, and the gate is registry-driven. F8-04 and F5-01 are PARTIALLY addressed and stay open on one point - the PUBLIC ledger is still in memory, which is a design decision scheduled in docs/PLAN_GAP_CLOSEOUT.md. The settings.local.json checksum fix is recorded as F6-R4-04. F2-R4-01 and F2-R4-02 are closed by the keyboard-focus and form-semantics gates. See docs/AUDIT_ROUND4.md sections 7-10 and docs/PLAN_GAP_CLOSEOUT.md. WAVE CLOSE-OUT (2026-11-16): the 7 wave-1 findings (F5-02, F5-03, F3-11, F3-13, F3-14, F3-17, F3-20), the wave-2 CLI seams (F3-11 fully), the owner-approved public-ledger durability (F5-01 and F8-04, code level, ADR-0019), and the answer-quality fix (F3-04) are CLOSED with named tests. The register's F3-04 row was corrected: it was already in closed_ids from round 4 but still said PROVEN. F3-15 is PARTIAL (the route is leak-free but no typed learner-facing gateway error was added). open_counts re-derived from the register: 43 open (0 blockers, 11 majors, 32 minors); the authoritative count is reconciliation.open_counts, not the legacy top-level counts field. Full chain: 609/609 tests, 29 suites; verify/repro and live deployment recorded in docs/AUDIT_ROUND4.md §17. Screen-reader evidence remains UNVERIFIED: the delegated NVDA agent died on an external free-model usage limit."
   }
 }

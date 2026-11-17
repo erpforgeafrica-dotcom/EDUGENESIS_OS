@@ -15,7 +15,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import type { ProviderAdapter } from '@edugenesis/contracts';
+import type { EduGenesisSettings, ProviderAdapter } from '@edugenesis/contracts';
 import {
   authorizeAuditAccess,
   authorizePeer,
@@ -26,6 +26,8 @@ import {
   type ServeHandle,
   type ServeOptions,
 } from './serve.js';
+import { createLearnerServices, type LearnerServices } from './learner.js';
+import { HOSTED_MODEL_ID, HOSTED_PROVIDER_ID, type FetchLike } from '@edugenesis/onekey';
 
 test('loopback detection accepts the IPv4, IPv6 and mapped loopback forms', () => {
   assert.equal(isLoopback('127.0.0.1'), true);
@@ -201,17 +203,46 @@ async function withServer(
   options: Partial<ServeOptions>,
   run: (handle: ServeHandle) => Promise<void>,
 ): Promise<void> {
+  const dataDir = mkdtempSync(join(tmpdir(), 'edugenesis-serve-'));
+  // HERMETIC SETTINGS, ALWAYS: the learner services built here must never read
+  // the machine's real settings file. An operator's machine can carry a real
+  // provider key in the local override; a test that defaulted to loadSettings()
+  // would load that key and dial the real provider from the test run. The
+  // explicit object makes the test suite independent of every machine it runs
+  // on (and independent of every credential it holds).
+  const services =
+    options.learnerServices ??
+    createLearnerServices({
+      dataDir,
+      adapters: options.adapters ?? [],
+      settings: hermeticSettings(),
+    });
+  const ownsServices = options.learnerServices === undefined;
   const handle = await startServer({
     host: '127.0.0.1',
     port: 0,
-    dataDir: mkdtempSync(join(tmpdir(), 'edugenesis-serve-')),
+    dataDir,
     ...options,
+    learnerServices: options.learnerServices ?? services,
   });
   try {
     await run(handle);
   } finally {
     await handle.close();
+    if (ownsServices) services.close();
   }
+}
+
+/** A full, valid settings file that names no hosted provider and holds no key. */
+function hermeticSettings(): EduGenesisSettings {
+  return {
+    schemaVersion: 1,
+    server: { host: '127.0.0.1', port: 8787 },
+    paths: { dataDir: './.edugenesis-data' },
+    providers: { primary: 'local-echo', secondary: 'local-echo', apiKeys: {} },
+    features: { accessibilityGuardian: true, offlineBundle: true, telemetry: false, publicAnchoring: false },
+    limits: { budgetUnits: 1_000_000, mediaBudgetBytes: 5_242_880, confidenceThreshold: 0.7 },
+  };
 }
 
 test('a blank question is refused with a plain message', async () => {
@@ -350,4 +381,127 @@ test('the enrolment route enrols a learner on a guardian consent token', async (
       'an enrolment response must never carry a credential secret',
     );
   });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The wired provider route: failures never leak provider evidence.           */
+/*                                                                            */
+/* Seam 2 wires the settings' primary provider onto the real gateway. These   */
+/* tests drive the REAL route over a REAL socket with that wiring in place    */
+/* and prove the learner-facing surface carries no provider name, no key,     */
+/* no quota and no status code (Doc 16 §6.6; the plan's non-leak rule).       */
+/* -------------------------------------------------------------------------- */
+
+/** A marker credential for the route tests: never a real key. */
+const ROUTE_KEY = 'sk-test-edugenesis-route-not-a-real-key-000000';
+
+/** The model body the fake provider host returns. */
+const ROUTE_MODEL_PAYLOAD = {
+  model: HOSTED_MODEL_ID,
+  choices: [{ message: { content: 'Water evaporates, forms clouds, and returns as rain.' } }],
+  usage: { prompt_tokens: 10, completion_tokens: 20 },
+};
+
+/** An injectable provider host for the wired adapter. */
+function routeFetch(response: { status: number; payload?: unknown }): FetchLike {
+  return async () => ({
+    ok: response.status >= 200 && response.status < 300,
+    status: response.status,
+    statusText: 'provider status text',
+    headers: { get: () => null },
+    json: async () => response.payload,
+  });
+}
+
+/** Learner services with the settings wiring in place. */
+function wiredServices(
+  dataDir: string,
+  fetch: FetchLike,
+  tierZero?: Parameters<typeof createLearnerServices>[0]['tierZero'],
+): LearnerServices {
+  return createLearnerServices({
+    dataDir,
+    settings: {
+      schemaVersion: 1,
+      server: { host: '127.0.0.1', port: 8787 },
+      paths: { dataDir: './.edugenesis-data' },
+      providers: { primary: HOSTED_PROVIDER_ID, secondary: 'local-echo', apiKeys: { [HOSTED_PROVIDER_ID]: ROUTE_KEY } },
+      features: { accessibilityGuardian: true, offlineBundle: true, telemetry: false, publicAnchoring: false },
+      limits: { budgetUnits: 1_000_000, mediaBudgetBytes: 5_242_880, confidenceThreshold: 0.7 },
+    },
+    providerFetch: fetch,
+    tierZero,
+  });
+}
+
+test('a provider failure on the wired route yields a generic 502 that leaks no provider evidence', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'edugenesis-serve-wired-'));
+  const services = wiredServices(
+    dir,
+    routeFetch({ status: 503, payload: { error: { message: 'quota exhausted, credit balance zero (HTTP 503)' } } }),
+    { serve: async () => null, bundles: () => [] },
+  );
+  await withServer({ learnerServices: services }, async (handle) => {
+    const response = await fetch(`${handle.url}/api/learn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'what is the water cycle' }),
+    });
+    assert.equal(response.status, 502, 'a dead provider with no offline content refuses cleanly');
+    const raw = await response.text();
+    const payload = JSON.parse(raw) as { ok: boolean; error: string };
+    assert.equal(payload.ok, false);
+    assert.equal(
+      payload.error,
+      'A lesson is not available right now. Please try again shortly.',
+      'the learner-facing message is the fixed generic one',
+    );
+    assert.equal(new RegExp([HOSTED_PROVIDER_ID, '503', 'quota', 'credit', 'outage', 'rate limit', 'unavailable', 'refused'].join('|'), 'i').test(raw), false,
+      'the response body never names the provider, the status code or the outage');
+    assert.equal(raw.includes(ROUTE_KEY), false, 'the response body never carries the credential');
+  });
+  services.close();
+});
+
+test('a wired provider serves the model tier through the real route', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'edugenesis-serve-wired-'));
+  const services = wiredServices(dir, routeFetch({ status: 200, payload: ROUTE_MODEL_PAYLOAD }));
+  await withServer({ learnerServices: services }, async (handle) => {
+    const response = await fetch(`${handle.url}/api/learn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'what is the water cycle' }),
+    });
+    assert.equal(response.status, 200);
+    const payload = (await response.json()) as { ok: boolean; text: string; tier: number; guarded: boolean };
+    assert.equal(payload.ok, true);
+    assert.equal(payload.tier, 1, 'the wired provider serves the model tier');
+    assert.equal(payload.text, 'Water evaporates, forms clouds, and returns as rain.');
+    assert.equal(payload.guarded, true);
+  });
+  services.close();
+});
+
+test('a provider failure on the wired route still yields a lesson, and that lesson leaks no provider evidence', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'edugenesis-serve-wired-'));
+  const services = wiredServices(
+    dir,
+    routeFetch({ status: 429, payload: { error: { message: 'rate limit exceeded (HTTP 429)' } } }),
+  );
+  await withServer({ learnerServices: services }, async (handle) => {
+    const response = await fetch(`${handle.url}/api/learn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'what is the water cycle' }),
+    });
+    assert.equal(response.status, 200, 'the provider being rate limited still yields a lesson');
+    const raw = await response.text();
+    const payload = JSON.parse(raw) as { ok: boolean; text: string; tier: number };
+    assert.equal(payload.ok, true);
+    assert.equal(payload.tier, 0, 'the lesson came from the offline tier');
+    assert.equal(new RegExp([HOSTED_PROVIDER_ID, '429', 'quota', 'credit', 'rate limit', 'unavailable', 'refused'].join('|'), 'i').test(raw), false,
+      'the lesson body never carries an operations event');
+    assert.equal(raw.includes(ROUTE_KEY), false, 'the lesson body never carries the credential');
+  });
+  services.close();
 });

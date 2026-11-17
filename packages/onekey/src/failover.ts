@@ -57,9 +57,13 @@ export interface FailoverDrillOptions {
   gateway?: OneKeyGatewayImpl;
   /**
    * Which ladder outcome to exercise. Defaults to `offline-rescue`.
-   *   offline-rescue  — every model fails, Tier 0 serves a cached lesson
-   *   human-deferral  — every model fails and no cached lesson exists, Tier 4 defers
-   *   exhausted       — no Tier 0 and no Tier 4: the ladder raises a typed error
+   *   offline-rescue     — every model fails, Tier 0 serves a cached lesson
+   *   human-deferral     — every model fails and no cached lesson exists, Tier 4 answers
+   *   exhausted          — no Tier 0; a human tier takes the work but has no
+   *                         answer now, so the ladder raises a typed error
+   *   no-human-support  — no Tier 0 and NO human tier: the ladder raises a
+   *                         typed error and records NO deferral, because no
+   *                         human ever took the work (audit finding F3-20)
    */
   scenario?: FailoverScenario;
   policy?: TaskPolicy;
@@ -67,7 +71,11 @@ export interface FailoverDrillOptions {
   ctx?: RequestContext;
 }
 
-export type FailoverScenario = 'offline-rescue' | 'human-deferral' | 'exhausted';
+export type FailoverScenario =
+  | 'offline-rescue'
+  | 'human-deferral'
+  | 'exhausted'
+  | 'no-human-support';
 
 /** The deferred response a human-support tier returns. */
 export const DEFERRED_RESPONSE_TEXT =
@@ -190,13 +198,49 @@ function buildFailoverDrillGateway(): OneKeyGatewayImpl {
 }
 
 /**
- * A drill gateway with NO offline tier and NO human-support tier, so the
- * ladder must fail with a typed error instead of pretending a learner was
- * served. This is the negative control for the other two scenarios.
+ * A drill gateway with NO offline tier and a human tier that TAKES the work
+ * but has no answer ready, so the ladder must fail with a typed error instead
+ * of pretending a learner was served. This is the negative control for the
+ * other two scenarios.
+ *
+ * WHY a human tier here and not none: the deferral must be TRUE for it to be
+ * recorded. A human that took the question and cannot answer it right now has
+ * genuinely deferred it, so the trail says "deferred" and the learner is not
+ * denied silently. The case where NO human tier exists — where nothing may be
+ * deferred at all — is the separate `no-human-support` scenario below.
  *
  * Module-internal: the drill runner owns the scenarios.
  */
 function buildExhaustionDrillGateway(): OneKeyGatewayImpl {
+  const gateway = createOneKeyGateway({
+    policyVersion: 'failover-drill-v1',
+    tierFour: {
+      async serve() {
+        // A mentor took the question; no answer is ready now.
+        return null;
+      },
+      async accept() {
+        return true;
+      },
+    },
+  });
+  gateway.register(createFailingProvider('drill-primary', 1), { locales: ['*'] });
+  gateway.register(createFailingProvider('drill-secondary', 2), { locales: ['*'] });
+  gateway.register(createFailingProvider('drill-local', 3), { locales: ['*'] });
+  return gateway;
+}
+
+/**
+ * A drill gateway with NO offline tier and NO human tier.
+ *
+ * WHY this scenario exists (audit finding F3-20): with no human tier, nothing
+ * can be deferred. The request was denied, and the trail must record exactly
+ * that — the false sentence "the request is deferred to human support" is what
+ * this control exists to rule out.
+ *
+ * Module-internal: the drill runner owns the scenarios.
+ */
+function buildNoHumanSupportDrillGateway(): OneKeyGatewayImpl {
   const gateway = createOneKeyGateway({
     policyVersion: 'failover-drill-v1',
   });
@@ -220,7 +264,11 @@ export async function runFailoverScenario(
   const scenario = opts.scenario ?? 'offline-rescue';
   const gateway =
     opts.gateway ??
-    (scenario === 'exhausted' ? buildExhaustionDrillGateway() : buildFailoverDrillGateway());
+    (scenario === 'exhausted'
+      ? buildExhaustionDrillGateway()
+      : scenario === 'no-human-support'
+        ? buildNoHumanSupportDrillGateway()
+        : buildFailoverDrillGateway());
   const policy =
     opts.policy ?? (scenario === 'offline-rescue' ? drillPolicy('explain') : drillPolicy('research'));
   const request =
@@ -278,6 +326,7 @@ export interface FailoverDrillReport {
     'offline-rescue': FailoverDrillResult;
     'human-deferral': FailoverDrillResult;
     exhausted: FailoverDrillResult;
+    'no-human-support': FailoverDrillResult;
   };
   /** Every tier reached by at least one scenario, ascending. */
   tiersExercised: FallbackTier[];
@@ -287,9 +336,10 @@ export async function runFailoverDrill(): Promise<FailoverDrillReport> {
   const rescue = await runFailoverScenario({ scenario: 'offline-rescue' });
   const deferral = await runFailoverScenario({ scenario: 'human-deferral' });
   const exhausted = await runFailoverScenario({ scenario: 'exhausted' });
+  const noHumanSupport = await runFailoverScenario({ scenario: 'no-human-support' });
 
   const tiers = new Set<FallbackTier>();
-  for (const run of [rescue, deferral, exhausted]) {
+  for (const run of [rescue, deferral, exhausted, noHumanSupport]) {
     for (const transition of run.transitions) {
       tiers.add(transition.tier);
     }
@@ -300,6 +350,7 @@ export async function runFailoverDrill(): Promise<FailoverDrillReport> {
       'offline-rescue': rescue,
       'human-deferral': deferral,
       exhausted,
+      'no-human-support': noHumanSupport,
     },
     tiersExercised: [...tiers].sort((a, b) => a - b),
   };

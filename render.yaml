@@ -8,10 +8,15 @@
 # A free instance is a demonstration and governance surface, never a system of
 # record. Durable learner state lives on the learner's device (Tier 0).
 #
-# No database is declared here on purpose. Genesis Slice 0 persists NOTHING:
-# every store is in-memory behind a repository seam (ADR-0017), so declaring an
-# unused Render Postgres would claim infrastructure the code does not use. The
-# database arrives with the slice that implements the durable adapter.
+# No database is declared here on purpose. Durability is file-backed through
+# node:sqlite, INSIDE the project at ./.edugenesis-data (ADR-0018: the private
+# store and the consent/enrolment audit log; ADR-0019: the public sponsor
+# ledger journal). The code needs no hosted database, so declaring one here
+# would claim infrastructure it does not use. A free instance's filesystem is
+# ephemeral (line 6): these stores survive restarts and crashes for the life of
+# the instance, NOT a redeploy or spin-down. Local runs and paid plans with a
+# persistent disk mounted at the data dir get full durability with no code
+# change. Hosted enrolment and audit reads stay refused (ADR-0012).
 
 services:
   - type: web

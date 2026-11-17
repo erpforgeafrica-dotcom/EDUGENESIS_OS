@@ -54,8 +54,17 @@ export const TIER_ZERO_MODEL = 'offline-curriculum';
  * WHY it says nothing about providers: a provider outage is an operations
  * event, not a learner event (Doc 16 §6.6). The learner is told what they are
  * reading, not why the usual path was unavailable.
+ *
+ * WHY it says learning CONTINUES and that sponsors are notified: that is
+ * §6.6 step 6 — the learner-facing message must state that core learning
+ * continues and that sponsors are being notified, never that credits ran out
+ * or that a provider failed (audit finding F3-17). The old wording ("Here is
+ * a lesson from your offline library that covers this topic") said neither,
+ * and it framed the answer as material pulled from a fallback store — the
+ * degraded framing the spec forbids.
  */
-export const TIER_ZERO_FALLBACK_NOTICE = 'Here is a lesson from your offline library that covers this topic.';
+export const TIER_ZERO_FALLBACK_NOTICE =
+  'Core learning continues. Here is a lesson on the same topic as your question. The sponsors of this programme have been notified.';
 
 /**
  * The notice for a fallback whose best candidate shares NO word with the task.
@@ -66,9 +75,13 @@ export const TIER_ZERO_FALLBACK_NOTICE = 'Here is a lesson from your offline lib
  * now made only when the relevance score says there is a topical match. The
  * learner still receives a lesson — the product promise is that a learner is
  * never denied — but the text no longer says something the build cannot know.
+ *
+ * WHY it does not apologise: "it may not answer your question" reads like a
+ * fallback admitting it failed. The learner gets a lesson and a clear
+ * statement that learning continues.
  */
 export const TIER_ZERO_FALLBACK_UNRELATED_NOTICE =
-  'Our offline library has no lesson on this exact topic. Here is the closest lesson we have — it may not answer your question.';
+  'Core learning continues. Here is a lesson from this programme to work through. The sponsors of this programme have been notified.';
 
 const DEFAULT_ENTRIES: TierZeroEntry[] = [
   {
@@ -164,15 +177,46 @@ function toResult(entry: TierZeroEntry): CompletionResult {
 const WORD = /[a-z0-9]+/g;
 
 /**
+ * Common words are not evidence of a topic. "what is a EduGenesis?" shares
+ * "a" with "Solving a linear equation"; counting that as a match is how an
+ * unrelated lesson was served with a "same topic" claim (owner screenshots,
+ * 2026-11-16). Both sides of the comparison are filtered.
+ */
+const STOPWORDS = new Set([
+  'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'so', 'to', 'of', 'in', 'on', 'at', 'by', 'for',
+  'with', 'from', 'about', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'am', 'what', 'which',
+  'who', 'whom', 'whose', 'when', 'where', 'why', 'how', 'do', 'does', 'did', 'can', 'could', 'would',
+  'should', 'will', 'shall', 'may', 'might', 'must', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me',
+  'him', 'her', 'us', 'them', 'my', 'your', 'his', 'its', 'our', 'their', 'this', 'that', 'these',
+  'those', 'there', 'here', 'one', 'two', 'three', 'some', 'any', 'all', 'each', 'every', 'more',
+  'most', 'other', 'another', 'same', 'as', 'into', 'over', 'under', 'again', 'very', 'just', 'also',
+  'explain', 'describe', 'tell', 'lesson', 'lessons', 'question', 'questions', 'mean', 'means',
+]);
+
+/** A deliberately simple singular form: "fractions" and "fraction" must meet. */
+function normalizeWord(word: string): string {
+  return word.length > 3 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word;
+}
+
+function contentWords(text: string): string[] {
+  return (text.toLowerCase().match(WORD) ?? [])
+    .filter((word) => !STOPWORDS.has(word))
+    .map(normalizeWord);
+}
+
+/**
  * How well a cached lesson matches the learner's words.
  *
- * WHY relevance and not "first entry": serving an unrelated lesson is not a
- * fallback, it is a wrong answer. A zero score still returns a lesson (the
- * deterministic floor), but a topical match wins.
+ * WHY RELEVANCE AND NOT "FIRST ENTRY": serving an unrelated lesson is not a
+ * fallback, it is a wrong answer. Only CONTENT words count — a stopword match
+ * is not a topic match (the "a" bug), and singular/plural forms are equal, so
+ * "What is a fraction?" reaches "Fractions basics" instead of whichever
+ * lesson happens to carry an "a". A score of ZERO now selects the honest
+ * curriculum-gap lesson in `serveFallback`, never a cached subject lesson.
  */
 function relevanceScore(entry: TierZeroEntry, prompt: string): number {
-  const wanted = new Set(prompt.toLowerCase().match(WORD) ?? []);
-  const offered = `${entry.id} ${entry.title}`.toLowerCase().match(WORD) ?? [];
+  const wanted = new Set(contentWords(prompt));
+  const offered = contentWords(`${entry.id} ${entry.title}`);
   let score = 0;
   for (const word of offered) {
     if (wanted.has(word)) {
@@ -180,6 +224,32 @@ function relevanceScore(entry: TierZeroEntry, prompt: string): number {
     }
   }
   return score;
+}
+
+/**
+ * The honest answer when NO cached lesson is on the learner's topic.
+ *
+ * "Core learning is never denied" must not become "serve an unrelated maths
+ * lesson with a disclaimer" (gap-register F3-04; owner screenshots). This is
+ * a usable lesson in its own right: it states the gap plainly, names the
+ * topics that ARE available, and gives the learner a next step. It claims no
+ * false lineage — no source was used, so `sourceLineage` is empty. The notice
+ * keeps Doc 16 §6.6 step 6: core learning continues, sponsors are notified.
+ */
+function curriculumGapLesson(candidates: readonly TierZeroEntry[]): CompletionResult {
+  const titles = candidates.map((candidate) => candidate.title).join('; ');
+  return {
+    text:
+      `${TIER_ZERO_FALLBACK_UNRELATED_NOTICE}\n\n` +
+      `This programme's lesson collection does not have a lesson on this topic yet. ` +
+      `These lessons are available now: ${titles}. ` +
+      `Ask about one of them, or try a more specific question.`,
+    providerId: TIER_ZERO_ID,
+    modelId: TIER_ZERO_MODEL,
+    usage: { inputTokens: 0, outputTokens: 0 },
+    latencyMs: 0,
+    sourceLineage: [],
+  };
 }
 
 export function createTierZeroProvider(opts: TierZeroOptions = {}): TierZeroProviderImpl {
@@ -252,9 +322,14 @@ export function createTierZeroProvider(opts: TierZeroOptions = {}): TierZeroProv
       }
 
       const result = toResult(best);
-      // The notice must not claim topical coverage the score does not support.
-      const notice = bestScore > 0 ? TIER_ZERO_FALLBACK_NOTICE : TIER_ZERO_FALLBACK_UNRELATED_NOTICE;
-      return { ...result, text: `${notice}\n\n${result.text}` };
+      // A zero score means NO cached lesson is on this topic. Serving one
+      // anyway with a disclaimer is a wrong answer (F3-04), so the honest
+      // curriculum-gap lesson is served instead: the learner still learns
+      // something true and useful, and is never denied.
+      if (bestScore === 0) {
+        return curriculumGapLesson(candidates);
+      }
+      return { ...result, text: `${TIER_ZERO_FALLBACK_NOTICE}\n\n${result.text}` };
     },
 
     bundles(): string[] {

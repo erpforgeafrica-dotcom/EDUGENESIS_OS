@@ -13,6 +13,7 @@ import { createLocalEchoProvider } from './providers/local-echo.js';
 import { createTierZeroProvider } from './providers/tier-zero.js';
 import { createBlockingGuardian, createContext, createMockAdapter, createPolicy, createRequest, createSource } from './testing/support.js';
 import { createKillSwitch } from './kill-switch.js';
+import { ProviderCredentialRevokedError, ProviderRateLimitedError } from './provider-errors.js';
 import type { OneKeyGatewayImpl } from './gateway.js';
 
 /** The real interception point a learner's request runs. */
@@ -381,6 +382,147 @@ test('gateway: a provider that refuses on budget falls through to the next tier'
   const outcomes = g.attemptsFor('req-test').map((a) => `${a.tier}:${a.outcome}`);
   assert.deepEqual(outcomes, ['0:no-offline-content', '1:skipped', '2:served']);
   assert.equal(g.circuitState('p1'), 'closed', 'a budget refusal must not trip the provider circuit');
+});
+
+test('gateway: a 429 leaves the circuit closed — a rate limit is not a health failure', async () => {
+  // F3-13. A throttle arrives exactly when the provider is busiest and most
+  // needed. Before the fix every non-budget failure called
+  // breaker.recordFailure(), so three throttles opened the circuit and the
+  // provider was removed from routing under load.
+  const g = gateway();
+  const throttled = createMockAdapter({
+    id: 'p1',
+    tier: 1,
+    failWith: new ProviderRateLimitedError('p1', 'the provider is rate limited (HTTP 429)'),
+  });
+  const next = createMockAdapter({ id: 'p2', tier: 2 });
+  g.register(throttled.adapter);
+  g.register(next.adapter);
+
+  const result = await g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext());
+
+  assert.equal(result.providerId, 'p2', 'a throttled provider must fall through to the next tier');
+  assert.equal(g.circuitState('p1'), 'closed', 'a 429 must not open the health circuit');
+  assert.deepEqual(
+    g.attemptsFor('req-test').map((a) => `${a.tier}:${a.outcome}`),
+    ['0:no-offline-content', '1:skipped', '2:served'],
+    'a throttled provider is a skipped rung, not a failed one',
+  );
+});
+
+test('gateway: a revoked credential is a governance failure, never a health failure', async () => {
+  // F3-14. The provider is not sick — the credential is dead. The failure is a
+  // governance event (rotate the key, review the incident), it must not be
+  // counted towards the health circuit, and the provider must not be retried.
+  const g = gateway();
+  const revoked = createMockAdapter({
+    id: 'p1',
+    tier: 1,
+    failWith: new ProviderCredentialRevokedError('p1', 'the provider rejected the credential (HTTP 401)'),
+  });
+  const next = createMockAdapter({ id: 'p2', tier: 2 });
+  g.register(revoked.adapter);
+  g.register(next.adapter);
+
+  const result = await g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext());
+
+  assert.equal(result.providerId, 'p2', 'the request must fall through to the next tier');
+  assert.equal(g.circuitState('p1'), 'closed', 'a rejected credential is not a provider outage');
+  assert.deepEqual(
+    g.attemptsFor('req-test').map((a) => `${a.tier}:${a.outcome}`),
+    ['0:no-offline-content', '1:governance-failed', '2:served'],
+    'the attempt must be recorded as a governance failure, not a generic provider failure',
+  );
+  assert.equal(revoked.calls(), 1, 'a provider whose credential was revoked must not be retried');
+});
+
+test('gateway: no handler means no deferral claim', async () => {
+  // F3-20. After every tier fails, the gateway used to record tier 4 as
+  // "deferred to human support" whether or not a human tier existed. The
+  // trail is the audit evidence for the sponsor: it must describe what
+  // actually happened, and no human was ever asked here.
+  const g = createOneKeyGateway({ policyVersion: 'policy-test-1' });
+  g.register(
+    createMockAdapter({ id: 'p1', tier: 1, failWith: new ProviderUnavailableError('p1', 'boom') }).adapter,
+  );
+
+  await assert.rejects(
+    () => g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext()),
+    (err: unknown) => {
+      assert.ok(err instanceof AllTiersExhaustedError, 'the failure must stay typed');
+      const tierFour = err.attempts.find((attempt) => attempt.tier === 4);
+      assert.ok(tierFour, 'the tier 4 rung must still be recorded');
+      assert.doesNotMatch(
+        tierFour.reason,
+        /deferred to human support/i,
+        'no human was asked, so the trail must not claim one was',
+      );
+      return true;
+    },
+  );
+
+  const tierFour = g.attemptsFor('req-test').find((attempt) => attempt.tier === 4);
+  assert.ok(tierFour, 'the tier 4 rung must be recorded on the trail');
+  assert.equal(
+    tierFour.outcome,
+    'failed',
+    'with no handler there is no deferral — the request failed, and the trail must say so',
+  );
+});
+
+test('gateway: a tier 4 handler that declines the work records a failure, not a deferral', async () => {
+  const g = createOneKeyGateway({
+    policyVersion: 'policy-test-1',
+    tierFour: {
+      async serve() {
+        return null;
+      },
+    },
+  });
+  g.register(
+    createMockAdapter({ id: 'p1', tier: 1, failWith: new ProviderUnavailableError('p1', 'boom') }).adapter,
+  );
+
+  await assert.rejects(
+    () => g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext()),
+    (err: unknown) => err instanceof AllTiersExhaustedError,
+  );
+
+  const tierFour = g.attemptsFor('req-test').find((attempt) => attempt.tier === 4);
+  assert.equal(
+    tierFour?.outcome,
+    'failed',
+    'a human tier that did not take the work did not defer it',
+  );
+});
+
+test('gateway: a tier 4 handler that accepts the work records the deferral', async () => {
+  const g = createOneKeyGateway({
+    policyVersion: 'policy-test-1',
+    tierFour: {
+      async serve() {
+        return null;
+      },
+      async accept() {
+        return true;
+      },
+    },
+  });
+  g.register(
+    createMockAdapter({ id: 'p1', tier: 1, failWith: new ProviderUnavailableError('p1', 'boom') }).adapter,
+  );
+
+  await assert.rejects(
+    () => g.complete(createPolicy(), createRequest({ prompt: LIVE_PROMPT }), createContext()),
+    (err: unknown) => err instanceof AllTiersExhaustedError,
+  );
+
+  const tierFour = g.attemptsFor('req-test').find((attempt) => attempt.tier === 4);
+  assert.equal(
+    tierFour?.outcome,
+    'deferred',
+    'a human took the work, so the deferral is true and may be recorded',
+  );
 });
 
 test('gateway: the onAttempt hook receives every rung of the ladder as it happens', async () => {

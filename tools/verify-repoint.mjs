@@ -46,13 +46,17 @@ for (const entry of [join(DIST, 'index.js'), join(DIST, 'testing', 'support.js')
 /**
  * The learner path: everything in the package that can run on a learner's
  * request, excluding provider implementations, the two composition roots, and
- * test doubles. Kept identical to `registry.test.ts` on purpose — two
+ * test doubles. Kept identical to `registry.test.ts` on purpose - two
  * definitions of "learner path" would let a file escape both.
+ *
+ * `provider-wiring.ts` is a COMPOSITION ROOT: the one place a settings
+ * provider id maps to an adapter factory, so the application never names a
+ * provider (ADR-0001). Exempt in `registry.test.ts` too - keep identical.
  */
 function isProductionLearnerPath(relativePath) {
   const normalised = relativePath.replace(/\\/g, '/');
   if (normalised.startsWith('providers/')) return false;
-  if (normalised === 'index.ts' || normalised === 'failover.ts') return false;
+  if (normalised === 'index.ts' || normalised === 'failover.ts' || normalised === 'provider-wiring.ts') return false;
   if (normalised.startsWith('testing/') || normalised.endsWith('.test.ts')) return false;
   return true;
 }

@@ -12,6 +12,9 @@
  *   sqlite-private-store.ts the DURABLE (file backed) private store
  *   durable-audit-log.ts the DURABLE, hash-chained audit log for consent and
  *                   enrolment events
+ *   sqlite-ledger-journal.ts the DURABLE journal behind the PUBLIC ledger
+ *                   (ADR-0019): the file-first sink and the verified restore
+ *                   for `createLedgerStore`'s optional seams
  *   reinvestment.ts the 60 % reinvestment engine (integer minor units)
  *   sponsor-report.ts the aggregate, privacy-reviewed artefact the Anchor
  *                   Sponsor receives
@@ -80,6 +83,14 @@ export {
   type DurableAuditLog,
   type DurableAuditLogOptions,
 } from './durable-audit-log.js';
+
+export {
+  createSqliteLedgerJournal,
+  LedgerPersistenceError,
+  type JournalVerification,
+  type SqliteLedgerJournal,
+  type SqliteLedgerJournalOptions,
+} from './sqlite-ledger-journal.js';
 
 export {
   createReinvestmentEngine,

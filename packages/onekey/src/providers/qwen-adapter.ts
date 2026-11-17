@@ -10,6 +10,7 @@ import type {
 } from '@edugenesis/contracts';
 import { requiredUnits } from '../budget.js';
 import { EgressRejectedError, projectEgressPayload, projectGroundedContext } from '../egress.js';
+import { ProviderCredentialRevokedError, ProviderRateLimitedError } from '../provider-errors.js';
 import { redactSecret } from '../redact.js';
 
 /**
@@ -218,6 +219,12 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
   // Held in a mutable binding so dispose() can release it (Doc 2 exit
   // procedure: a provider must be able to drop its credential).
   let apiKey: string | undefined = opts.apiKey;
+  // WHY a separate flag: a REVOKED credential (the provider rejected it) and
+  // a credential that was never configured are different facts. A revoked key
+  // must fail as a governance event forever; a missing key is a
+  // configuration state. Collapsing the two would report an incident for a
+  // provider that was never configured.
+  let credentialRevoked = false;
 
   const capabilities: ProviderCapabilities = {
     modalities: ['text'],
@@ -238,6 +245,16 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
 
     async complete(req: CompletionRequest, ctx: RequestContext): Promise<CompletionResult> {
       if (!apiKey) {
+        if (credentialRevoked) {
+          // The provider rejected this credential, so it is DEAD. Sending it
+          // again — now or after the circuit cooldown — is the defect this
+          // branch exists to prevent (audit finding F3-14). The adapter
+          // refuses before the egress boundary, so no request is ever built.
+          throw new ProviderCredentialRevokedError(
+            id,
+            'the credential was revoked after a rejected authentication and can never be used again',
+          );
+        }
         // A typed refusal. The adapter never runs without a credential and
         // never surfaces a raw credential error to the caller.
         throw new ProviderUnavailableError(
@@ -350,15 +367,26 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
         if (!response.ok) {
           const detail = await readErrorDetail(response);
           if (response.status === 401 || response.status === 403) {
-            throw new ProviderUnavailableError(
+            // A 401/403 is a CREDENTIAL failure, not an outage (audit finding
+            // F3-14). The credential is revoked HERE, at the only place that
+            // knows it is dead: the key is dropped, so it can never be sent
+            // again, and the failure is raised as a governance-typed error
+            // so the gateway skips this provider instead of counting it
+            // towards the health circuit.
+            apiKey = undefined;
+            credentialRevoked = true;
+            throw new ProviderCredentialRevokedError(
               id,
               `the provider rejected the credential (HTTP ${response.status}): ${detail}`,
             );
           }
           if (response.status === 429) {
+            // A 429 is a rate limit on a HEALTHY provider (audit finding
+            // F3-13). It is raised as its own type so the gateway can keep it
+            // off the health circuit.
             const retryAfter = response.headers.get('retry-after');
             const hint = retryAfter ? `retry after ${retryAfter}s` : 'no retry-after header was returned';
-            throw new ProviderUnavailableError(
+            throw new ProviderRateLimitedError(
               id,
               `the provider is rate limited (HTTP 429): ${detail}; ${hint}`,
             );
@@ -399,7 +427,13 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
 
     async health() {
       if (!apiKey) {
-        return { ok: false, consecutiveFailures: 0, detail: 'no API key is configured' };
+        return {
+          ok: false,
+          consecutiveFailures: 0,
+          detail: credentialRevoked
+            ? 'the credential was revoked after a rejected authentication'
+            : 'no API key is configured',
+        };
       }
       // No network probe: health must not spend credit or leak the key.
       return { ok: true, consecutiveFailures: 0 };

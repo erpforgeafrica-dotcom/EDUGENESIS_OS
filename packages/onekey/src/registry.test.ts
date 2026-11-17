@@ -62,15 +62,18 @@ test('registry: a provider can be disabled and re-enabled by status', () => {
  * name concrete providers — that is how the offline behaviour is proven — so
  * they are exempt. `src/index.ts` and `src/failover.ts` are exempt because
  * both are COMPOSITION ROOTS: index.ts is the package's public surface, and
- * failover.ts builds the drill's own scenario. The rule's intent — the
- * gateway and the policy engine never reach into a provider — still holds.
+ * failover.ts builds the drill's own scenario. `src/provider-wiring.ts` is a
+ * composition root too: it is the ONE place that maps a settings provider id
+ * to a concrete adapter factory, so the application never names a provider
+ * (ADR-0001). The rule's intent - the gateway and the policy engine never
+ * reach into a provider - still holds.
  */
 function isProductionLearnerPath(relativePath: string): boolean {
   const normalised = relativePath.replace(/\\/g, '/');
   if (normalised.startsWith('providers/')) {
     return false;
   }
-  if (normalised === 'index.ts' || normalised === 'failover.ts') {
+  if (normalised === 'index.ts' || normalised === 'failover.ts' || normalised === 'provider-wiring.ts') {
     return false;
   }
   if (normalised.startsWith('testing/') || normalised.endsWith('.test.ts')) {

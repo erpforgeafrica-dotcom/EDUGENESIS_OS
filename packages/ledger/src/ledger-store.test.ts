@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LedgerTamperError } from '@edugenesis/contracts';
+import { LedgerTamperError, type LedgerEntry } from '@edugenesis/contracts';
 
 import {
   appendCorrection,
@@ -335,6 +335,240 @@ test('the value scan can be switched off for a migration, but the field rule nev
       return true;
     },
   );
+});
+
+// ===========================================================================
+// F5-02 — THE SEQUENCE BELONGS TO THE STORE, NOT TO THE CALLER
+//
+// The store assigns every seq, so a caller can never supply one. What the
+// store must ALSO guarantee is that the seq it assigns is the next one: it
+// comes from the store's own counter, never from the length of an array the
+// store handed out, so no caller can make two entries claim the same seq or
+// make the store adopt an entry it never wrote.
+//
+// F5-03 — THE CHAIN IS VERIFIED ON READ AND ON WRITE
+//
+// A tamper-evident record that is only checked when somebody remembers to
+// ask is not tamper evident at the moment it matters. The trusted reads (the
+// public export and the merkle root) and the write path refuse a broken
+// chain with the contract's typed error, while `verify()` keeps REPORTING a
+// broken chain instead of throwing: an auditor must be able to read it.
+// ===========================================================================
+
+test('the sequence belongs to the store: removing an entry cannot make the store issue its seq again', () => {
+  const store = makeStore();
+  store.append('sponsor_pledge', { amount_cents: 100 });
+  const second = store.append('sponsor_deposit', { amount_cents: 200 });
+  assert.equal(second.seq, 2);
+
+  // The store hands out its live array on purpose (tamper evidence needs an
+  // auditor to be able to reach the stored bytes). A caller that removes an
+  // entry must NOT be able to make the store slide its sequence back: seq 2
+  // is already issued and must never be issued again.
+  store.all().splice(0, 1);
+
+  assert.throws(
+    () => {
+      store.append('grant_awarded', { amount_cents: 300 });
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof LedgerTamperError, 'the store must refuse to extend a chain it knows is broken');
+      assert.equal(error.brokenAtSeq, 1);
+      return true;
+    },
+  );
+
+  // And no seq is ever issued twice.
+  const seqs = store.all().map((entry) => entry.seq);
+  assert.equal(new Set(seqs).size, seqs.length, 'a seq must never be issued twice');
+});
+
+test('the sequence belongs to the store: an entry injected into the chain is refused, not adopted', () => {
+  const store = makeStore();
+  const first = store.append('sponsor_pledge', { amount_cents: 100 });
+
+  // A caller reaches into the live array the store handed out and splices in
+  // an entry the store never wrote. Its own hash is perfectly valid, so the
+  // hash chain alone cannot see it.
+  const injected: LedgerEntry = {
+    seq: 2,
+    type: 'sponsor_deposit',
+    at: '2026-01-01T00:00:00.000Z',
+    payload: { amount_cents: 666_666 },
+    previousEntryHash: first.entryHash,
+    entryHash: '',
+  };
+  injected.entryHash = computeEntryHash(injected);
+  store.all().push(injected);
+
+  // The store must not adopt it: it never issued that seq, and the chain it
+  // is about to extend is not the chain it wrote.
+  assert.throws(
+    () => {
+      store.append('grant_awarded', { amount_cents: 300 });
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof LedgerTamperError);
+      return true;
+    },
+  );
+
+  // And the report must say the chain is broken — a chain that holds an entry
+  // the store never wrote is broken, however well-formed its hashes are.
+  const result = store.verify();
+  assert.equal(result.ok, false);
+  assert.equal(result.brokenAtSeq, 2);
+});
+
+test('two appends in the same tick produce two distinct seq values and one unbroken chain', () => {
+  // A clock that re-enters the store: the second append is issued from inside
+  // the first one, before the first one has been written.
+  const holder: { store?: ReturnType<typeof createLedgerStore> } = {};
+  let reentered = false;
+  holder.store = createLedgerStore({
+    now: (): string => {
+      if (!reentered) {
+        reentered = true;
+        holder.store?.append('sponsor_pledge', { amount_cents: 111 });
+      }
+      return '2026-01-01T00:00:00.000Z';
+    },
+  });
+  const store = holder.store;
+  assert.ok(store);
+
+  const outer = store.append('sponsor_deposit', { amount_cents: 222 });
+
+  const seqs = store.all().map((entry) => entry.seq);
+  assert.deepEqual(seqs, [1, 2], 'the overlapping appends must take two different seq values');
+  assert.equal(store.verify().ok, true, 'the chain must still verify');
+  assert.equal(outer.seq, 2);
+
+  // ONE chain, not two: the second entry links to the first.
+  const entries = store.all();
+  const first = entries[0];
+  const second = entries[1];
+  assert.ok(first);
+  assert.ok(second);
+  assert.equal(second.previousEntryHash, first.entryHash);
+});
+
+test('a tampered entry makes a read throw', () => {
+  const store = makeStore();
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 });
+  store.append('sponsor_deposit', { amount_cents: 500_000 });
+
+  const second = store.all()[1];
+  assert.ok(second);
+  second.payload['amount_cents'] = 999;
+
+  assert.throws(
+    () => {
+      store.exportPublic();
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof LedgerTamperError);
+      assert.equal(error.brokenAtSeq, 2);
+      return true;
+    },
+  );
+});
+
+test('the merkle root of a tampered chain is refused', () => {
+  const store = makeStore();
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 });
+  store.append('sponsor_deposit', { amount_cents: 500_000 });
+
+  const second = store.all()[1];
+  assert.ok(second);
+  second.payload['amount_cents'] = 999;
+
+  assert.throws(
+    () => {
+      store.merkleRoot();
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof LedgerTamperError);
+      assert.equal(error.brokenAtSeq, 2);
+      return true;
+    },
+  );
+});
+
+test('the write path refuses to extend a tampered chain', () => {
+  const store = makeStore();
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 });
+  const second = store.append('sponsor_deposit', { amount_cents: 500_000 });
+
+  second.payload['amount_cents'] = 999;
+
+  assert.throws(
+    () => {
+      store.append('grant_awarded', { amount_cents: 250_000 });
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof LedgerTamperError);
+      assert.equal(error.brokenAtSeq, 2);
+      return true;
+    },
+  );
+  assert.equal(store.all().length, 2, 'the refused append must not have been written');
+});
+
+test('verify() reports a broken chain instead of throwing', () => {
+  const store = makeStore();
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 });
+  store.append('sponsor_deposit', { amount_cents: 500_000 });
+
+  const second = store.all()[1];
+  assert.ok(second);
+  second.payload['amount_cents'] = 999;
+
+  // An auditor must be able to READ a broken chain and see where it broke.
+  const result = store.verify();
+  assert.equal(result.ok, false);
+  assert.equal(result.brokenAtSeq, 2);
+  assert.equal(result.entriesChecked, 2);
+  assert.match(result.detail ?? '', /entryHash/);
+});
+
+test('a read refusal names the same seq and detail verify() reports', () => {
+  const store = makeStore();
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 });
+  store.append('sponsor_deposit', { amount_cents: 500_000 });
+
+  const second = store.all()[1];
+  assert.ok(second);
+  second.payload['amount_cents'] = 999;
+
+  const report = store.verify();
+  assert.throws(
+    () => {
+      store.exportPublic();
+    },
+    (error: unknown) => {
+      assert.ok(error instanceof LedgerTamperError);
+      assert.equal(error.brokenAtSeq, report.brokenAtSeq);
+      assert.equal(error.detail, report.detail);
+      return true;
+    },
+  );
+});
+
+test('all() still hands out the raw chain after a break: the auditor must be able to read it', () => {
+  const store = makeStore();
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 });
+  store.append('sponsor_deposit', { amount_cents: 500_000 });
+
+  const second = store.all()[1];
+  assert.ok(second);
+  second.payload['amount_cents'] = 999;
+
+  // The RAW access is deliberately not a trust boundary: tamper evidence
+  // needs an auditor to be able to reach the stored bytes of a broken chain
+  // and see what was done to them. The trusted reads (exportPublic,
+  // merkleRoot) and the write path are the ones that refuse.
+  assert.equal(store.all().length, 2);
 });
 
 test('ledger: a NEGATIVE money amount is refused', () => {

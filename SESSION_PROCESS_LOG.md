@@ -597,3 +597,29 @@ worst kind of bug: a README that tells a sponsor the opposite of what the code d
   container that may be recycled. `/api/enrol` is now refused on a hosted instance, with the
   reason stated; `/api/learn` stays open, because a learner asking a question is the product
   and a question carries no identifier. Two tests lock both halves.
+
+## 17. Wave close-out, durable public ledger and the answer-quality repair (2026-11-16)
+
+- **Owner order:** a skills-loaded swarm took the owner-gated tasks while Solo oversaw and
+  independently verified every result, then the owner chose Option A for the public ledger.
+- **Wave 1 and Wave 2 were verified by re-running the work myself**, not accepted on agent
+  reports: ledger 103/103, onekey 139/139, CLI 51/51. The two defects behind the owner's
+  screenshots were reproduced locally before any fix was written.
+- **The screen-reader agent died on an external free-model usage limit.** The accessibility
+  claim remains UNVERIFIED; it was not quietly promoted to a pass. The ops brief (GitHub
+  billing lock live-verified, keep Frankfurt) and the ledger-design brief (fresh Goldfish:
+  APPROVE-WITH-CHANGES) were verified against the code before use.
+- **ADR-0019 records the owner's Option A**: an INSERT-only SQLite journal behind two
+  optional seams in the existing ledger store, no contract change, no new dependency. The
+  Goldfish blocker (no restore mechanism) and its four majors (hook contract, false
+  `render.yaml` comment, WAL departure, crash/backup overclaims) were folded into the build.
+- **The answer-quality fix was at the source**: stopword matches and plural mismatches no
+  longer pick a wrong lesson, and a zero-score question receives an honest curriculum-gap
+  lesson instead of an unrelated subject with a false "covers this topic" claim.
+- **ADR-0001 had to be enforced, not weakened.** Wave 2's provider literal in `apps/cli`
+  failed the no-provider-leak blocker (28 hits). The wiring moved behind a new onekey
+  composition root with neutral aliases; the three gate/test predicates that define a
+  composition root were kept identical rather than relaxed. 613/613 tests, 18/18 gates,
+  repro 4/4 same.
+- **Not closed honestly:** F3-15 is PARTIAL (no typed learner-facing gateway error class);
+  the screen-reader claim is UNVERIFIED; hosted free-tier storage remains ephemeral (ADR-0019).

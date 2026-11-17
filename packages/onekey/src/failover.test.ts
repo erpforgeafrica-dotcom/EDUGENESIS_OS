@@ -111,6 +111,52 @@ test('failover drill: exhausted — no Tier 0 and no Tier 4 raises a typed error
   );
 });
 
+test('failover drill: no-human-support — with no human tier the trail records a failure, not a deferral', async () => {
+  // F3-20. The audit trail is the evidence the sponsor reads. It may only say
+  // "deferred to human support" when a human tier EXISTS AND TOOK the work.
+  const drill = await runFailoverScenario({ scenario: 'no-human-support' });
+
+  assert.equal(drill.exhausted, true, 'with nothing to serve the request, the ladder is exhausted');
+  const last = drill.transitions[drill.transitions.length - 1];
+  assert.equal(last?.outcome, 'failed', 'no human took the work, so nothing was deferred');
+  assert.doesNotMatch(
+    last?.reason ?? '',
+    /deferred to human support/i,
+    'the trail must not claim a human was asked when no human tier exists',
+  );
+});
+
+test('failover drill: the Tier 0 lesson states that core learning continues and that sponsors are notified', async () => {
+  // F3-17. Doc 16 §6.6 step 6: the learner-facing message must state that
+  // core learning continues and that sponsors are being notified — never that
+  // credits ran out or that a provider failed. The old notice said neither,
+  // and it framed the lesson as material pulled from an "offline library",
+  // which is the degraded framing the spec forbids.
+  const drill = await runFailoverScenario({ scenario: 'offline-rescue' });
+  const text = drill.result?.text ?? '';
+
+  assert.match(
+    text,
+    /core learning continues/i,
+    '§6.6 step 6 requires the message to say that core learning continues',
+  );
+  assert.match(
+    text,
+    /sponsors?[^.]*notified/i,
+    '§6.6 step 6 also requires the sponsor-notification clause',
+  );
+  assert.doesNotMatch(
+    text,
+    /provider|quota|credit|outage|\b401\b|\b403\b/i,
+    'the learner must never see operations vocabulary',
+  );
+  assert.doesNotMatch(
+    text,
+    /offline|library|may not answer|apolog|sorry|unfortunately/i,
+    'the message must not apologise for itself or frame the lesson as degraded material',
+  );
+});
+
 test('failover drill: the documented report exercises all five tiers and the §6.6 rescue', async () => {
   const report = await runFailoverDrill();
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { ProviderUnavailableError, BudgetExceededError } from '@edugenesis/contracts';
 import { createQwenAdapter, QWEN_BASE_URL, QWEN_DEFAULT_MODEL, QWEN_MAINLAND_BASE_URL, assertSafeBaseUrl } from './qwen-adapter.js';
 import { createContext, createRequest, createSource } from '../testing/support.js';
+import { ProviderCredentialRevokedError, ProviderRateLimitedError } from '../provider-errors.js';
 import { createBudgetLedger } from '../budget.js';
 import type { FetchLike, FetchRequestInit } from './qwen-adapter.js';
 
@@ -173,6 +174,65 @@ test('qwen: a 429 is mapped to ProviderUnavailableError with a retry-after hint'
       assert.match(err.detail ?? '', /retry after 30s/i);
       return true;
     },
+  );
+});
+
+test('qwen: a 429 is a rate limit on a healthy provider, not an outage', async () => {
+  const calls: RecordedCall[] = [];
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    fetchImpl: recordingFetch(calls, {
+      status: 429,
+      body: { error: { message: 'rate limited' } },
+      headers: { 'retry-after': '30' },
+    }),
+  });
+
+  await assert.rejects(
+    () => adapter.complete(createRequest(), createContext()),
+    (err: unknown) => {
+      assert.ok(
+        err instanceof ProviderRateLimitedError,
+        'a throttle must be distinguishable from an outage, or the gateway cannot keep it off the health circuit',
+      );
+      assert.match(err.detail ?? '', /429/);
+      assert.match(err.detail ?? '', /retry after 30s/i);
+      return true;
+    },
+  );
+});
+
+test('qwen: a 401 revokes the credential — it is never sent again', async () => {
+  const calls: RecordedCall[] = [];
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    fetchImpl: recordingFetch(calls, { status: 401, body: { error: { message: 'invalid api key' } } }),
+  });
+
+  await assert.rejects(
+    () => adapter.complete(createRequest(), createContext()),
+    (err: unknown) => {
+      assert.ok(
+        err instanceof ProviderCredentialRevokedError,
+        'a rejected credential is a governance failure, not a provider outage',
+      );
+      assert.match(err.detail ?? '', /401/);
+      assert.doesNotMatch(err.detail ?? '', /test-key-not-real/);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () => adapter.complete(createRequest(), createContext()),
+    (err: unknown) => {
+      assert.ok(err instanceof ProviderCredentialRevokedError, 'the revoked credential must refuse to run');
+      return true;
+    },
+  );
+  assert.equal(
+    calls.length,
+    1,
+    'a revoked credential must never reach the provider again — retrying a dead key is the defect',
   );
 });
 
