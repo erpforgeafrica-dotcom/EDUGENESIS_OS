@@ -30,6 +30,22 @@ export interface TierZeroEntry {
   retrievedAt: string;
   /** Locales this lesson is cleared for. Omit for "no locale restriction". */
   locales?: string[];
+  /**
+   * Learner vocabulary this lesson accepts, scored exactly like title words.
+   * It exists because a learner does not use the catalogue's words: "solve for
+   * x" never says "linear" or "equation". Keep the aliases STRONG terms only -
+   * a generic verb such as "solve" would pull unrelated questions into the
+   * lesson (the false-coverage bug class this file already guards against).
+   */
+  keywords?: string[];
+  /**
+   * Regular-expression sources that identify a question about this lesson by
+   * its FORM rather than its words - "2x + 3 = 11" is an algebra question
+   * without naming algebra. Scored above a single word match. Invalid sources
+   * are ignored rather than thrown, because content data must never crash a
+   * learner request.
+   */
+  promptPatterns?: string[];
 }
 
 export interface TierZeroOptions {
@@ -72,16 +88,17 @@ export const TIER_ZERO_FALLBACK_NOTICE =
  * WHY TWO NOTICES: the original notice asserted topical coverage
  * unconditionally, so a learner who asked about the water cycle could be
  * served an algebra lesson that CLAIMED to cover their question. The claim is
- * now made only when the relevance score says there is a topical match. The
- * learner still receives a lesson — the product promise is that a learner is
- * never denied — but the text no longer says something the build cannot know.
+ * now made only when the relevance score says there is a topical match.
  *
- * WHY it does not apologise: "it may not answer your question" reads like a
- * fallback admitting it failed. The learner gets a lesson and a clear
- * statement that learning continues.
+ * WHY THIS NOTICE PROMISES NO LESSON: it opens the curriculum-gap answer, which
+ * then says there is no lesson on the topic yet. The first live deploy after
+ * the stopword fix opened that answer with "Here is a lesson from this
+ * programme to work through" and contradicted itself in the next sentence.
+ * A precise message says only what is true: learning continues, and sponsors
+ * are notified (Doc 16 §6.6 step 6).
  */
 export const TIER_ZERO_FALLBACK_UNRELATED_NOTICE =
-  'Core learning continues. Here is a lesson from this programme to work through. The sponsors of this programme have been notified.';
+  'Core learning continues. The sponsors of this programme have been notified.';
 
 const DEFAULT_ENTRIES: TierZeroEntry[] = [
   {
@@ -93,6 +110,9 @@ const DEFAULT_ENTRIES: TierZeroEntry[] = [
     licence: 'CC-BY-4.0',
     retrievedAt: '2026-01-05T00:00:00.000Z',
     locales: ['en'],
+    keywords: ['algebra', 'equation', 'variable', 'unknown', 'x'],
+    // "2x + 3 = 11" and "x = 5" are algebra questions that never say "algebra".
+    promptPatterns: ['\\d\\s*[a-z](?![a-z])', '[a-z]\\s*=\\s*[-+]?\\d'],
   },
   {
     id: 'science/photosynthesis',
@@ -216,11 +236,23 @@ function contentWords(text: string): string[] {
  */
 function relevanceScore(entry: TierZeroEntry, prompt: string): number {
   const wanted = new Set(contentWords(prompt));
-  const offered = contentWords(`${entry.id} ${entry.title}`);
+  const aliases = (entry.keywords ?? []).join(' ');
+  const offered = contentWords(`${entry.id} ${entry.title} ${aliases}`);
   let score = 0;
   for (const word of offered) {
     if (wanted.has(word)) {
       score += 1;
+    }
+  }
+  // A form match is stronger evidence than one shared word: "2x + 3 = 11" is
+  // about this lesson even though it shares no title word with it.
+  for (const source of entry.promptPatterns ?? []) {
+    try {
+      if (new RegExp(source, 'i').test(prompt)) {
+        score += 2;
+      }
+    } catch {
+      // Content data must never break a learner request.
     }
   }
   return score;

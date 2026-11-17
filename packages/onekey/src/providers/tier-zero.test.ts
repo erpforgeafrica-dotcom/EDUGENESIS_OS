@@ -140,6 +140,75 @@ test('tier zero: a stopword match is not a topical match', async () => {
   assert.match(result.text, /does not have a lesson on this topic/i);
 });
 
+test('tier zero: a question that contains an equation reaches the algebra lesson', async () => {
+  // Regression found on the live page after the stopword fix: a real
+  // in-catalogue question ("How do I solve 2x + 3 = 11?") shares no title word
+  // with the lesson, so it must be recognised by its equation form rather than
+  // left in the curriculum gap.
+  const tz = createTierZeroProvider();
+  const result = await tz.serveFallback(
+    createPolicy(),
+    createRequest({ prompt: 'How do I solve 2x + 3 = 11?' }),
+  );
+
+  assert.ok(result !== null);
+  assert.equal(
+    result.sourceLineage[0]?.locator,
+    'curriculum:algebra/linear-eq',
+    'an equation question is an algebra question',
+  );
+  assert.match(result.text, /same topic as your question/i);
+});
+
+test('tier zero: "solve for x" reaches the algebra lesson', async () => {
+  const tz = createTierZeroProvider();
+  const result = await tz.serveFallback(
+    createPolicy(),
+    createRequest({ prompt: 'solve for x' }),
+  );
+
+  assert.ok(result !== null);
+  assert.equal(result.sourceLineage[0]?.locator, 'curriculum:algebra/linear-eq');
+});
+
+test('tier zero: the word solve alone is not an algebra match', async () => {
+  // A guard against over-reach: "solve" appears in questions that have
+  // nothing to do with algebra. Only the equation form or a variable earns
+  // the algebra lesson, never the bare verb.
+  const tz = createTierZeroProvider();
+  const result = await tz.serveFallback(
+    createPolicy(),
+    createRequest({ prompt: 'How do we solve the water crisis?' }),
+  );
+
+  assert.ok(result !== null);
+  assert.doesNotMatch(
+    result.text,
+    /linear equation has the form/i,
+    'the bare verb must not select an algebra lesson',
+  );
+  assert.match(result.text, /does not have a lesson on this topic/i);
+});
+
+test('tier zero: the gap message does not promise a lesson it cannot give', async () => {
+  // The live page opened the gap answer with "Here is a lesson from this
+  // programme to work through" and then said there is no lesson on the topic.
+  // A precise message states the gap and what is available, and promises
+  // nothing else.
+  const tz = createTierZeroProvider();
+  const result = await tz.serveFallback(
+    createPolicy(),
+    createRequest({ prompt: 'what is an Agent' }),
+  );
+
+  assert.ok(result !== null);
+  assert.doesNotMatch(
+    result.text,
+    /here is a lesson/i,
+    'the gap message must not announce a lesson and then deny it',
+  );
+});
+
 test('tier zero: a question using the singular of a lesson title finds that lesson', async () => {
   // Plural mismatch ("fraction" vs "Fractions basics") must not let a
   // stopword-scored unrelated lesson win the ranking.
