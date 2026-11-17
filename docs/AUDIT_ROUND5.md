@@ -1,7 +1,7 @@
 # Audit — Round 5
 
 **Date:** 2026-11-17
-**Head:** `ce69982` plus the learner-surface fix wave (shipped with this document)
+**Head:** `aa7457f` — the learner-surface wave plus the throttle correction; the live probe in this document ran against that commit.
 **Standard:** `docs/DESIGN-CONSTITUTION.md` (ratified with this round)
 **Method:** `production-audit` skill — local evidence only, no external scanner,
 no upload of source.
@@ -81,11 +81,11 @@ Six API routes exist, and no others (`apps/cli/src/serve.ts`):
 | Route | Line | Guard | Notes |
 |---|---|---|---|
 | `GET /api/health` | 521 | none | `hosted`, version, node, uptime, settings path (project-relative), schema version |
-| `POST /api/learn` | 551 | rate limit (token bucket), loopback exempt by default | the one route that can cause paid work |
-| `POST /api/enrol` | 619 | guardian consent token | honest 403 when hosted without a store |
-| `POST /api/audit` | 706 | same posture | honest 403 when hosted |
-| `GET/PUT /api/settings` | 729 | loopback + JSON content-type + origin checks; hosted refuses writes | keys are write-only |
-| `GET /assets/edugenesis-tokens.css` | 810 | none | allow-listed asset route |
+| `POST /api/learn` | 551 | rate limit (token bucket, 10 burst / 30 per minute); a hosted instance never exempts the platform proxy peer | the one route that can cause paid work |
+| `POST /api/enrol` | 627 | guardian consent token | honest 403 when hosted without a store |
+| `POST /api/audit` | 714 | same posture | honest 403 when hosted |
+| `GET/PUT /api/settings` | 737 | loopback + JSON content-type + origin checks; hosted refuses writes | keys are write-only |
+| `GET /assets/edugenesis-tokens.css` | 818 | none | allow-listed asset route |
 
 Backend findings:
 
@@ -95,9 +95,19 @@ Backend findings:
   probe. This is new this round; before it, a learner page could be framed by a
   third party.
 - **The question route is throttled** — 10 burst / 30 per minute per address,
-  429 with `Retry-After`, checked **before** the body is read. Loopback is
-  exempt so a learner running the project locally is never throttled by their
-  own software.
+  429 with `Retry-After`, checked **before** the body is read. A hosted instance
+  never takes the loopback exemption: the platform proxy can reach the service
+  over loopback, so exempting that peer would exempt every learner. The local
+  exemption remains, because a learner running the project on their own machine
+  should never be throttled by their own software. This distinction was missing
+  from the first version of the fix, and the deployed service answered a
+  40-request run with 40 successes (§8, defect 4). After the correction the live
+  run answered **10** and refused **30**, each refusal carrying `Retry-After`.
+- **The deployed instance runs Tier 0 only.** A live `GET /api/settings` returns
+  the shipped defaults: `primary`, `secondary` and `local` are all `local-echo`
+  and `apiKeys` is empty. No hosted model credential exists in production, so
+  tier 1 is not in play and every answer a learner receives is a Tier 0 lesson.
+  That is honest, and it is a limit on the value chain, not a defect in it.
 - **Nothing writes the public ledger, nothing reads it.** See §2.
 - **No route exposes spend, audit verification, sponsor data, or reinvestment.**
 - **`/api/health` discloses a project-relative settings path.** Not an absolute
@@ -197,7 +207,9 @@ built first. **The dashboard cannot be built honestly before hop 2 exists.**
 **Weighted reading:** the learner-facing constitution is largely honoured. The
 operator-facing principle — the one that makes the programme auditable — is
 essentially unimplemented. That is why the overall score is in the blocked band
-while the learner slice scores 84.
+while the learner slice scores 84. The learner score remains capped by
+first-party evidence, and defect 4 shows exactly why: a green suite became a
+green deployment only after a live re-run.
 
 ### Browser measurements (independent of the code)
 
@@ -228,14 +240,21 @@ errors, and the service worker active at scope `/`.
 | 1 | Chip touch targets 29 px | CDP measurement | `min-height: var(--eg-touch-target)` → 44 px, re-measured |
 | 2 | Empty state declared `class="hint"` but no control referenced it | `form-semantics` gate: "the hint `answer-empty` is referenced by nothing" | Reclassified as `.eg-empty` — it describes the region, not the input; faking an `aria-describedby` would have been worse |
 | 3 | Viewer could frame the learner page | no `frame-ancestors` before this round | CSP + `X-Frame-Options: DENY`, verified by test and live probe |
-| 4 | 12 unprompted `/api/learn` calls all returned 200 | burst probe | token bucket, 429 + `Retry-After` |
+| 4 | The deployed question route did not throttle at all | live run on `1ab1be7`: 40 sequential requests at ~4/s, **40 × 200**, no `Retry-After`. Every throttle test had passed `exemptLoopback: false`, so the hosted default was never exercised — and the platform proxy reaches the service over loopback, which the default exempted | hosted never exempts a loopback peer; two tests now pin the proxy case and the surviving local exemption. Live re-run on `aa7457f`: **10 × 200, 30 × 429**, every refusal with `Retry-After` |
 | 5 | Internal `curriculum:` ID in learner copy | page source | removed; test asserts absence |
 | 6 | Gap notice promised a lesson it did not have | live probe | corrected notice; Tier 0 test asserts the wording |
-| 7 | A hosted throttle would have keyed on the platform proxy | design review before ship: `socket.remoteAddress` is Render's proxy for every learner, so the "per-caller" bucket would have been one bucket for the whole internet | `clientIdentity()` keys on the first forwarded hop **only when hosted**, with a bounded address shape; two tests prove per-caller buckets behind a proxy and that a local instance ignores a forged header |
+| 7 | A hosted throttle would have keyed on the platform proxy | design review before ship, later confirmed live: `socket.remoteAddress` is the platform proxy, and that proxy arrives over loopback — so a bucket keyed on it would have been one bucket (or no bucket) for the whole internet | `clientIdentity()` keys on the first forwarded hop **only when hosted**, with a bounded address shape; two tests prove per-caller buckets behind a proxy and that a local instance ignores a forged header |
 
 Defect 2 is worth naming explicitly: the gate caught **my own** regression,
 introduced during this round, and it was fixed by making the markup honest
 rather than by weakening the gate.
+
+Defect 4 is the more important lesson, and it is the reason this round now ends
+with a live contract probe rather than a suite result. The bucket existed, its
+tests passed, and §8 had already called the finding fixed — while production
+answered every one of forty requests. A test that always disables the exemption
+cannot see the exemption. Code-level green is not deployment-level green; only
+the deployed run could establish this, and it did.
 
 ---
 
@@ -273,11 +292,15 @@ Stated because C4 requires it:
   (`form-semantics` PASS on 2 pages; `path-portability-runtime` PASS, 12/12
   steps), and the cause was identified as the orphan hint in §8. Over the
   frozen source, `npm run verify:repro` ran the full chain twice and produced
-  **624 tests, 0 failed, 18/18 gates, 0 unverified, exit 0**, and **4/4
+  **626 tests, 0 failed, 18/18 gates, 0 unverified, exit 0**, and **4/4
   byte-identical evidence files**. Because this document is itself part of the
   checksum manifest, the digests are not quoted here; they are the `same` lines
   in the reproducibility transcript.
-- **Hosted settings visibility** is an owner decision, not a defect.
+- **Hosted settings visibility** is an owner decision, not a defect. The live
+  `GET /api/settings` returns the shipped defaults with `apiKeys: {}` — there is
+  no hosted key to expose today — and when keys are set the payload reports only
+  `{set, length}` per key. Whether a stranger may read the provider names,
+  feature flags and limits at all is the owner's call.
 
 ---
 
