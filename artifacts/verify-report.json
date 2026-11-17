@@ -36,28 +36,28 @@
       "title": "no-pii-in-source",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no personal data found in 142 source file(s)"
+      "detail": "no personal data found in 150 source file(s)"
     },
     {
       "id": "no-provider-leak",
       "title": "no-provider-leak",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no provider reference outside packages/onekey in 111 source file(s)"
+      "detail": "no provider reference outside packages/onekey in 116 source file(s)"
     },
     {
       "id": "path-portability",
       "title": "path-portability",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no absolute path in 169 shipped file(s)"
+      "detail": "no absolute path in 179 shipped file(s)"
     },
     {
       "id": "design-token-governance",
       "title": "design-token-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no raw colour literal in 142 source file(s)"
+      "detail": "no raw colour literal in 150 source file(s)"
     },
     {
       "id": "contracts-baseline",
@@ -99,7 +99,7 @@
       "title": "adr-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "18 ADR index rows agree with their records, and every owner is a registered role"
+      "detail": "19 ADR index rows agree with their records, and every owner is a registered role"
     },
     {
       "id": "token-contrast",
