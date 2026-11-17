@@ -434,6 +434,45 @@ test('the public question route is throttled, and the retry is stated', async ()
   );
 });
 
+test('a hosted instance throttles even when its proxy arrives over loopback', async () => {
+  // The platform proxy can connect to the service over loopback. If that peer
+  // were exempt, every learner behind it would be exempt too: the live service
+  // answered a 40-request run with 40 successes for exactly this reason.
+  await withServer(
+    { hosted: true, adapters: [echoAdapter()], rateLimit: { burst: 1, perMinute: 1 } },
+    async (handle) => {
+      const ask = () =>
+        fetch(`${handle.url}/api/learn`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.7' },
+          body: JSON.stringify({ prompt: 'what is a fraction?' }),
+        });
+
+      assert.equal((await ask()).status, 200);
+      const refused = await ask();
+      assert.equal(refused.status, 429, 'the proxy peer must not exempt the caller behind it');
+      assert.ok(refused.headers.get('retry-after'), 'the refusal still states when to retry');
+    },
+  );
+});
+
+test('a local instance still exempts the learner on their own machine', async () => {
+  await withServer(
+    { adapters: [echoAdapter()], rateLimit: { burst: 1, perMinute: 1 } },
+    async (handle) => {
+      const ask = () =>
+        fetch(`${handle.url}/api/learn`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ prompt: 'what is a fraction?' }),
+        });
+
+      assert.equal((await ask()).status, 200);
+      assert.equal((await ask()).status, 200, 'running the project locally is never throttled by itself');
+    },
+  );
+});
+
 test('a hosted instance throttles the caller, not the platform proxy', async () => {
   await withServer(
     { hosted: true, adapters: [echoAdapter()], rateLimit: { burst: 1, perMinute: 1, exemptLoopback: false } },

@@ -558,8 +558,16 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
       const remoteAddress = request.socket.remoteAddress;
       const forwarded = request.headers['x-forwarded-for'];
       const forwardedFor = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+      // WHY hosted is checked FIRST: a hosting platform terminates the public
+      // connection at its own proxy, and that proxy can reach the service over
+      // loopback. Exempting a loopback peer would then exempt every learner on
+      // the internet, and the throttle would exist only in the tests. A hosted
+      // instance therefore never takes the local exemption; only a run on the
+      // learner's own machine does.
       const exempt =
-        (rateLimit.exemptLoopback ?? DEFAULT_RATE_LIMIT.exemptLoopback) && isLoopback(remoteAddress);
+        !hosted &&
+        (rateLimit.exemptLoopback ?? DEFAULT_RATE_LIMIT.exemptLoopback) &&
+        isLoopback(remoteAddress);
       if (!exempt) {
         const verdict = takeQuestionToken(clientIdentity(remoteAddress, forwardedFor, hosted));
         if (!verdict.allowed) {

@@ -25,8 +25,8 @@ e54032d9c74cd5dc6ef337f59b39a1ffa7a0bc3d2ec7b86134abaec68e5820ac  apps/cli/src/k
 8e8a967ebdd8c0383ccb09dbeb09f39adfd203dae74e8186285a414d23e14579  apps/cli/src/paths.ts
 74bc744f7dc8ce6fce662dc65ed91e0c1a222541a8ff7443ee75bb3b3119ab89  apps/cli/src/schema-validate.ts
 5fb7ebe4272591ee8568b5c6043f2b418331b5ff4d4374829a03b64c4add93a0  apps/cli/src/selftest.ts
-084a9d18a136c7f507251678f0a65105d843181fab39253dfb6b4c5406381c4a  apps/cli/src/serve.test.ts
-2f941e013671be111109084bde353e94225a30f5edb2e5ff985c3bc4c0036443  apps/cli/src/serve.ts
+f6ad8cded79d29d59c81ebbbc659052a8bd800a33519fdd75d3acc29a61bb8de  apps/cli/src/serve.test.ts
+6f258a5e4b594d422784292c1b5bf810e22512e5b99fa8d75d3c0f3f99e82a29  apps/cli/src/serve.ts
 2d3402aa1e2e706597cfe615f63c08a08c8d2359b38490df8e681609eb27f8bf  apps/cli/src/settings-store.test.ts
 910ef0b866e3986df90e35abf2f37e4e99a550b3f5e24eb8bb43cc7279cd8172  apps/cli/src/settings-store.ts
 9094eb35001a69851911e236900b235363d553916c2450252d412249762dba83  apps/cli/src/settings.ts
