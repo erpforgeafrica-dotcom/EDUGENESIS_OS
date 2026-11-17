@@ -344,6 +344,153 @@ test('the learner screen is served, with a live region and a labelled control', 
   });
 });
 
+test('the learner screen carries no internal curriculum id, and states what is checked', async () => {
+  await withServer({ adapters: [echoAdapter()] }, async (handle) => {
+    const html = await (await fetch(`${handle.url}/learn`)).text();
+    assert.doesNotMatch(html, /curriculum:/, 'an operator ID is not learner language');
+    assert.match(
+      html,
+      /reading level,\s+language and source/i,
+      'the page states exactly what is checked',
+    );
+    assert.doesNotMatch(
+      html,
+      /screen reader/i,
+      'the page makes no screen-reader claim this build cannot prove',
+    );
+    assert.match(
+      html,
+      /<link rel="manifest" href="\/manifest\.webmanifest"/,
+      'the learner page names the manifest',
+    );
+    assert.match(
+      html,
+      /<script src="\/register-sw\.js"/,
+      'the worker is registered from a file, not an inline script',
+    );
+    assert.doesNotMatch(html, /<script(?![^>]*\bsrc=)/, 'no inline script, so script-src self holds');
+  });
+});
+
+test('the lesson card is focusable and labelled, so the answer is announced in place', async () => {
+  await withServer({ adapters: [echoAdapter()] }, async (handle) => {
+    const html = await (await fetch(`${handle.url}/learn`)).text();
+    assert.match(
+      html,
+      /id="answer"[^>]*tabindex="-1"/,
+      'the card takes focus without joining the tab order',
+    );
+    assert.match(html, /id="answer"[^>]*aria-labelledby="answer-heading"/);
+    assert.match(html, /aria-live="polite"/);
+  });
+});
+
+test('every response carries the security headers, and the worker scripts are served', async () => {
+  await withServer({ adapters: [echoAdapter()] }, async (handle) => {
+    const page = await fetch(`${handle.url}/learn`);
+    const csp = page.headers.get('content-security-policy') ?? '';
+    assert.match(csp, /default-src 'self'/);
+    assert.match(csp, /script-src 'self'/, 'inline script is not allowed');
+    assert.match(csp, /frame-ancestors 'none'/);
+    assert.equal(page.headers.get('x-frame-options'), 'DENY');
+    assert.equal(page.headers.get('referrer-policy'), 'no-referrer');
+    assert.ok(page.headers.get('permissions-policy'), 'a permissions policy is stated');
+    assert.ok(page.headers.get('strict-transport-security'), 'HSTS is stated');
+
+    const api = await fetch(`${handle.url}/api/health`);
+    assert.match(
+      api.headers.get('content-security-policy') ?? '',
+      /default-src 'self'/,
+      'the policy covers JSON responses too',
+    );
+
+    for (const path of ['/learn.js', '/register-sw.js']) {
+      const asset = await fetch(`${handle.url}${path}`);
+      assert.equal(asset.status, 200, `${path} is served`);
+      assert.match(asset.headers.get('content-type') ?? '', /javascript/, `${path} is JavaScript`);
+    }
+  });
+});
+
+test('the public question route is throttled, and the retry is stated', async () => {
+  await withServer(
+    { adapters: [echoAdapter()], rateLimit: { burst: 3, perMinute: 1, exemptLoopback: false } },
+    async (handle) => {
+      const statuses: number[] = [];
+      let retryAfter: string | null = null;
+      for (let index = 0; index < 4; index += 1) {
+        const response = await fetch(`${handle.url}/api/learn`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ prompt: 'what is a fraction?' }),
+        });
+        statuses.push(response.status);
+        if (response.status === 429) retryAfter = response.headers.get('retry-after');
+      }
+      assert.deepEqual(statuses.slice(0, 3), [200, 200, 200]);
+      assert.equal(statuses[3], 429, 'the fourth request in the burst is refused');
+      assert.ok(retryAfter, 'a refused caller is told when to retry');
+    },
+  );
+});
+
+test('a hosted instance throttles the caller, not the platform proxy', async () => {
+  await withServer(
+    { hosted: true, adapters: [echoAdapter()], rateLimit: { burst: 1, perMinute: 1, exemptLoopback: false } },
+    async (handle) => {
+      const ask = (forwardedFor: string) =>
+        fetch(`${handle.url}/api/learn`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-forwarded-for': forwardedFor },
+          body: JSON.stringify({ prompt: 'what is a fraction?' }),
+        });
+
+      assert.equal((await ask('203.0.113.7')).status, 200);
+      assert.equal(
+        (await ask('198.51.100.9')).status,
+        200,
+        'a different learner arriving through the same proxy gets their own bucket',
+      );
+      assert.equal((await ask('203.0.113.7')).status, 429, 'the first learner is still throttled');
+    },
+  );
+});
+
+test('a local instance ignores a forwarded header, so it cannot mint buckets', async () => {
+  await withServer(
+    { adapters: [echoAdapter()], rateLimit: { burst: 1, perMinute: 1, exemptLoopback: false } },
+    async (handle) => {
+      const ask = (forwardedFor: string) =>
+        fetch(`${handle.url}/api/learn`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-forwarded-for': forwardedFor },
+          body: JSON.stringify({ prompt: 'what is a fraction?' }),
+        });
+
+      assert.equal((await ask('203.0.113.7')).status, 200);
+      assert.equal(
+        (await ask('198.51.100.9')).status,
+        429,
+        'without a trusted proxy the header is caller-controlled and must not create a fresh bucket',
+      );
+    },
+  );
+});
+
+test('the installed app opens the learner page, and offline navigation is stored per URL', async () => {
+  await withServer({ adapters: [echoAdapter()] }, async (handle) => {
+    const manifest = (await (await fetch(`${handle.url}/manifest.webmanifest`)).json()) as {
+      start_url?: string;
+    };
+    assert.equal(manifest.start_url, '/learn', 'the installed app opens the learner screen');
+
+    const sw = await (await fetch(`${handle.url}/sw.js`)).text();
+    assert.match(sw, /'\/learn'/, 'the learner page is in the shell cache');
+    assert.doesNotMatch(sw, /cache\.put\('\/'/, 'a navigation is not stored under the wrong key');
+    assert.match(sw, /cache\.put\(url\.pathname/, 'each page is cached under its own URL');
+  });
+});
+
 test('the enrolment route enrols a learner on a guardian consent token', async () => {
   await withServer({ adapters: [echoAdapter()] }, async (handle) => {
     // The guardian is registered through the identity surface the server exposes.

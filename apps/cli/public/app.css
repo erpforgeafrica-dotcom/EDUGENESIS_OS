@@ -201,3 +201,51 @@ code {
   padding: 0 var(--eg-space-1);
   border-radius: var(--eg-radius-sm);
 }
+
+/* ==========================================================================
+   The learner screen.
+   Every value here is a token. Nothing in this block declares a colour.
+   ========================================================================== */
+
+/* A row of example questions. It wraps at 360px instead of scrolling
+   sideways: a learner on a small phone must never have to pan. */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--eg-space-2);
+  margin: var(--eg-space-4) 0 var(--eg-space-4);
+}
+
+/* The suggestions are real buttons, so they need the reset the token
+   stylesheet does not apply (it styles chips as inline-flex labels). They are
+   also a touch target: 29px is comfortable for a mouse and too small for a
+   thumb, so they take the token's touch height. */
+button.chip {
+  font-family: inherit;
+  background: var(--eg-surface);
+  color: var(--eg-text-primary);
+  cursor: pointer;
+  min-height: var(--eg-touch-target);
+  padding: var(--eg-space-2) var(--eg-space-4);
+  transition: background var(--eg-duration-fast) var(--eg-ease-out);
+}
+
+button.chip:hover {
+  background: var(--eg-overlay);
+}
+
+button.chip:active {
+  transform: translateY(1px);
+}
+
+/* Lesson text is prose, not a UI label: give it a readable measure. */
+#answer-text {
+  max-width: var(--eg-container-prose);
+}
+
+/* The empty state is a quiet placeholder, not a hint and not an alarm. */
+.eg-empty {
+  margin: var(--eg-space-2) 0 0;
+  color: var(--eg-text-secondary);
+  font-size: var(--eg-text-caption);
+}

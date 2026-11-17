@@ -3,6 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- ADR-0011: the learner surface defaults to the light theme. Declaring it
+         here stops the browser painting dark form controls before the
+         stylesheet loads. The colour itself lives in the token stylesheet and
+         the manifest; this page carries no colour literal. -->
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="Ask a question and receive a lesson from the EduGenesis programme."
+    />
     <title>EduGenesis OS — ask a question</title>
     <!--
       The Aurora design tokens. Every colour, every focus ring and every
@@ -13,16 +22,20 @@
     <link rel="stylesheet" href="/app.css" />
     <!-- The browser asks for this by itself; naming it here keeps the console clean. -->
     <link rel="icon" href="/icon.svg" />
+    <!-- The learner page is the installed app's start page, so it names the
+         manifest itself. The Settings page is a separate surface. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
-    <a class="skip-link" href="#ask-form">Skip to the question</a>
+    <a class="skip-link" href="#question">Skip to the question</a>
 
     <main class="eg-main" id="main">
       <header class="eg-header">
-        <h1>Ask a question</h1>
+        <p class="label">EduGenesis OS</p>
+        <h1>What would you like to learn?</h1>
         <p class="lede">
-          Type anything you want to learn. Every answer is checked for accessibility before it
-          reaches you.
+          Ask anything you want to understand. Every answer is checked for reading level,
+          language and source before it reaches you.
         </p>
       </header>
 
@@ -35,101 +48,69 @@
             type="text"
             autocomplete="off"
             aria-describedby="hint-question"
-            placeholder="Explain curriculum:algebra/linear-eq"
+            placeholder="What is a fraction?"
           />
           <p class="hint" id="hint-question">
-            A specific question gets a specific lesson. For example: “Explain curriculum:algebra/linear-eq”.
+            A specific question gets a specific lesson. You can start with one of the
+            questions below, or ask your own.
           </p>
         </div>
 
         <div class="eg-actions">
           <button class="btn btn--primary" id="ask-button" type="submit">Ask</button>
         </div>
-
-        <section class="eg-section" id="answer-section" aria-labelledby="answer-heading">
-          <h2 id="answer-heading">Your lesson</h2>
-          <!--
-            The live region. The answer is announced here: `role="status"` with
-            `aria-live="polite"` means a screen reader speaks the result when it
-            arrives, without the learner hunting for it.
-          -->
-          <p id="status" class="eg-status" role="status" aria-live="polite"></p>
-          <div class="card" id="answer" hidden>
-            <p id="answer-text"></p>
-          </div>
-        </section>
       </form>
 
+      <!--
+        The suggestions are real questions the programme can answer today. They
+        are shortcuts, not decoration: a learner who does not know what to ask
+        gets a working first step in one tap.
+      -->
+      <div class="chip-row" id="suggestions" role="group" aria-label="Example questions">
+        <button class="chip chip--gold" type="button" data-question="What is a fraction?">
+          What is a fraction?
+        </button>
+        <button class="chip chip--gold" type="button" data-question="How do I solve 2x + 3 = 11?">
+          How do I solve 2x + 3 = 11?
+        </button>
+        <button class="chip chip--gold" type="button" data-question="What is photosynthesis?">
+          What is photosynthesis?
+        </button>
+      </div>
+
+      <section class="eg-section" id="answer-section" aria-labelledby="answer-heading">
+        <h2 id="answer-heading">Your lesson</h2>
+        <!--
+          The live region. `role="status"` with `aria-live="polite"` announces
+          the state of the request ("Preparing your lesson…", "Your lesson is
+          ready.") without the learner hunting for it.
+        -->
+        <p id="status" class="eg-status" role="status" aria-live="polite"></p>
+        <!--
+          The empty state says what will happen, in one line. It is hidden the
+          moment a lesson arrives, so it never competes with the answer. It is
+          deliberately NOT a `.hint`: a hint describes an owning control and
+          must be wired to it, and this text describes the region, not the
+          input. Calling it a hint would either lie to the gate or force a
+          false aria-describedby on the question field.
+        -->
+        <p class="eg-empty" id="answer-empty">Ask a question to receive your first lesson.</p>
+        <!--
+          The lesson card receives focus when a lesson arrives, so its content
+          is announced once, in place. `tabindex="-1"` makes it focusable by
+          script without adding it to the tab order.
+        -->
+        <div class="card" id="answer" hidden tabindex="-1" aria-labelledby="answer-heading">
+          <p id="answer-text"></p>
+        </div>
+      </section>
+
       <footer class="eg-footer">
-        <p><a href="/">Settings</a></p>
+        <p>EduGenesis OS · core learning continues.</p>
       </footer>
     </main>
 
-    <script>
-      (function () {
-        'use strict';
-
-        var form = document.getElementById('ask-form');
-        var input = document.getElementById('question');
-        var button = document.getElementById('ask-button');
-        var status = document.getElementById('status');
-        var answer = document.getElementById('answer');
-        var answerText = document.getElementById('answer-text');
-
-        function say(message, tone) {
-          status.textContent = message;
-          if (tone) {
-            status.setAttribute('data-tone', tone);
-          } else {
-            status.removeAttribute('data-tone');
-          }
-        }
-
-        form.addEventListener('submit', function (event) {
-          event.preventDefault();
-          var question = input.value.trim();
-          if (question.length === 0) {
-            say('Type a question first.', 'error');
-            input.focus();
-            return;
-          }
-          button.disabled = true;
-          say('Preparing your lesson…');
-
-          fetch('/api/learn', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: question }),
-          })
-            .then(function (response) {
-              return response.json().then(function (payload) {
-                return { ok: response.ok, payload: payload };
-              });
-            })
-            .then(function (result) {
-              if (!result.ok) {
-                say(
-                  result.payload && result.payload.error
-                    ? result.payload.error
-                    : 'A lesson is not available right now.',
-                  'error',
-                );
-                answer.hidden = true;
-                answerText.textContent = '';
-                return;
-              }
-              answerText.textContent = result.payload.text;
-              answer.hidden = false;
-              say('Your lesson is ready.', 'ok');
-            })
-            .catch(function () {
-              say('A lesson is not available right now. Please try again shortly.', 'error');
-            })
-            .then(function () {
-              button.disabled = false;
-            });
-        });
-      })();
-    </script>
+    <script src="/learn.js" defer></script>
+    <script src="/register-sw.js" defer></script>
   </body>
 </html>

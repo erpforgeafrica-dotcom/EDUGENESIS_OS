@@ -55,6 +55,10 @@ const STATIC_ROUTES: Record<string, string> = {
   '/learn.html': 'learn.html',
   '/app.css': 'app.css',
   '/app.js': 'app.js',
+  '/learn.js': 'learn.js',
+  // The service-worker bootstrap is a file, not an inline script, so the
+  // Content-Security-Policy can refuse inline scripts outright.
+  '/register-sw.js': 'register-sw.js',
   // The service worker must be served from the origin root: its scope is its
   // own directory, so `/sw.js` can control `/` but `/assets/sw.js` could not.
   '/sw.js': 'sw.js',
@@ -62,9 +66,45 @@ const STATIC_ROUTES: Record<string, string> = {
   '/icon.svg': 'icon.svg',
 };
 
+/**
+ * Headers every response carries.
+ *
+ * WHY a CSP with no inline allowance: both shipped pages load scripts from
+ * files only (the Settings page's service-worker bootstrap lives in
+ * `/register-sw.js`), so `script-src 'self'` costs nothing and closes the
+ * injected-script class outright. `frame-ancestors 'none'` plus
+ * `X-Frame-Options: DENY` stop another site framing the learner page.
+ *
+ * WHY `style-src 'self'`: no shipped HTML carries a `style` attribute, and the
+ * only script that touches styling assigns through the CSSOM, which the CSP
+ * does not govern. If a future page needs an inline style, this line must be
+ * changed deliberately — not silently relaxed.
+ */
+const SECURITY_HEADERS: Record<string, string> = {
+  'Content-Security-Policy': [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "script-src 'self'",
+    "style-src 'self'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'self'",
+    "worker-src 'self'",
+    "manifest-src 'self'",
+  ].join('; '),
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
+  'Permissions-Policy': 'geolocation=(), camera=(), microphone=()',
+  'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+};
+
 function sendJson(response: ServerResponse, status: number, payload: unknown): void {
   const body = JSON.stringify(payload, null, 2);
   response.writeHead(status, {
+    ...SECURITY_HEADERS,
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-store',
@@ -75,6 +115,7 @@ function sendJson(response: ServerResponse, status: number, payload: unknown): v
 
 function sendText(response: ServerResponse, status: number, body: string, contentType = 'text/plain; charset=utf-8'): void {
   response.writeHead(status, {
+    ...SECURITY_HEADERS,
     'Content-Type': contentType,
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-store',
@@ -88,6 +129,96 @@ export function isLoopback(remoteAddress: string | undefined): boolean {
   if (!remoteAddress) return false;
   const normalized = remoteAddress.replace(/^::ffff:/, '');
   return normalized === '127.0.0.1' || normalized === '::1' || normalized.startsWith('127.');
+}
+
+/**
+ * The identity a throttle bucket is keyed by.
+ *
+ * WHY this is not simply the socket address: a hosted instance sits behind the
+ * platform proxy, so `request.socket.remoteAddress` is the PROXY for every
+ * learner. Keying on it would turn a per-caller throttle into ONE bucket shared
+ * by the whole internet — the eleventh learner in a minute would be refused
+ * because ten strangers asked a question first. That is a denial of service
+ * wearing the costume of a defence.
+ *
+ * WHY the forwarded header is trusted only when hosted: on a directly exposed
+ * instance the header is caller-controlled, and honouring it would let one
+ * caller mint unlimited buckets. Local and self-hosted instances key on the
+ * socket address, exactly as before.
+ *
+ * The first hop is the originating client; later hops are the proxies that
+ * appended to the header. The shape check keeps the key space bounded, so even
+ * a hostile header cannot grow the bucket map without limit.
+ */
+export function clientIdentity(
+  remoteAddress: string | undefined,
+  forwardedFor: string | undefined,
+  hosted: boolean,
+): string {
+  const fallback = remoteAddress ?? 'unknown';
+  if (!hosted) return fallback;
+  const first = (forwardedFor ?? '').split(',')[0]?.trim() ?? '';
+  return /^[0-9a-fA-F:.]{3,45}$/.test(first) ? first : fallback;
+}
+
+/**
+ * The token bucket that guards the public question route.
+ *
+ * WHY this exists: `/api/learn` is the one surface that can cause real work
+ * (a model call whenever a tier-1 provider is configured) and anyone who can
+ * reach the instance can call it. A twelve-request burst was answered with
+ * twelve 200s and no throttle. That is a budget hazard for the programme and a
+ * trivial denial-of-service against a free instance.
+ *
+ * WHY it is in-process and keyed by address: the product is single-tenant and
+ * dependency-free by design. A shared store would be the right answer for a
+ * fleet; pretending this is a fleet would be worse than an honest local
+ * limiter. Loopback is exempt by default, so a learner running the project on
+ * their own machine is never throttled by their own software.
+ */
+export interface RateLimitOptions {
+  /** How many requests may arrive at once. */
+  readonly burst?: number;
+  /** How many requests are restored per minute, per caller. */
+  readonly perMinute?: number;
+  /** Exempt loopback callers (default true — local use is never throttled). */
+  readonly exemptLoopback?: boolean;
+}
+
+export const DEFAULT_RATE_LIMIT: Required<RateLimitOptions> = {
+  burst: 10,
+  perMinute: 30,
+  exemptLoopback: true,
+};
+
+/** Build a limiter. Pure in time, so a test can drive it without sleeping. */
+export function createRateLimiter(
+  options: RateLimitOptions = {},
+): (key: string, now?: number) => { allowed: boolean; retryAfterSec: number } {
+  const capacity = options.burst ?? DEFAULT_RATE_LIMIT.burst;
+  const perMinute = options.perMinute ?? DEFAULT_RATE_LIMIT.perMinute;
+  const tokensPerMs = perMinute / 60_000;
+  const buckets = new Map<string, { tokens: number; updatedAt: number }>();
+
+  return function take(key: string, now: number = Date.now()) {
+    // A cheap bound: under address churn the map must not grow without limit.
+    if (buckets.size > 10_000) buckets.clear();
+
+    const previous = buckets.get(key);
+    const tokens = Math.min(
+      capacity,
+      (previous?.tokens ?? capacity) + Math.max(0, now - (previous?.updatedAt ?? now)) * tokensPerMs,
+    );
+
+    if (tokens < 1) {
+      buckets.set(key, { tokens, updatedAt: now });
+      const waitMs = tokensPerMs > 0 ? (1 - tokens) / tokensPerMs : 60_000;
+      return { allowed: false, retryAfterSec: Math.max(1, Math.ceil(waitMs / 1000)) };
+    }
+
+    buckets.set(key, { tokens: tokens - 1, updatedAt: now });
+    return { allowed: true, retryAfterSec: 0 };
+  };
 }
 
 /**
@@ -330,6 +461,8 @@ export interface ServeOptions {
   readonly adapters?: readonly ProviderAdapter[];
   /** A ready-made learner surface. Supplied by tests; built here otherwise. */
   readonly learnerServices?: LearnerServices;
+  /** Token bucket for the public question route. */
+  readonly rateLimit?: RateLimitOptions;
 }
 
 /** A running server. */
@@ -359,6 +492,8 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
   const learner =
     options.learnerServices ??
     createLearnerServices({ dataDir, adapters: options.adapters ?? [] });
+  const rateLimit = options.rateLimit ?? {};
+  const takeQuestionToken = createRateLimiter(rateLimit);
   const loaded = loadSettings();
   // Hosted mode exists for the Render deployment. It widens WHO may connect
   // (the platform proxy is never loopback) and narrows WHAT may be written
@@ -417,6 +552,24 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
       if (method !== 'POST') {
         sendJson(response, 405, { ok: false, error: 'Use POST.' });
         return;
+      }
+      // The throttle comes BEFORE the body is read: a caller who is over the
+      // limit must not be able to make the server buffer a megabyte first.
+      const remoteAddress = request.socket.remoteAddress;
+      const forwarded = request.headers['x-forwarded-for'];
+      const forwardedFor = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+      const exempt =
+        (rateLimit.exemptLoopback ?? DEFAULT_RATE_LIMIT.exemptLoopback) && isLoopback(remoteAddress);
+      if (!exempt) {
+        const verdict = takeQuestionToken(clientIdentity(remoteAddress, forwardedFor, hosted));
+        if (!verdict.allowed) {
+          response.setHeader('Retry-After', String(verdict.retryAfterSec));
+          sendJson(response, 429, {
+            ok: false,
+            error: `Too many questions at once. Try again in ${verdict.retryAfterSec} seconds.`,
+          });
+          return;
+        }
       }
       let body: unknown;
       try {

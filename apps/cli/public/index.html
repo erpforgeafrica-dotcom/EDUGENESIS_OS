@@ -175,18 +175,6 @@
     </footer>
 
     <script src="/app.js" defer></script>
-    <script>
-      /* Register the shell cache, but only over a secure context: a service
-         worker is unavailable on plain HTTP beyond localhost, and registering
-         blindly would throw on a LAN address. Failure is silent and harmless —
-         the page works without it. */
-      if ('serviceWorker' in navigator && window.isSecureContext) {
-        window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/sw.js').catch(function () {
-            /* The app is fully usable without the cache. */
-          });
-        });
-      }
-    </script>
+    <script src="/register-sw.js" defer></script>
   </body>
 </html>

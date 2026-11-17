@@ -1,10 +1,10 @@
 {
   "name": "EduGenesis OS",
   "short_name": "EduGenesis",
-  "description": "Learn without a connection: the offline lesson library is the floor, not a degraded mode.",
+  "description": "Ask a question and receive a lesson. Learning continues when a provider is unavailable.",
   "lang": "en",
   "dir": "ltr",
-  "start_url": "/",
+  "start_url": "/learn",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",

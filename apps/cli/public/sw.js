@@ -2,27 +2,37 @@
  *
  * Rules, in order of importance:
  *
- *   1. NEVER intercept /api/. A settings read or write must always reach the
- *      server; a cached settings response is a lie about stored state, and a
- *      cached write would silently drop a change.
+ *   1. NEVER intercept /api/. A lesson request or a settings read must always
+ *      reach the server; a cached settings response is a lie about stored
+ *      state, and a cached write would silently drop a change.
  *   2. Navigations are network-first, so a redeploy is visible immediately and
- *      the cached shell is only a fallback when the network is gone.
+ *      the cached page is only a fallback when the network is gone. Each page
+ *      is stored under ITS OWN url — storing every navigation under "/" made
+ *      the offline fallback whatever page was visited last.
  *   3. Static shell assets are cache-first, versioned by CACHE_NAME. Bump the
  *      version to invalidate the shell.
  *
- * The cache is a convenience, never a source of truth. Settings live in the
- * project folder; learner progress lives on the device or in the server store.
+ * The cache is a convenience, never a source of truth. A lesson is produced by
+ * the server, so an offline device can reopen the last page it loaded but
+ * cannot receive a new lesson. Nothing in this file claims otherwise.
  */
-const CACHE_NAME = 'edugenesis-shell-v1';
+const CACHE_NAME = 'edugenesis-shell-v2';
 
 const SHELL = [
+  '/learn',
   '/',
   '/app.css',
   '/app.js',
+  '/learn.js',
+  '/register-sw.js',
   '/assets/edugenesis-tokens.css',
   '/manifest.webmanifest',
   '/icon.svg'
 ];
+
+/* The page a lost offline navigation lands on: the learner screen, because
+ * that is what the installed app opens and what a learner came for. */
+const OFFLINE_FALLBACK = '/learn';
 
 self.addEventListener('install', function (event) {
   event.waitUntil(
@@ -80,16 +90,23 @@ self.addEventListener('fetch', function (event) {
     event.respondWith(
       fetch(request)
         .then(function (response) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(function (cache) {
-            return cache.put('/', copy);
-          });
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(function (cache) {
+              return cache.put(url.pathname, copy);
+            });
+          }
           return response;
         })
         .catch(function () {
-          return caches.match('/').then(function (cached) {
-            return cached || Response.error();
-          });
+          return caches
+            .match(url.pathname)
+            .then(function (cached) {
+              return cached || caches.match(OFFLINE_FALLBACK);
+            })
+            .then(function (cached) {
+              return cached || Response.error();
+            });
         })
     );
     return;
