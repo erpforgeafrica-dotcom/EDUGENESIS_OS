@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "title": "EduGenesis OS production wave plan",
+  "note": "Exact ID set, checked by tools/verify-production-loop.mjs. A plan that omits an ID fails.",
+  "waves": {
+    "W1": ["PG-01","PG-02","PG-03","PG-13","PG-17"],
+    "W2": ["PG-04","PG-05","PG-06"],
+    "W3": ["PG-08","PG-09"],
+    "W4": ["PG-07","PG-14"],
+    "W5": ["PG-10","PG-11","PG-12","PG-16"],
+    "W6": ["PG-15","PG-18","PG-19","PG-17"],
+    "W7": ["PG-20"]
+  },
+  "ids": ["PG-01","PG-02","PG-03","PG-04","PG-05","PG-06","PG-07","PG-08","PG-09","PG-10","PG-11","PG-12","PG-13","PG-14","PG-15","PG-16","PG-17","PG-18","PG-19","PG-20"]
+}

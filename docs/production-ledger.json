@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "title": "EduGenesis OS production-readiness ledger",
+  "generatedBy": "production completion mandate 2026-11-17",
+  "note": "One record per PG item. Status: pending | in-progress | closed | owner-gated. 'owner' is agent or owner-only. proof must be a reproducible claim (command/URL/file:line).",
+  "records": [
+    {"id":"PG-01","title":"Operator/sponsor access control","wave":"W1","status":"pending","owner":"agent","judge":"node --test packages/auth/dist/**/*.test.js apps/cli/dist/serve.test.js","proof":"","evidence":""},
+    {"id":"PG-02","title":"F8-12 hosted /api/settings deny-by-default","wave":"W1","status":"pending","owner":"agent","judge":"node --test apps/cli/dist/serve.test.js --test-name-pattern=settings","proof":"","evidence":""},
+    {"id":"PG-03","title":"ADR-0012 replacement (ADR-0021 hosted enrol/audit)","wave":"W1","status":"pending","owner":"agent","judge":"node tools/verify-all.mjs","proof":"","evidence":""},
+    {"id":"PG-04","title":"Sponsor intake + funding runtime","wave":"W2","status":"pending","owner":"agent","judge":"node --test apps/cli/dist/sponsor.test.js packages/ledger/dist/ledger-store.test.js","proof":"","evidence":""},
+    {"id":"PG-05","title":"Public ledger reader + sponsor report","wave":"W2","status":"pending","owner":"agent","judge":"node --test apps/cli/dist/sponsor.test.js packages/ledger/dist/sponsor-report.test.js","proof":"","evidence":""},
+    {"id":"PG-06","title":"Reinvestment + learner linkage","wave":"W2","status":"pending","owner":"agent","judge":"node --test apps/cli/dist/sponsor.test.js packages/ledger/dist/reinvestment.test.js","proof":"","evidence":""},
+    {"id":"PG-07","title":"Dashboards (learner/sponsor/operator)","wave":"W4","status":"pending","owner":"agent","judge":"node tools/verify-all.mjs","proof":"","evidence":""},
+    {"id":"PG-08","title":"Tier 1 AI wiring","wave":"W3","status":"pending","owner":"owner-only","judge":"node $TEMP/opencode/eg-live-contract.mjs","proof":"","evidence":""},
+    {"id":"PG-09","title":"Curriculum breadth (pack format/loader/validator)","wave":"W3","status":"pending","owner":"agent","judge":"node --test packages/onekey/dist/curriculum/*.test.js","proof":"","evidence":""},
+    {"id":"PG-10","title":"Durability without paying (export/restore)","wave":"W5","status":"pending","owner":"agent","judge":"node --test apps/cli/dist/backup.test.js","proof":"","evidence":""},
+    {"id":"PG-11","title":"Operations (logs/health depth/runbooks/retention)","wave":"W5","status":"pending","owner":"agent","judge":"node tools/verify-all.mjs","proof":"","evidence":""},
+    {"id":"PG-12","title":"Privacy and compliance paperwork","wave":"W5","status":"pending","owner":"owner-only","judge":"node tools/verify-all.mjs","proof":"","evidence":""},
+    {"id":"PG-13","title":"Signed Tier-0 bundle (F1-09)","wave":"W1","status":"pending","owner":"agent","judge":"node --test packages/onekey/dist/bundle-signature.test.js","proof":"","evidence":""},
+    {"id":"PG-14","title":"Accessibility proof","wave":"W4","status":"pending","owner":"owner-only","judge":"node $TEMP/opencode/eg-live-contract.mjs","proof":"","evidence":""},
+    {"id":"PG-15","title":"Release engineering with no paid CI","wave":"W6","status":"pending","owner":"agent","judge":"npm run ci:local","proof":"","evidence":""},
+    {"id":"PG-16","title":"Performance and resilience","wave":"W5","status":"pending","owner":"agent","judge":"node --test apps/cli/dist/resilience.test.js","proof":"","evidence":""},
+    {"id":"PG-17","title":"Security pass (first pass W1, final W6)","wave":"W1/W6","status":"pending","owner":"agent","judge":"node tools/secrets-scan.mjs","proof":"","evidence":""},
+    {"id":"PG-18","title":"Docs as one source of truth","wave":"W6","status":"pending","owner":"agent","judge":"node tools/verify-all.mjs","proof":"","evidence":""},
+    {"id":"PG-19","title":"Hygiene (.gitattributes if repro stays 4/4)","wave":"W6","status":"pending","owner":"agent","judge":"npm run verify:repro","proof":"","evidence":""},
+    {"id":"PG-20","title":"Owner packets","wave":"W7","status":"pending","owner":"agent","judge":"node tools/verify-production-loop.mjs","proof":"","evidence":""}
+  ]
+}

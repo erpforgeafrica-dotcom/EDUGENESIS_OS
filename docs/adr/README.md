@@ -46,6 +46,11 @@ later ADR, not edited in place.
 | [ADR-0018](ADR-0018-sqlite-durability-and-the-durable-audit-trail.md) | SQLite durability behind the existing seams, and a durable hash-chained audit trail | Accepted | Chief Systems Architect | This directory |
 | [ADR-0019](ADR-0019-durable-public-ledger-journal.md) | Durable public sponsor ledger behind the existing store seams | Accepted | Chief Systems Architect | This directory |
 | [ADR-0020](ADR-0020-accessibility-emission-shape-deviation.md) | Accessibility emission shape stays frozen; Doc 7 deviation recorded | Accepted | Chief Systems Architect | This directory |
+| [ADR-0021](ADR-0021-hosted-enrolment-and-audit.md) | Hosted enrolment and audit behind authentication and feature flags | Accepted | Chief Systems Architect | This directory |
+| [ADR-0022](ADR-0022-hosted-settings-deny-by-default.md) | Hosted settings are deny-by-default behind operator auth | Accepted | Chief Systems Architect | This directory |
+| [ADR-0023](ADR-0023-operator-role-mapping.md) | Operator role maps to the existing `admin` contract role | Accepted | Chief Systems Architect | This directory |
+| [ADR-0024](ADR-0024-signed-tier-zero-bundle.md) | Ed25519-signed Tier 0 bundle with an owner-only key ceremony | Accepted | Chief Systems Architect | This directory |
+| [ADR-0025](ADR-0025-funding-to-learner-credit-rule.md) | Funding-to-learner-credit rule: 60 % reinvestment to a pseudonymous learner pool | Accepted | Chief Systems Architect | This directory |
 
 ## ADR-0001 to ADR-0012
 
