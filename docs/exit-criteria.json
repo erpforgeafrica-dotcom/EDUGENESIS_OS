@@ -213,8 +213,18 @@
           "kind": "test",
           "target": "packages/onekey/dist/gateway.test.js",
           "minTests": 10
+        },
+        {
+          "kind": "test",
+          "target": "packages/onekey/dist/failover.test.js",
+          "minTests": 8
+        },
+        {
+          "kind": "gate",
+          "target": "failover-drill"
         }
-      ]
+      ],
+      "note": "AC-35 has two clauses and both are now cited. Continued delivery on credit exhaustion is proved by the gateway credit-exhaustion test (packages/onekey/dist/gateway.test.js, the 'with the budget at zero' case: a non-empty lesson is still returned). The no-learner-facing-credit-message clause is proved by the failover-drill gate and by packages/onekey/src/failover.test.ts:57-64: the gate's OPERATIONS_TERMS regex (packages/verification/src/gates/failover-gate.ts:27, applied at :166-173) refuses a delivered fallback text that names a provider, quota, credit or outage, and the named test asserts that neutral wording on the delivered lesson. Before this repair the row cited only a gateway test count, which proved delivery but not the wording clause. Reproduce with `node tools/verify-all.mjs` (prints the P5-4 gate:failover-drill evidence line) and `node --test packages/onekey/dist/failover.test.js`."
     },
     {
       "id": "P5-5",

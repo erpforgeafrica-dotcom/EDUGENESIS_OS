@@ -1,0 +1,349 @@
+{
+  "generated_from": "docs/gap-register.json open set",
+  "records": [
+    {
+      "id": "F0-05",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"cannot be issued a guardian consent token\" packages/identity/dist/enrolment.test.js exit=0; PASS 2/2 learner + unknown principal refused guardian token; impl packages/identity/src/enrolment.ts:328-340; already-closed prior round, no weakened tests",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F0-06",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"band\" packages/identity/dist/enrolment.test.js exit=0; PASS 3/3 caller band unverified, attested band written, contradiction refused; impl packages/identity/src/enrolment.ts:467-496; already-closed prior round",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F1-07",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node tools/verify-all.mjs exit 0 18/18 gates, exit-criteria PASS 13 met 3 owner-blocked; P5-4 cites failover-drill + tests; impl docs/exit-criteria.json:206-228, packages/verification/src/gates/failover-gate.ts:27,166-173; no gate weakened",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-09",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"registered adapter\" packages/onekey/dist/conformance.test.js exit 0 PASS refuses without adapter + registered adapter passes; impl packages/onekey/src/conformance.ts:68,76,99,148",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-16",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"one request walks all five rungs\" packages/onekey/dist/failover.test.js exit 0 PASS rung sequence [0,1,2,3,0,4]; impl packages/onekey/src/failover.ts:372-394",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-07",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F3-07: a credit-exhausted learner\" packages/onekey/dist/gateway.test.js exit 0 PASS no credit vocabulary; second F3-07 typed learner-safe outcome PASS; impl packages/onekey/src/gateway.ts:107,626",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-15",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F3-15: a provider failure thrown to the learner\" packages/onekey/dist/gateway.test.js exit 0 PASS no status/provider id/credential; impl packages/onekey/src/gateway.ts:107-111,626",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-19",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"a decision never promises Tier 0\" packages/onekey/dist/policy.test.js exit 0 PASS; impl packages/onekey/src/policy.ts:36,328-345",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F1-09",
+      "severity": "major",
+      "status": "owner-gated",
+      "proof": "node --test --test-reporter=spec packages/onekey/dist/registry/model-card.test.js packages/onekey/dist/registry/regions.test.js packages/onekey/dist/registry/signed-bundle.test.js packages/onekey/dist/registry/tier-two-adapter.test.js exit 0 PASS 4/4; model card, regions, tier-2 closed at model-card.ts:14-70, regions.ts:19-38, tier-two-adapter.ts:28-71. Signed Tier-0 bundle sub-item owner-gated: signed-bundle.ts:52-62 refuses unsigned bundles and delegates crypto; NO faked signature. Owner decision needed: supply KMS/HSM signing key + real BundleSignatureVerifier; unblock: wire verifier and re-verify.",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-18",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F3-18: the nine-element compliance emission\" packages/onekey/dist/gateway.test.js exit 0 PASS emission returned with 9 keys; impl packages/onekey/src/gateway.ts:701-705,749",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F8-07",
+      "severity": "major",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec packages/onekey/dist/egress.test.js packages/onekey/dist/gateway.test.js exit 0, 58/58 PASS incl 'a non-Qwen adapter receives only the projected request', 'the real Qwen adapter still grounds (projection is idempotent)', 'a legitimate grounded answer still works through the real gateway and guardian'; impl packages/onekey/src/gateway.ts:304-313 (single callAdapter), egress.ts:382-390,317-327; grounded test uses tierZero:false honestly because offline tier answers photosynthesis and short-circuits, nothing relaxed",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T03:26:55.290Z"
+    },
+    {
+      "id": "F0-10",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"reordered scope set\" packages/identity/dist/enrolment.test.js exit=0; PASS 1/1 reordered scope set matches; impl packages/identity/src/enrolment.ts:412 set-based comparison",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F1-13",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "ADR gate exit 0 PASSED '20 ADR index rows agree with their records'; contracts-baseline gate exit 0 PASSED 'frozen contracts unchanged'; docs/adr/ADR-0020-accessibility-emission-shape-deviation.md:41-44 marks easy-read/dyslexia/low-stimulation/sign-language as not implemented, :53-55 escalates as product decision; docs/adr/README.md:48 row present",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T03:26:55.290Z"
+    },
+    {
+      "id": "F3-23",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"tier 0 serves the learner\" packages/onekey/dist/gateway.test.js exit 0 PASS six-rung ladder [0,1,2,3,0]; impl packages/onekey/src/gateway.ts:43-52 + assertion gateway.test.ts:145-147",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-34",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"public surface does not re-export\" packages/onekey/dist/registry.test.js exit 0 PASS type-only FetchLike re-export allowed, value export refused; impl packages/onekey/src/index.ts:38 registry.test.ts:75-86,133-170",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-31",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"eligibility rule|not hard-filtered\" packages/onekey/dist/policy.test.js exit 0 PASS 2/2; impl packages/onekey/src/policy.ts:209,222-233",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-35",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-name-pattern=\"input-token estimate includes the system prompt\" --test-reporter=spec packages/onekey/dist/providers/local-echo.test.js exit 0 PASS; impl packages/onekey/src/providers/local-echo.ts:84-88",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-26",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F3-26: a non-string provider error\" packages/onekey/dist/gateway.test.js exit 0 PASS; node --test --test-reporter=spec --test-name-pattern=\"redact: a non-string value is redacted recursively\" packages/onekey/dist/redact.test.js exit 0 PASS; impl packages/onekey/src/redact.ts:56,84,93 gateway.ts:233",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-27",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"refuseOverBudget option is exercised\" packages/onekey/dist/conformance.test.js exit 0 PASS; impl packages/onekey/src/conformance.test.ts:191-207 testing/support.ts:145,179",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F5-13",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"NEGATIVE money|homoglyph\" packages/ledger/dist/ledger-store.test.js exit 0 PASS negative money refused + ZWSP field refused; node --test --test-reporter=spec --test-name-pattern=\"renamed producer key\" packages/ledger/dist/sponsor-report.test.js exit 0 PASS; impl ledger-store.ts:281-288,499-508 sponsor-report.ts:139,267",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F5-07",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"VALUE:|forbidden field name is refused whatever\" packages/ledger/dist/pii-guard.test.js exit 0 PASS 5/5 value scanning; impl packages/ledger/src/pii-guard.ts:216-242,327-363; count assertion 1->2 strengthened, names both violations",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F5-08",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F5-08\" packages/ledger/dist/private-store.test.js exit 0 PASS 2/2 sealed at rest + wrong key refused; impl packages/ledger/src/private-store.ts:199-291; flaky 2-char substring replaced by stronger structural + exact plaintext-JSON assertion",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F8-12",
+      "severity": "minor",
+      "status": "owner-gated",
+      "proof": "Owner decision 2026-11-17: escalate, never act on hosted GET /api/settings visibility. NO code change in apps/cli/src/serve.ts. Unblock: owner decides whether the read stays public, then implement auth/redaction in apps/cli/src/serve.ts and extend the live probe.",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F8-11",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec packages/onekey/dist/kill-switch.test.js apps/cli/dist/kill-switch-store.test.js exit 0, 20/20 PASS incl governed kill persists, actor+reason required, killer cannot revive own safety kill, corrupt state refused, CLI governance fields survive round-trip; impl kill-switch.ts:146-200,246-344 + apps/cli/src/kill-switch-store.ts:64-85,91-186; no truncation",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T03:26:55.290Z"
+    },
+    {
+      "id": "F1-10",
+      "severity": "minor",
+      "status": "owner-gated",
+      "proof": "ci.yml:1-35 maps GL-01..GL-08 with jobs gl01_intake:53, gl02_development:74, gl05_loop_testing:112, gl08_verify:187; NO CI run exists while GitHub Actions billing is locked (ci.yml:20-28). Owner decision: Repository Owner enables Actions billing; unblock: push main and record the run URL against P0-3.",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-36",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F3-36: the constructor refuses\" packages/onekey/dist/gateway.test.js exit 0 PASS foreign policy engine refused; impl packages/onekey/src/gateway.ts:243-247,263",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-29",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-name-pattern=\"a credential in the provider status line is redacted\" --test-reporter=spec packages/onekey/dist/providers/qwen-adapter.test.js exit 0 PASS 1/1; impl packages/onekey/src/providers/qwen-adapter.ts:481",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F5-10",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F5-10\" packages/ledger/dist/reinvestment.test.js exit 0 PASS 2/2 duplicate event_ref + semantic duplicate counted once; impl packages/ledger/src/reinvestment.ts:161-174,226-251",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F8-09",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node tools/secrets-scan.mjs exit 0 PASS 219 tree files + 469 history blobs, 0 findings, canary live on file+history; manifest has no settings.local.json (tools/checksums.mjs:88); already-closed prior round, scanner not weakened",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F0-09",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"not a dead principal attribute\" packages/identity/dist/enrolment.test.js exit=0; PASS 1/1 method in audit trail not principal; impl packages/identity/src/enrolment.ts:489-490",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-22",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F3-22: the ARC-I4 uncertainty note\" packages/onekey/dist/gateway.test.js exit 0 PASS confidence 0.2 note, 0.95 null; impl packages/onekey/src/gateway.ts:830-834",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F5-04",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"defensive copies\" packages/ledger/dist/ledger-store.test.js exit 0 PASS all() returns defensive copies; impl packages/ledger/src/ledger-store.ts:337,557-567,618; tamper tests migrated to rawEntries()",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-28",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"circuit breaker: half-open admits exactly one probe\" packages/onekey/dist/circuit-breaker.test.js exit 0 PASS; failed probe re-opens PASS; impl packages/onekey/src/circuit-breaker.ts:85-97,101-123,152,160 gateway.ts:380",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-33",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"built-in drill is offline\" packages/onekey/dist/failover.test.js exit 0 PASS; impl packages/onekey/src/failover.ts:320,56-62",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-25",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F3-25: the per-request attempt trail\" packages/onekey/dist/gateway.test.js exit 0 PASS size and TTL eviction; impl packages/onekey/src/gateway.ts:224,273-288",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-30",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-name-pattern=\"the 429 hint is advisory\" --test-reporter=spec packages/onekey/dist/providers/qwen-adapter.test.js exit 0 PASS advisory no retry; old 429 tests PASS 2/2; impl packages/onekey/src/providers/qwen-adapter.ts:401-404",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F1-12",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "README.md:165-204 documents env vars, PORT-only-when-hosted, health and rollback; commands `npm run serve -- --port 8787` + curl health match apps/cli/src/serve.ts:890,886,521,535-538; read-only verification, no weakened test",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-21",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F3-21: risk_tier derives\" packages/onekey/dist/gateway.test.js exit 0 PASS low->1 critical->4; impl packages/onekey/src/gateway.ts:117-122,815",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F0-08",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"revok\" packages/identity/dist/enrolment.test.js exit=0; PASS 2/2 revoke before expiry + revoked token refused; impl packages/identity/src/enrolment.ts:366-393,438-440",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-24",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-name-pattern=\"latencyMs is the measured round-trip time\" --test-reporter=spec packages/onekey/dist/providers/qwen-adapter.test.js exit 0 PASS measured 137ms; impl packages/onekey/src/providers/qwen-adapter.ts:358,372,435",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F3-32",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"capabilities are re-read\" packages/onekey/dist/policy.test.js exit 0 PASS; impl packages/onekey/src/policy.ts:181,150-156,194-209",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F5-12",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"non-ISO|equivalent ISO\" packages/ledger/dist/ledger-store.test.js exit 0 PASS 2/2 strict ISO + canonical hash; impl packages/ledger/src/ledger-store.ts:316-334,512",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    },
+    {
+      "id": "F5-09",
+      "severity": "minor",
+      "status": "closed",
+      "proof": "node --test --test-reporter=spec --test-name-pattern=\"F5-09\" packages/ledger/dist/reinvestment.test.js exit 0 PASS 2/2 late allocation excluded/attributed; impl packages/ledger/src/reinvestment.ts:83-85,116-132,204-205,269",
+      "verified_by": "independent-judge",
+      "at": "2026-11-18T02:48:55.478Z"
+    }
+  ]
+}

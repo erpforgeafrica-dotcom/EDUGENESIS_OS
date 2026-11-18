@@ -175,6 +175,34 @@ more than that:
 | Rollback | The service deploys from `main` with `autoDeployTrigger: checksPass`. To roll back, redeploy the previous known-good commit. There is no schema migration to reverse: the durable stores create their tables on first use. |
 | Secrets | API keys live in the gitignored local settings file and are write-only over HTTP; they are never logged and never returned by the API. |
 
+### Copyable deployment commands
+
+The table above is the contract; these are the commands that exercise it. Run the local ones from the
+project root after `npm run build`. The environment variables below are supplied **by the host** — they
+are declared in `render.yaml`, not set by this repository. `PORT` is honoured **only** when
+`EDUGENESIS_HOSTED=1`; locally the port comes from `settings/settings.json` → `server.port`.
+
+```bash
+# Host-supplied environment (Render sets these per render.yaml envVars):
+#   NODE_VERSION=24         selects the Node runtime
+#   EDUGENESIS_HOSTED=1     hosted mode: read-only settings, platform proxy admitted
+#   PORT=<Render value>     the listening port, used only in hosted mode
+#   NODE_ENV=production     set by Render
+
+# Local run — port from settings, overridden by --port (PORT is ignored locally):
+npm run serve -- --port 8787
+
+# Health check — HTTP 200 with {"ok":true,"status":"ok","service":"edugenesis-os"}:
+curl -fsS http://127.0.0.1:8787/api/health                       # local
+curl -fsS https://edugenesis-web-yju6.onrender.com/api/health    # deployed demonstration
+
+# Rollback — identify the last known-good deploy, then roll the host back:
+git log --oneline -5
+# Render Dashboard -> edugenesis-web -> Deploys -> <last green deploy> -> "Rollback to this deploy".
+# Git-managed equivalent: git revert <sha>, then push to the branch the host watches.
+# There is no schema migration to undo: the durable stores create their tables on first use.
+```
+
 The platform is **Render**, described in git by `render.yaml` (ADR-0009, proposal §9.4). The Blueprint
 declares **one** free web service, `edugenesis-web`, which runs `node apps/cli/dist/serve.js --hosted`.
 Hosted mode widens *who* may connect — the platform proxy is never a loopback peer — and makes every
