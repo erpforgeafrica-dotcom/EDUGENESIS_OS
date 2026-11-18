@@ -12,8 +12,19 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { existsSync, readFileSync } from 'node:fs';
 import { extname, join, resolve } from 'node:path';
 import type { ProviderAdapter } from '@edugenesis/contracts';
+import {
+  createAuthStore,
+  createSessionManager,
+  hasPermission,
+  type AuthRole,
+  type AuthStore,
+  type Permission,
+  type SessionManager,
+  type SessionPayload,
+} from '@edugenesis/auth';
 import { flagBoolean, flagString, parseArgs } from './args.js';
 import { createLearnerServices, type LearnerServices } from './learner.js';
+import { createSponsorServices, type SponsorServices } from './sponsor.js';
 import {
   DATA_DIR,
   displayPath,
@@ -254,6 +265,82 @@ export function isHostedWriteRefused(
 }
 
 /**
+ * Parse a Cookie header into a name -> value map. The first occurrence of a
+ * name wins, so a caller cannot shadow an HttpOnly session cookie by appending
+ * a second cookie of the same name.
+ */
+export function parseCookies(header: string | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!header) return out;
+  for (const part of header.split(';')) {
+    const index = part.indexOf('=');
+    if (index <= 0) continue;
+    const name = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    if (!Object.hasOwn(out, name)) out[name] = value;
+  }
+  return out;
+}
+
+/** Verify the session cookie attached to a request, or null. */
+function sessionOf(request: IncomingMessage, sessions: SessionManager): SessionPayload | null {
+  const cookies = parseCookies(headerValue(request, 'cookie'));
+  const token = cookies['eg_session'];
+  return token === undefined ? null : sessions.verify(token);
+}
+
+/**
+ * Authorize a state-changing authenticated request.
+ *
+ * A signed session proves WHO called; the CSRF token proves the CALLER INTENDED
+ * the write (a cross-origin page cannot read the non-HttpOnly csrf cookie). A
+ * permission check proves the role is entitled. All three are required — a
+ * missing CSRF token is a refusal, never a logged warning.
+ */
+export function authorizeAuthenticatedWrite(
+  session: SessionPayload | null,
+  csrfHeader: string | undefined,
+  permission: Permission,
+): { allowed: boolean; reason: string } {
+  if (session === null) return { allowed: false, reason: 'Sign in first.' };
+  if (!hasPermission(session.roles, permission)) {
+    return { allowed: false, reason: 'This role may not perform that action.' };
+  }
+  const csrf = csrfHeader ?? '';
+  if (csrf.length === 0 || csrf !== session.csrf) {
+    return { allowed: false, reason: 'A valid CSRF token is required.' };
+  }
+  return { allowed: true, reason: '' };
+}
+
+/** Authorize a read against a session permission (no CSRF token needed). */
+export function authorizeAuthenticatedRead(
+  session: SessionPayload | null,
+  permission: Permission,
+): { allowed: boolean; reason: string } {
+  if (session === null) return { allowed: false, reason: 'Sign in first.' };
+  if (!hasPermission(session.roles, permission)) {
+    return { allowed: false, reason: 'This role may not read this surface.' };
+  }
+  return { allowed: true, reason: '' };
+}
+
+/** Build the Set-Cookie pair for a newly issued session. */
+function sessionCookies(token: string, csrf: string, hosted: boolean, maxAgeSec: number): string[] {
+  const shared = `Path=/; Max-Age=${maxAgeSec}; SameSite=Strict${hosted ? '; Secure' : ''}`;
+  return [
+    `eg_session=${token}; HttpOnly; ${shared}`,
+    `eg_csrf=${csrf}; ${shared}`,
+  ];
+}
+
+/** Cookies that expire a session immediately. */
+function expiredCookies(hosted: boolean): string[] {
+  const shared = `Path=/; Max-Age=0; SameSite=Strict${hosted ? '; Secure' : ''}`;
+  return [`eg_session=; HttpOnly; ${shared}`, `eg_csrf=; ${shared}`];
+}
+
+/**
  * Decide whether a request may read the DURABLE AUDIT TRAIL.
  *
  * WHY THIS IS STRICTER THAN THE SETTINGS SURFACE
@@ -463,6 +550,13 @@ export interface ServeOptions {
   readonly learnerServices?: LearnerServices;
   /** Token bucket for the public question route. */
   readonly rateLimit?: RateLimitOptions;
+  /** HMAC secret for signed sessions. Hosted mode refuses auth routes without one. */
+  readonly sessionSecret?: string;
+  /** Initial accounts, supplied by tests or by the local bootstrap command. */
+  readonly authBootstrap?: readonly { id: string; password: string; roles: readonly AuthRole[] }[];
+  /** Hosted feature flags (ADR-0021). Both default false: refusal is the default. */
+  readonly hostedEnrol?: boolean;
+  readonly hostedAudit?: boolean;
 }
 
 /** A running server. */
@@ -502,6 +596,30 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
   // The only file this process may write. Named through the accessor rather
   // than the constant so the rule has one definition (see paths.ts).
   const writeTarget = localOverridePath();
+
+  // ---- authentication (PG-01) -------------------------------------------
+  // A hosted instance refuses to invent a signing secret: without an
+  // operator-provisioned secret there are no sessions, and every privileged
+  // route stays denied. A local instance uses a clearly non-production
+  // default so the settings UI keeps working on a laptop.
+  const sessionSecret =
+    options.sessionSecret ??
+    process.env['EDUGENESIS_SESSION_SECRET'] ??
+    'edugenesis-local-development-only-not-a-production-session-secret';
+  const authAvailable = !hosted || options.sessionSecret !== undefined || process.env['EDUGENESIS_SESSION_SECRET'] !== undefined;
+  const sessions = createSessionManager({ secret: sessionSecret, ttlSec: 3600 });
+  const authStore: AuthStore = createAuthStore({ dataDir: join(dataDir, 'auth') });
+  for (const account of options.authBootstrap ?? []) {
+    if (authStore.rolesOf(account.id) === undefined) {
+      authStore.register(account);
+      authStore.auditEvent({ actor: 'system', action: 'bootstrap', target: account.id, outcome: 'registered' });
+    }
+  }
+  const hostedEnrol = options.hostedEnrol ?? process.env['EDUGENESIS_HOSTED_ENROL'] === '1';
+  const hostedAudit = options.hostedAudit ?? process.env['EDUGENESIS_HOSTED_AUDIT'] === '1';
+
+  // ---- the value chain (PG-04/PG-05/PG-06, ADR-0025) ----------------------
+  const sponsor: SponsorServices = createSponsorServices({ dataDir: join(dataDir, 'value-chain') });
 
   const handle = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const method = request.method ?? 'GET';
@@ -544,6 +662,160 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
         settingsSchemaVersion: schemaVersion,
         time: new Date().toISOString(),
       });
+      return;
+    }
+
+    // ---- authentication (PG-01) -----------------------------------------
+    if (pathname === '/api/auth/login') {
+      if (method !== 'POST') {
+        sendJson(response, 405, { ok: false, error: 'Use POST.' });
+        return;
+      }
+      if (!authAvailable) {
+        sendJson(response, 503, {
+          ok: false,
+          error: 'Operator authentication is not configured on this instance.',
+        });
+        return;
+      }
+      let body: unknown;
+      try {
+        body = await readBody(request);
+      } catch (error) {
+        sendJson(response, 400, { ok: false, error: `Could not read the request body: ${(error as Error).message}` });
+        return;
+      }
+      const id = isPlainObject(body) ? String(body['id'] ?? '') : '';
+      const password = isPlainObject(body) ? String(body['password'] ?? '') : '';
+      if (id.length === 0 || password.length === 0) {
+        sendJson(response, 400, { ok: false, error: 'An id and password are required.' });
+        return;
+      }
+      const verdict = authStore.authenticate(id, password);
+      if (!verdict.ok) {
+        authStore.auditEvent({ actor: id, action: 'login', outcome: verdict.reason });
+        sendJson(response, 401, { ok: false, error: 'Invalid id or password.' });
+        return;
+      }
+      const issued = sessions.issue(verdict.principal);
+      authStore.auditEvent({ actor: id, action: 'login', outcome: 'ok' });
+      const payload = JSON.stringify({
+        ok: true,
+        principal: verdict.principal,
+        csrf: issued.csrf,
+        expiresAt: issued.expiresAt,
+      });
+      response.writeHead(200, {
+        ...SECURITY_HEADERS,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': Buffer.byteLength(payload),
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Set-Cookie': sessionCookies(issued.token, issued.csrf, hosted, 3600),
+      });
+      response.end(payload);
+      return;
+    }
+
+    if (pathname === '/api/auth/logout') {
+      const session = sessionOf(request, sessions);
+      if (session !== null) {
+        authStore.auditEvent({ actor: session.sub, action: 'logout', outcome: 'ok' });
+      }
+      response.writeHead(200, {
+        ...SECURITY_HEADERS,
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Length': 2,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+        'Set-Cookie': expiredCookies(hosted),
+      });
+      response.end('{}');
+      return;
+    }
+
+    if (pathname === '/api/auth/me') {
+      const session = sessionOf(request, sessions);
+      if (session === null) {
+        sendJson(response, 401, { ok: false, error: 'Not signed in.' });
+        return;
+      }
+      sendJson(response, 200, {
+        ok: true,
+        principal: { id: session.sub, roles: session.roles },
+        expiresAt: session.exp,
+      });
+      return;
+    }
+
+    // ---- the public, read-only ledger (PG-05) ---------------------------
+    if (pathname === '/api/ledger') {
+      if (method !== 'GET') {
+        sendJson(response, 405, { ok: false, error: 'Use GET.' });
+        return;
+      }
+      const view = sponsor.publicLedger();
+      sendJson(response, 200, { ok: true, ...view });
+      return;
+    }
+
+    // ---- sponsor intake and funding (PG-04) -----------------------------
+    if (pathname === '/api/sponsor/register' || pathname === '/api/sponsor/funding') {
+      if (method !== 'POST') {
+        sendJson(response, 405, { ok: false, error: 'Use POST.' });
+        return;
+      }
+      const write = authorizeAuthenticatedWrite(
+        sessionOf(request, sessions),
+        headerValue(request, 'x-csrf-token'),
+        'sponsor:write',
+      );
+      if (!write.allowed) {
+        sendJson(response, 403, { ok: false, error: write.reason });
+        return;
+      }
+      let body: unknown;
+      try {
+        body = await readBody(request);
+      } catch (error) {
+        sendJson(response, 400, { ok: false, error: `Could not read the request body: ${(error as Error).message}` });
+        return;
+      }
+      const payload = isPlainObject(body) ? body : {};
+      try {
+        if (pathname === '/api/sponsor/register') {
+          const ref = String(payload['ref'] ?? '');
+          const result = sponsor.registerSponsor({ ref });
+          sendJson(response, 200, { ok: true, ...result });
+          return;
+        }
+        const result = sponsor.recordFunding({
+          sponsorId: String(payload['sponsorId'] ?? ''),
+          amountCents: Number(payload['amountCents']),
+          idempotencyKey: String(payload['idempotencyKey'] ?? ''),
+        });
+        sendJson(response, 200, result);
+      } catch (error) {
+        sendJson(response, 400, { ok: false, error: (error as Error).message });
+      }
+      return;
+    }
+
+    // ---- the sponsor report (PG-05, PG-06) ------------------------------
+    if (pathname === '/api/sponsor/report') {
+      if (method !== 'GET') {
+        sendJson(response, 405, { ok: false, error: 'Use GET.' });
+        return;
+      }
+      const read = authorizeAuthenticatedRead(sessionOf(request, sessions), 'sponsor:read');
+      if (!read.allowed) {
+        sendJson(response, 403, { ok: false, error: read.reason });
+        return;
+      }
+      const sponsorId = url.searchParams.get('sponsorId') ?? '';
+      const draft = url.searchParams.get('draft') === '1';
+      const result = sponsor.sponsorReport({ sponsorId, draft });
+      sendJson(response, result.ok ? 200 : 409, result);
       return;
     }
 
@@ -626,22 +898,32 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
     // ---- enrolment (D-1) ------------------------------------------------
     if (pathname === '/api/enrol') {
       if (hosted) {
-        // A DEMONSTRATION SURFACE TAKES NO REAL LEARNER DATA.
-        //
-        // WHY THIS IS REFUSED AND WHY `/api/learn` IS NOT: a hosted instance
-        // is a public demonstration, its filesystem is ephemeral (the free tier
-        // recycles the container), and ADR-0012 forbids real learner data in a
-        // technical demonstration. Enrolment creates a guardian identity and a
-        // learner record - that is real data about a person. A learner asking a
-        // question is not: it is the product working, and it carries no
-        // identifier. So the question is answered and the enrolment is refused.
-        sendJson(response, 403, {
-          ok: false,
-          error:
-            'This is a demonstration instance: it answers questions but cannot enrol a learner, ' +
-            'so it never holds real learner data. Run the project locally to enrol.',
-        });
-        return;
+        // ADR-0021: hosted enrolment is OFF unless an operator enables the flag.
+        // When enabled it still requires a guardian/operator session and a CSRF
+        // token, so a public visitor can never create a learner record.
+        if (!hostedEnrol) {
+          sendJson(response, 403, {
+            ok: false,
+            error:
+              'This is a demonstration instance: enrolment is disabled. ' +
+              'An operator may enable it behind authenticated access.',
+          });
+          return;
+        }
+        if (method === 'POST') {
+          const write = authorizeAuthenticatedWrite(
+            sessionOf(request, sessions),
+            headerValue(request, 'x-csrf-token'),
+            'enrol:write',
+          );
+          if (!write.allowed) {
+            sendJson(response, 403, { ok: false, error: write.reason });
+            return;
+          }
+        } else {
+          sendJson(response, 405, { ok: false, error: 'Use POST.' });
+          return;
+        }
       }
       if (method !== 'POST') {
         sendJson(response, 405, { ok: false, error: 'Use POST.' });
@@ -712,13 +994,25 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
 
     // ---- the private audit trail (D-3) ----------------------------------
     if (pathname === '/api/audit') {
-      const auditAccess = authorizeAuditAccess(hosted, request.socket.remoteAddress);
-      if (!auditAccess.allowed) {
-        sendJson(response, 403, {
-          ok: false,
-          error: auditAccess.reason ?? 'This request may not read the audit trail.',
-        });
-        return;
+      if (hosted) {
+        // ADR-0021: the private evidence stays hidden unless the flag is on AND
+        // an auditor/operator session is present. No public surface exposes it.
+        const read = hostedAudit
+          ? authorizeAuthenticatedRead(sessionOf(request, sessions), 'audit:read')
+          : { allowed: false, reason: 'The audit trail is disabled on this hosted instance.' };
+        if (!read.allowed) {
+          sendJson(response, 403, { ok: false, error: read.reason });
+          return;
+        }
+      } else {
+        const auditAccess = authorizeAuditAccess(hosted, request.socket.remoteAddress);
+        if (!auditAccess.allowed) {
+          sendJson(response, 403, {
+            ok: false,
+            error: auditAccess.reason ?? 'This request may not read the audit trail.',
+          });
+          return;
+        }
       }
       if (method !== 'GET') {
         sendJson(response, 405, { ok: false, error: 'Use GET.' });
@@ -736,6 +1030,17 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
     // ---- settings ------------------------------------------------------
     if (pathname === '/api/settings') {
       if (method === 'GET') {
+        // ADR-0022: hosted settings are deny-by-default. Only an authenticated
+        // operator may read them, and only through the fully redacted mask.
+        if (hosted) {
+          const read = authAvailable
+            ? authorizeAuthenticatedRead(sessionOf(request, sessions), 'settings:read')
+            : { allowed: false, reason: 'Operator authentication is not configured on this instance.' };
+          if (!read.allowed) {
+            sendJson(response, 403, { ok: false, error: read.reason });
+            return;
+          }
+        }
         try {
           const current = loadSettings();
           sendJson(response, 200, { ok: true, settings: publicSettings(current.settings), file: displayPath(current.activePath) });
@@ -865,6 +1170,8 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
         server.close(() => resolvePromise());
       });
       if (ownsLearner) learner.close();
+      authStore.close();
+      sponsor.close();
     },
   };
 }

@@ -22,6 +22,7 @@ export * from './registry.js';
 export * from './registry/model-card.js';
 export * from './registry/regions.js';
 export * from './registry/signed-bundle.js';
+export * from './registry/ed25519-signature.js';
 export * from './registry/tier-two-adapter.js';
 export * from './policy.js';
 export * from './gateway.js';
