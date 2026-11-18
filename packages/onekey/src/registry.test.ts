@@ -60,20 +60,21 @@ test('registry: a provider can be disabled and re-enabled by status', () => {
  * WHY the exemption: the rule exists to stop the runtime path from reaching
  * into a provider SDK. Test files and the shared test doubles legitimately
  * name concrete providers — that is how the offline behaviour is proven — so
- * they are exempt. `src/index.ts` and `src/failover.ts` are exempt because
- * both are COMPOSITION ROOTS: index.ts is the package's public surface, and
- * failover.ts builds the drill's own scenario. `src/provider-wiring.ts` is a
- * composition root too: it is the ONE place that maps a settings provider id
- * to a concrete adapter factory, so the application never names a provider
- * (ADR-0001). The rule's intent - the gateway and the policy engine never
- * reach into a provider - still holds.
+ * they are exempt. `src/failover.ts` and `src/provider-wiring.ts` are exempt
+ * because both are COMPOSITION ROOTS: failover.ts builds the drill's own
+ * scenario, and provider-wiring.ts is the ONE place that maps a settings
+ * provider id to a concrete adapter factory (ADR-0001).
+ *
+ * F3-34: `src/index.ts` is NO LONGER exempt. The public surface must itself be
+ * provider-agnostic, so it is scanned like every other module; the concrete
+ * Alibaba adapter is no longer re-exported from it.
  */
 function isProductionLearnerPath(relativePath: string): boolean {
   const normalised = relativePath.replace(/\\/g, '/');
   if (normalised.startsWith('providers/')) {
     return false;
   }
-  if (normalised === 'index.ts' || normalised === 'failover.ts' || normalised === 'provider-wiring.ts') {
+  if (normalised === 'failover.ts' || normalised === 'provider-wiring.ts') {
     return false;
   }
   if (normalised.startsWith('testing/') || normalised.endsWith('.test.ts')) {
@@ -128,9 +129,42 @@ test('registry: only the composition root may reference provider implementations
       continue;
     }
     const source = readFileSync(file, 'utf8');
-    if (/from\s*['"][^'"]*providers\//.test(source)) {
+    // Only an IMPORT binds a provider implementation into a learner-path
+    // module. `export ... from` in the public surface is the package API, not
+    // a learner-path import (F3-34); that surface is checked separately for
+    // concrete vendor adapters by the public-surface test below.
+    const providerImport = /^\s*import\s[^;]*?from\s*['"][^'"]*providers\/[^'"]+['"]/gm;
+    if (providerImport.test(source)) {
       offenders.push(rel);
     }
   }
   assert.deepEqual(offenders, [], `learner-path modules must not import provider implementations: ${offenders.join(', ')}`);
+});
+
+// F3-34: the root public surface is scanned by BOTH guards above and must not
+// re-export the concrete Alibaba adapter. Concrete adapters stay behind their
+// own modules; the root stays provider-agnostic.
+test('registry: the public surface does not re-export the concrete Qwen adapter', () => {
+  const source = readFileSync(join(srcDir(), 'index.ts'), 'utf8');
+  // A TYPE-only re-export is not a vendor dependency: FetchLike is the CLI's
+  // injection seam and must stay available after the concrete adapter is
+  // removed from the value surface. Only value re-exports are forbidden here.
+  const valueSurface = source
+    .split('\n')
+    .filter((line) => !/^\s*export\s+type\s/.test(line))
+    .join('\n');
+  assert.doesNotMatch(
+    valueSurface,
+    /from\s*['"][^'"]*qwen-adapter/,
+    'a concrete vendor adapter must not be part of the root public API',
+  );
+  assert.match(source, /export\s+type\s*\{\s*FetchLike\s*\}/, 'the type-only injection seam survives');
+  assert.equal(
+    isProductionLearnerPath('index.ts'),
+    true,
+    'the guard must scan index.ts — it is no longer an exemption',
+  );
+  // The guard still fires on a real learner-path import of a provider module.
+  const providerImport = /^\s*import\s[^;]*?from\s*['"][^'"]*providers\/[^'"]+['"]/gm;
+  assert.equal(providerImport.test("import { x } from './providers/qwen-adapter.js';"), true);
 });

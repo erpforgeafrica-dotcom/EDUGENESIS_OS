@@ -46,8 +46,12 @@ test('normalisation collapses every spelling of the same field name', () => {
 test('a forbidden field name is refused whatever its casing', () => {
   const result = assertNoPersonalData({ learner_name: 'Synthetic Learner' });
   assert.equal(result.ok, false);
-  assert.equal(result.violations.length, 1);
-  assert.match(result.violations[0] ?? '', /learner_name/);
+  // F5-07 adds value scanning: a forbidden field name AND a name-shaped value
+  // are both violations now. Both must be named, not merely counted.
+  assert.equal(result.violations.length, 2);
+  assert.match(result.violations.join(' '), /learner_name/);
+  assert.match(result.violations[0] ?? '', /forbidden field name/);
+  assert.match(result.violations[1] ?? '', /possible personal name in value/);
 });
 
 test('a forbidden field name nested in an object is refused', () => {
@@ -159,10 +163,48 @@ test('folding is an extension: ordinary ASCII normalisation is unchanged', () =>
   assert.equal(isForbiddenFieldName('total_spend_cents'), false);
 });
 
+test('VALUE: a personal name in free text under an innocuous key is refused', () => {
+  // F5-07: a field name is not a guarantee. A prose value under a key like
+  // `note` can carry a learner's full name; pattern-only value scanning used
+  // to let that through because no email/digit shape was present.
+  const result = assertNoPersonalData({ note: 'Learner Amina Ochieng missed the session.' });
+  assert.equal(result.ok, false);
+  assert.match(result.violations.join(' '), /personal name/i);
+});
+
+test('VALUE: an obfuscated email is refused', () => {
+  // Writing the at-sign and the dot as words used to slip past V1 entirely.
+  const result = assertNoPersonalData({ contact: 'ada [at] example [dot] org' });
+  assert.equal(result.ok, false);
+  assert.match(result.violations.join(' '), /email/i);
+});
+
+test('VALUE: a zero-width-obfuscated phone number is refused', () => {
+  // Zero-width characters between the digits broke the contiguous digit run
+  // that V2/V3 used to match, hiding a phone number in plain sight.
+  const result = assertNoPersonalData({ reference: '07\u200B12\u200B34\u200B56\u200B78' });
+  assert.equal(result.ok, false);
+  assert.match(result.violations.join(' '), /digit|phone/i);
+});
+
+test('VALUE: an organisational name is not mistaken for a personal name', () => {
+  // Explicit false-positive handling: the name rule is an extension, never a
+  // narrowing. Known organisational values and keys stay legal.
+  const result = assertNoPersonalData({ sponsor_name: 'Anchor Foundation', category: 'devices' });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.violations, []);
+});
+
 test('the detection rules are published so an auditor can read them', () => {
   assert.ok(VALUE_DETECTION_RULES.length >= 3);
   assert.match(VALUE_DETECTION_RULES.join(' '), /email-address/);
   assert.match(VALUE_DETECTION_RULES.join(' '), /long-digit-string/);
+});
+
+test('the value rules include the name and obfuscation detectors an auditor relies on', () => {
+  assert.ok(VALUE_DETECTION_RULES.length >= 6);
+  assert.match(VALUE_DETECTION_RULES.join(' '), /personal name/i);
+  assert.match(VALUE_DETECTION_RULES.join(' '), /obfuscat/i);
 });
 
 test('every forbidden field in the frozen contract is enforced by this guard', () => {

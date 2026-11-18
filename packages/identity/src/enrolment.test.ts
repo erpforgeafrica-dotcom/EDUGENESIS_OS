@@ -439,3 +439,115 @@ test('enrolment: a band that contradicts the verified band is refused', async ()
   );
   assert.equal(h.enrolment.auditTrail('learner-1').at(-1)?.outcome, 'refused');
 });
+
+/**
+ * F0-10 — the scope claim is a SET, not an ordered sequence.
+ *
+ * A client that normalises (e.g. sorts) the scope list before presenting the
+ * token has not tampered with it. A refusal there is a false accusation that
+ * can lock out a legitimate client; widening or redirecting is still refused
+ * by the other claim checks and by the set-size check.
+ */
+test('enrolment: a reordered scope set still matches the token that was issued', async () => {
+  const h = harness();
+  addGuardian(h);
+  const scopes: ConsentScope[] = ['progress_visible_to_guardian', 'mentor_contact'];
+  const issued = h.enrolment.issueGuardianConsentToken({
+    guardianId: 'guardian-1',
+    learnerId: 'learner-1',
+    scopes,
+  });
+
+  // Same set, different order - a harmless client-side normalisation.
+  const reordered = { ...issued.token, scopes: [...scopes].reverse() };
+  const result = await h.enrolment.enrolWithGuardianConsent({
+    token: reordered,
+    secret: issued.secret,
+  });
+
+  assert.equal(result.principal.id, 'learner-1');
+  assert.deepEqual([...result.grantedScopes].sort(), [...scopes].sort());
+});
+
+/**
+ * F0-08 — a guardian token can be revoked before it expires.
+ *
+ * A token captured in transit must be neutralisable at once rather than
+ * staying usable for the rest of its 24-hour TTL.
+ */
+test('enrolment: a guardian consent token can be revoked before it expires', () => {
+  const h = harness();
+  addGuardian(h);
+  const issued = h.enrolment.issueGuardianConsentToken({
+    guardianId: 'guardian-1',
+    learnerId: 'learner-1',
+    scopes: ['progress_visible_to_guardian'],
+    ttlMs: 60_000,
+  });
+
+  // Well before expiry on the fixed clock.
+  h.enrolment.revokeGuardianConsentToken(issued.token.tokenId);
+
+  const trail = h.enrolment.auditTrail('learner-1');
+  assert.ok(
+    trail.some(
+      (event) => event.consentTokenId === issued.token.tokenId && /revoked/i.test(event.detail),
+    ),
+    'the revocation is itself recorded in the enrolment audit trail',
+  );
+  assert.equal(h.identity.get('learner-1'), undefined, 'revocation enrols nobody');
+});
+
+test('enrolment: a revoked consent token is refused on presentation', async () => {
+  const h = harness();
+  addGuardian(h);
+  const issued = h.enrolment.issueGuardianConsentToken({
+    guardianId: 'guardian-1',
+    learnerId: 'learner-1',
+    scopes: ['progress_visible_to_guardian'],
+    ttlMs: 60_000,
+  });
+
+  h.enrolment.revokeGuardianConsentToken(issued.token.tokenId);
+
+  await assert.rejects(
+    () => h.enrolment.enrolWithGuardianConsent({ token: issued.token, secret: issued.secret }),
+    (error: unknown) => {
+      assert.ok(error instanceof EnrolmentRefusedError);
+      assert.match(error.reason, /revoked/i);
+      return true;
+    },
+  );
+  assert.equal(h.identity.get('learner-1'), undefined, 'a revoked token enrols nobody');
+  assert.equal(h.enrolment.auditTrail('learner-1').at(-1)?.outcome, 'refused');
+});
+
+/**
+ * F0-09 — the path is recorded once, in the audit trail.
+ *
+ * `enrolmentMethod` used to be written to the principal and read nowhere: a
+ * second, dead copy of what EnrolmentAuditEvent.method already records. The
+ * write is removed; this test pins that choice and that the trail still carries
+ * the method.
+ */
+test('enrolment: the method is in the audit trail, not a dead principal attribute', async () => {
+  const h = harness();
+  addGuardian(h);
+  const issued = h.enrolment.issueGuardianConsentToken({
+    guardianId: 'guardian-1',
+    learnerId: 'learner-1',
+    scopes: ['progress_visible_to_guardian'],
+  });
+
+  const result = await h.enrolment.enrolWithGuardianConsent({
+    token: issued.token,
+    secret: issued.secret,
+  });
+
+  assert.equal(result.principal.attributes['enrolmentMethod'], undefined);
+  assert.equal(
+    h.enrolment.auditTrail('learner-1')[0]?.method,
+    'guardian_consent_token',
+    'the audit trail is the single record of the path taken',
+  );
+});

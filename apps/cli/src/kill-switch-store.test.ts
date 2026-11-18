@@ -54,6 +54,39 @@ test('a saved state reads back intact from a fresh store over the same file', ()
   assert.deepEqual(reloaded, killedState());
 });
 
+test('F8-11: governance fields survive the durable round-trip', () => {
+  // A kill that survives a restart without its actor and classification would
+  // survive with weaker governance than the human authorised. The CLI store
+  // must carry the FULL onekey state, not a lossy projection of it.
+  const path = storePath();
+  const governed: KillSwitchState = {
+    killed: [
+      {
+        providerId: HOSTED_PROVIDER_ID,
+        reason: 'residency breach',
+        actor: 'compliance-officer',
+        classification: 'residency',
+      },
+    ],
+    records: [
+      {
+        providerId: HOSTED_PROVIDER_ID,
+        reason: 'residency breach',
+        at: '2026-11-17T10:00:00.000Z',
+        kind: 'kill',
+        actor: 'compliance-officer',
+        classification: 'residency',
+      },
+    ],
+  };
+  createSqliteKillSwitchStore({ privateStore: createSqlitePrivateStore({ path }) }).save(governed);
+
+  const reloaded = createSqliteKillSwitchStore({
+    privateStore: createSqlitePrivateStore({ path }),
+  }).load();
+  assert.deepEqual(reloaded, governed);
+});
+
 test('load returns undefined when nothing has ever been recorded', () => {
   const store = createSqlitePrivateStore({ path: storePath() });
   assert.equal(createSqliteKillSwitchStore({ privateStore: store }).load(), undefined);

@@ -9,8 +9,15 @@ import type {
   ProviderHealth,
   RequestContext,
 } from '@edugenesis/contracts';
-import { CONFORMANCE_RULES, runAdapterConformance } from './conformance.js';
+import {
+  CONFORMANCE_RULES,
+  ConformanceRefusalError,
+  runAdapterConformance,
+  runRegisteredAdapterConformance,
+} from './conformance.js';
+import { createProviderRegistry } from './registry.js';
 import { createLocalEchoProvider } from './providers/local-echo.js';
+import { createMockAdapter } from './testing/support.js';
 
 /**
  * A compliant mock adapter. The conformance suite must be runnable against a
@@ -146,4 +153,52 @@ test('conformance: every rule carries a description and a detail', async () => {
     assert.ok(result.description.length > 0);
     assert.ok(result.detail.length > 0);
   }
+});
+
+// F3-09: the suite is the "allowed near a learner" gate. It must refuse to
+// run when there is no real adapter to measure — neither a non-adapter value
+// nor a provider id that is not registered.
+test('conformance: refuses to run without a real registered adapter', async () => {
+  const registry = createProviderRegistry();
+  await assert.rejects(
+    () => runRegisteredAdapterConformance(registry, 'not-registered'),
+    (err: unknown) => err instanceof ConformanceRefusalError,
+    'an unregistered provider id must be refused',
+  );
+  await assert.rejects(
+    () => runAdapterConformance(undefined as unknown as ProviderAdapter),
+    (err: unknown) => err instanceof ConformanceRefusalError,
+    'a value that is not an adapter must be refused',
+  );
+});
+
+// F3-09: the counterpart — a REAL adapter, obtained from the registry the
+// gateway routes through, passes every rule.
+test('conformance: the registered adapter passes the suite', async () => {
+  const registry = createProviderRegistry();
+  registry.register(createLocalEchoProvider());
+  const results = await runRegisteredAdapterConformance(registry, 'local-echo');
+  assert.deepEqual(
+    results.filter((r) => !r.passed).map((r) => `${r.ruleId}: ${r.detail}`),
+    [],
+    'the registered adapter must satisfy every conformance rule',
+  );
+  assert.equal(results.length, CONFORMANCE_RULES.length);
+});
+
+// F3-27: `refuseOverBudget` is no longer an unused knob — this is its real
+// caller, and the assertion proves the option actually drives the refusal rule.
+test('conformance: the mock adapter refuseOverBudget option is exercised', async () => {
+  const { adapter, calls } = createMockAdapter({
+    id: 'budget-refusing',
+    refuseOverBudget: true,
+    usage: { inputTokens: 4, outputTokens: 2 },
+  });
+  const results = await runAdapterConformance(adapter);
+  assert.equal(
+    results.find((r) => r.ruleId === 'over-budget-refused')?.passed,
+    true,
+    'the over-budget option must make the adapter refuse on an empty pool',
+  );
+  assert.ok(calls() >= 2, 'the option must be reached through real complete() calls');
 });

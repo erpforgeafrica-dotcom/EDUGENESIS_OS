@@ -28,7 +28,7 @@
  *
  * Governance: Doc 2 §27 (data classification), Doc 6 §3.6, ADR-0001.
  */
-import type { DataClass } from '@edugenesis/contracts';
+import type { CompletionRequest, DataClass, SafetyTier } from '@edugenesis/contracts';
 
 /**
  * The fields a provider may receive.
@@ -290,7 +290,10 @@ function locatorIsUnsafe(locator: string): boolean {
  * grounding would change the model's answer without saying so.
  */
 export function projectGroundedContext(
-  context: readonly { source: { locator: string }; text: string }[],
+  context: readonly (
+    | { source: { locator: string }; text: string }
+    | EgressGroundedContextEntry
+  )[],
   options: GroundedContextOptions = {},
 ): EgressGroundedContextEntry[] {
   const maxChars = options.maxChars ?? DEFAULT_MAX_CONTEXT_CHARS;
@@ -311,7 +314,17 @@ export function projectGroundedContext(
     if (typeof entry !== 'object' || entry === null) {
       throw new EgressRejectedError(['context'], 'a grounded-context entry must be an object');
     }
-    const locator = entry.source?.locator;
+    // F8-07: accept BOTH the raw SourceLineage shape and an already-projected
+    // { locator, text } entry. The second form makes the gateway's single
+    // projection idempotent, so an adapter that still projects internally
+    // (Qwen) keeps grounding correctly on its own second pass.
+    const rawSource = 'source' in entry ? entry.source : undefined;
+    const locator =
+      rawSource !== undefined && typeof rawSource === 'object' && 'locator' in rawSource
+        ? rawSource.locator
+        : 'locator' in entry
+          ? entry.locator
+          : undefined;
     if (typeof locator !== 'string' || locatorIsUnsafe(locator)) {
       throw new EgressRejectedError(
         ['context'],
@@ -334,6 +347,46 @@ export function projectGroundedContext(
     out.push({ locator, text });
   }
   return out;
+}
+
+/**
+ * A CompletionRequest after the egress boundary has projected it.
+ *
+ * F8-07: this is the ONLY shape a registered adapter receives from the
+ * gateway. Every field is allowlisted and scalar, and `context` has been
+ * projected onto `{ locator, text }` — the full SourceLineage (licence,
+ * retrieval time, tier, source id) never crosses the boundary.
+ */
+export interface EgressSafeRequest {
+  readonly prompt: string;
+  readonly system?: string;
+  readonly dataClass: DataClass;
+  readonly safetyTier: SafetyTier;
+  readonly accessibilityProfileHash?: string;
+  readonly locale?: string;
+  readonly maxOutputTokens: number;
+  readonly requiresAccessibilityContract: boolean;
+  /** Projected grounded context — locator and text only, never the full lineage. */
+  readonly context: EgressGroundedContextEntry[];
+}
+
+/**
+ * Project a whole request in ONE place, or throw.
+ *
+ * F8-07: the gateway calls this once immediately before handing a request to
+ * any registered adapter. The projection is idempotent, so an adapter that
+ * still projects internally (Qwen) grounds correctly on its own second pass.
+ * A request carrying an unknown field or an unsafe locator is REFUSED here,
+ * before any adapter can serialise it to a third party.
+ */
+export function projectRequestForEgress(
+  req: CompletionRequest,
+  options: EgressOptions & GroundedContextOptions = {},
+): EgressSafeRequest {
+  const { context, ...rest } = req;
+  const projected = projectEgressPayload(rest as unknown as Record<string, unknown>, options);
+  const grounded = projectGroundedContext(context ?? [], options);
+  return { ...projected, context: grounded } as unknown as EgressSafeRequest;
 }
 
 /**

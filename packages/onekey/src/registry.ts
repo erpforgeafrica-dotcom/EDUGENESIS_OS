@@ -1,4 +1,6 @@
 import type { FallbackTier, ProviderAdapter, ProviderCapabilities } from '@edugenesis/contracts';
+import { assertLifecycleTransition } from './registry/model-card.js';
+import type { LifecycleStage, ModelCard } from './registry/model-card.js';
 
 /**
  * The provider registry (Doc 2 ADR-0001).
@@ -35,6 +37,10 @@ export interface ModelRegistryEntry {
   sponsorPreferred: boolean;
   /** The adapter itself, so the registry is the single source of truth. */
   adapter: ProviderAdapter;
+  /** The thirteen-item model card (Doc 09 §12.7). Recorded, never a routing input. */
+  modelCard?: ModelCard;
+  /** Where the model is in Select → … → Retire (Doc 09 §12.7). */
+  lifecycle?: LifecycleStage;
 }
 
 export interface RegisterMeta {
@@ -44,6 +50,10 @@ export interface RegisterMeta {
   status?: ProviderStatus;
   /** Recorded for audit, ignored by routing. Defaults to false. */
   sponsorPreferred?: boolean;
+  /** The thirteen-item model card. Recorded, never used for routing. */
+  modelCard?: ModelCard;
+  /** Initial lifecycle stage. Defaults to 'select'. */
+  lifecycle?: LifecycleStage;
 }
 
 export interface ProviderRegistry {
@@ -53,6 +63,8 @@ export interface ProviderRegistry {
   get(providerId: string): ModelRegistryEntry | undefined;
   entries(): ModelRegistryEntry[];
   setStatus(providerId: string, status: ProviderStatus): void;
+  /** Advance the lifecycle one rung at a time; refuses skips and backwards moves. */
+  setLifecycle(providerId: string, stage: LifecycleStage): void;
 }
 
 export function createProviderRegistry(): ProviderRegistry {
@@ -72,6 +84,8 @@ export function createProviderRegistry(): ProviderRegistry {
         locales: meta.locales ?? ['*'],
         sponsorPreferred: meta.sponsorPreferred ?? false,
         adapter,
+        modelCard: meta.modelCard,
+        lifecycle: meta.lifecycle ?? 'select',
       });
     },
     unregister(providerId: string): void {
@@ -91,6 +105,14 @@ export function createProviderRegistry(): ProviderRegistry {
       if (entry) {
         entry.status = status;
       }
+    },
+    setLifecycle(providerId: string, stage: LifecycleStage): void {
+      const entry = entries.get(providerId);
+      if (!entry) {
+        return;
+      }
+      assertLifecycleTransition(entry.lifecycle ?? 'select', stage);
+      entry.lifecycle = stage;
     },
   };
 }

@@ -8,6 +8,7 @@ import type {
   RequestContext,
 } from '@edugenesis/contracts';
 import { createBudgetLedger } from './budget.js';
+import type { ProviderRegistry } from './registry.js';
 
 /**
  * The provider adapter conformance suite (Doc 2 §7; ADR-0001).
@@ -60,6 +61,54 @@ function describeError(err: unknown): string {
 }
 
 /**
+ * F3-09: the suite is the "allowed near a learner" gate. It refuses to run
+ * unless it is handed a real ProviderAdapter — a value that does not implement
+ * the frozen contract cannot be "passed" into conformance.
+ */
+export class ConformanceRefusalError extends Error {
+  constructor(detail: string) {
+    super(`conformance refused: ${detail}`);
+    this.name = 'ConformanceRefusalError';
+  }
+}
+
+/** Structural check that the measured value is a real adapter. */
+export function isConformanceAdapter(value: unknown): value is ProviderAdapter {
+  if (value === null || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Partial<ProviderAdapter>;
+  return (
+    typeof candidate.id === 'string' &&
+    candidate.id.length > 0 &&
+    typeof candidate.modelId === 'string' &&
+    (candidate.tier === 1 || candidate.tier === 2 || candidate.tier === 3) &&
+    typeof candidate.maxDataClass === 'string' &&
+    typeof candidate.capabilities === 'function' &&
+    typeof candidate.complete === 'function' &&
+    typeof candidate.health === 'function' &&
+    typeof candidate.dispose === 'function'
+  );
+}
+
+/**
+ * Run conformance on an adapter that is actually REGISTERED in the gateway's
+ * registry. Refuses an unknown provider id, so a report can never claim to
+ * have conformance-tested a provider that was not measured.
+ */
+export async function runRegisteredAdapterConformance(
+  registry: ProviderRegistry,
+  providerId: string,
+  opts: ConformanceOptions = {},
+): Promise<ConformanceResult[]> {
+  const entry = registry.get(providerId);
+  if (!entry) {
+    throw new ConformanceRefusalError(`'${providerId}' is not a registered adapter`);
+  }
+  return runAdapterConformance(entry.adapter, opts);
+}
+
+/**
  * The probe context.
  *
  * WHY a permissive guardian lives in production code: the suite measures the
@@ -96,6 +145,9 @@ export async function runAdapterConformance(
   adapter: ProviderAdapter,
   opts: ConformanceOptions = {},
 ): Promise<ConformanceResult[]> {
+  if (!isConformanceAdapter(adapter)) {
+    throw new ConformanceRefusalError('no real adapter was supplied to measure');
+  }
   const results: ConformanceResult[] = [];
   const record = (ruleId: string, passed: boolean, detail: string): void => {
     const rule = CONFORMANCE_RULES.find((candidate) => candidate.id === ruleId);

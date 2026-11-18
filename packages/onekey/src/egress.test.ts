@@ -12,6 +12,7 @@ import {
   EgressRejectedError,
   projectEgressPayload,
   projectGroundedContext,
+  projectRequestForEgress,
   tryProjectEgressPayload,
 } from './egress.js';
 
@@ -263,4 +264,75 @@ test('egress: the non-throwing form reports the refusal without raising', () => 
   assert.equal(allowed.ok, true);
   if (!allowed.ok) return;
   assert.equal(allowed.payload['dataClass'], 'learner_scoped');
+});
+
+/**
+ * F8-07: the whole-request projection the gateway applies before handing a
+ * request to ANY registered adapter. The full SourceLineage must not survive.
+ */
+test('egress: a whole request is projected to the safe shape — no raw lineage crosses the boundary', () => {
+  const raw = {
+    prompt: 'Explain photosynthesis in simple terms',
+    dataClass: 'learner_scoped',
+    safetyTier: 'low',
+    locale: 'en-KE',
+    maxOutputTokens: 256,
+    requiresAccessibilityContract: true,
+    context: [
+      {
+        source: {
+          sourceId: 'science/photosynthesis',
+          locator: 'curriculum:science/photosynthesis',
+          licence: 'CC-BY-4.0',
+          retrievedAt: '2026-01-01T00:00:00.000Z',
+          tier: 1,
+        },
+        text: 'Light becomes chemical energy.',
+      },
+    ],
+  };
+  type Req = Parameters<typeof projectRequestForEgress>[0];
+  const projected = projectRequestForEgress(raw as unknown as Req);
+
+  assert.deepEqual(projected.context, [
+    { locator: 'curriculum:science/photosynthesis', text: 'Light becomes chemical energy.' },
+  ]);
+  const serialised = JSON.stringify(projected);
+  for (const leaked of ['sourceId', 'licence', 'retrievedAt', '"tier"', '"source"']) {
+    assert.equal(serialised.includes(leaked), false, `the projected request must not carry ${leaked}`);
+  }
+  assert.equal(projected.prompt, raw.prompt);
+  assert.equal(projected.dataClass, 'learner_scoped');
+});
+
+test('egress: projection is idempotent so an adapter that projects again (Qwen) is not broken', () => {
+  type Req = Parameters<typeof projectRequestForEgress>[0];
+  const raw = {
+    prompt: 'Explain photosynthesis in simple terms',
+    dataClass: 'public',
+    safetyTier: 'low',
+    maxOutputTokens: 256,
+    requiresAccessibilityContract: true,
+    context: [
+      {
+        source: {
+          sourceId: 'science/photosynthesis',
+          locator: 'curriculum:science/photosynthesis',
+          licence: 'CC-BY-4.0',
+          retrievedAt: '2026-01-01T00:00:00.000Z',
+          tier: 1,
+        },
+        text: 'Light becomes chemical energy.',
+      },
+    ],
+  };
+  const first = projectRequestForEgress(raw as unknown as Req);
+  const second = projectRequestForEgress(first as unknown as Req);
+
+  assert.deepEqual(second, first, 'a second projection must be a no-op');
+  assert.deepEqual(
+    second.context,
+    [{ locator: 'curriculum:science/photosynthesis', text: 'Light becomes chemical energy.' }],
+    'the grounded context must survive a second projection untouched',
+  );
 });

@@ -210,6 +210,32 @@ test('sponsor report: a credit entry that is missing a key the report depends on
   );
 });
 
+test('sponsor report: a renamed producer key fails loudly instead of defaulting', () => {
+  // F5-13: contract drift is not a missing optional field — it is producer and
+  // report disagreeing on the name of a figure the sponsor reads. The report
+  // must name the drifted key rather than publish a clean, meaningless zero.
+  const ledger = createLedgerStore({ now: (): string => '2026-01-01T00:00:00.000Z' });
+  const priv = createPrivateStore();
+  ledger.append(
+    'credit_consumed',
+    {
+      units: 10,
+      requestedUnits: 10, // renamed from the required requested_units
+      cost_cents: 100,
+      latency_ms: 50,
+      fallback_tier: 0,
+      served_offline: false,
+    },
+    '2026-03-20T00:00:00.000Z',
+  );
+
+  assert.throws(
+    () => buildSponsorReport(ledger, priv, { generatedAt: '2026-04-01T00:00:00.000Z' }),
+    /requested_units/,
+    'the report must fail loudly, naming the key the producer renamed',
+  );
+});
+
 test('sponsor report: a report over a BROKEN chain is REFUSED', () => {
   const ledger = createLedgerStore({ now: (): string => '2026-01-01T00:00:00.000Z' });
   const priv = createPrivateStore();
@@ -219,8 +245,9 @@ test('sponsor report: a report over a BROKEN chain is REFUSED', () => {
     '2026-03-20T00:00:00.000Z',
   );
 
-  // Tamper with the stored entry, so the chain no longer verifies.
-  const first = ledger.all()[0];
+  // Tamper with the stored entry via the RAW accessor, so the chain no longer
+  // verifies (`all()` deliberately returns defensive copies).
+  const first = ledger.rawEntries()[0];
   if (first) {
     first.payload['units'] = 999;
   }

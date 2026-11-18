@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createKillSwitch } from './kill-switch.js';
+import {
+  createKillSwitch,
+  KillGovernanceError,
+  KillSwitchCorruptStateError,
+} from './kill-switch.js';
 import type { KillSwitchState, KillSwitchStore } from './kill-switch.js';
 
 /**
@@ -141,4 +145,120 @@ test('kill switch: without a store the behaviour is exactly as it was', () => {
   ks.revive('p1', 'hold lifted');
   assert.equal(ks.isKilled('p1'), false);
   assert.equal(ks.records().length, 2);
+});
+
+/**
+ * F8-11. The governance authority, the second-person rule and the loud refusal
+ * of a corrupt persisted state are what turn a process-local Map into a
+ * governance decision that survives a restart.
+ */
+test('kill switch (F8-11): a governed kill persists across a restart with its governance', () => {
+  const store = memoryStore();
+  const issuer = createKillSwitch({
+    store,
+    now: () => Date.parse('2026-01-01T00:00:00.000Z'),
+    authorisedActors: ['alice', 'bob'],
+  });
+  issuer.killSwitch('qwen', 'data residency breach INC-42', 'alice', 'residency');
+
+  const restarted = createKillSwitch({ store, authorisedActors: ['alice', 'bob'] });
+  assert.equal(restarted.isKilled('qwen'), true, 'the kill must survive a restart');
+  assert.equal(restarted.reasonFor('qwen'), 'data residency breach INC-42');
+
+  const kill = restarted.records().find((record) => record.kind === 'kill');
+  assert.ok(kill);
+  assert.equal(kill?.actor, 'alice');
+  assert.equal(kill?.classification, 'residency');
+  assert.equal(kill?.at, '2026-01-01T00:00:00.000Z');
+
+  const persisted = store.state?.killed[0];
+  assert.ok(persisted);
+  assert.equal(persisted?.actor, 'alice', 'the persisted kill list must carry the actor');
+  assert.equal(persisted?.classification, 'residency', 'the persisted kill list must carry the classification');
+});
+
+test('kill switch (F8-11): kill and revive require an authorised actor and a reason', () => {
+  const ks = createKillSwitch({ authorisedActors: ['alice', 'bob'] });
+
+  assert.throws(
+    () => ks.killSwitch('qwen', 'safety incident INC-9'),
+    KillGovernanceError,
+    'a kill without an actor is refused',
+  );
+  assert.throws(
+    () => ks.killSwitch('qwen', ''),
+    KillGovernanceError,
+    'a kill without a reason is refused',
+  );
+
+  ks.killSwitch('qwen', 'safety incident INC-9', 'alice', 'safety');
+  assert.equal(ks.isKilled('qwen'), true);
+
+  assert.throws(
+    () => ks.revive('qwen', 'all clear'),
+    KillGovernanceError,
+    'a revive without an actor is refused',
+  );
+  assert.throws(
+    () => ks.revive('qwen', '', 'bob'),
+    KillGovernanceError,
+    'a revive without a reason is refused',
+  );
+  assert.throws(
+    () => ks.revive('qwen', 'all clear', 'mallory'),
+    KillGovernanceError,
+    'an unauthorised actor is refused',
+  );
+  assert.equal(ks.isKilled('qwen'), true, 'every refused decision leaves the provider killed');
+});
+
+test('kill switch (F8-11): the killer cannot revive their own safety kill', () => {
+  const ks = createKillSwitch({ authorisedActors: ['alice', 'bob'] });
+  ks.killSwitch('qwen', 'safeguarding incident', 'alice', 'safety');
+
+  assert.throws(
+    () => ks.revive('qwen', 'all clear', 'alice'),
+    KillGovernanceError,
+    'a second person is required for a safety kill',
+  );
+  assert.equal(ks.isKilled('qwen'), true, 'the refused same-actor revive changes nothing');
+});
+
+test('kill switch (F8-11): an authorised different actor revives and clears the persisted kill', () => {
+  const store = memoryStore();
+  const ks = createKillSwitch({ store, authorisedActors: ['alice', 'bob'] });
+  ks.killSwitch('qwen', 'licence lapse', 'alice', 'licence');
+
+  ks.revive('qwen', 'licence renewed and independently reviewed', 'bob');
+
+  assert.equal(ks.isKilled('qwen'), false);
+  assert.equal(ks.reasonFor('qwen'), undefined);
+  assert.deepEqual(store.state?.killed, [], 'the persisted kill list must clear on revive');
+  const revive = ks.records().find((record) => record.kind === 'revive');
+  assert.ok(revive);
+  assert.equal(revive?.actor, 'bob');
+});
+
+test('kill switch (F8-11): a corrupt or partial persisted write is refused loudly', () => {
+  const partial = memoryStore();
+  partial.save({
+    killed: [{ providerId: 'qwen' } as unknown as { providerId: string; reason: string }],
+    records: [],
+  });
+  assert.throws(
+    () => createKillSwitch({ store: partial }),
+    KillSwitchCorruptStateError,
+    'a killed entry missing its reason must not be read as an empty kill list',
+  );
+
+  const badTrail = memoryStore();
+  badTrail.save({
+    killed: [],
+    records: [{ providerId: 'qwen', reason: 'x', at: 'not-a-date', kind: 'kill' }],
+  });
+  assert.throws(
+    () => createKillSwitch({ store: badTrail }),
+    KillSwitchCorruptStateError,
+    'a trail record without a parseable timestamp must be refused',
+  );
 });

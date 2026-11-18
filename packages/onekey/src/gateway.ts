@@ -14,7 +14,9 @@ import type {
   OneKeyGateway,
   ProviderAdapter,
   RequestContext,
+  RiskTier,
   RoutingDecision,
+  SafetyTier,
   TaskPolicy,
   TierZeroProvider,
 } from '@edugenesis/contracts';
@@ -22,14 +24,15 @@ import { requiredUnits } from './budget.js';
 import { createCircuitBreaker } from './circuit-breaker.js';
 import type { CircuitBreaker } from './circuit-breaker.js';
 import { createKillSwitch } from './kill-switch.js';
-import type { KillSwitch } from './kill-switch.js';
+import type { KillClassification, KillSwitch } from './kill-switch.js';
 import { createPolicyEngine, TIER_FOUR_PROVIDER_ID, TIER_ZERO_PROVIDER_ID } from './policy.js';
 import type { PolicyEngine } from './policy.js';
 import { isCredentialRevoked, isRateLimited } from './provider-errors.js';
 import { hasTierZeroFallback } from './tier-zero-fallback.js';
 import { createProviderRegistry } from './registry.js';
-import type { ProviderRegistry, RegisterMeta } from './registry.js';
-import { redactSecret } from './redact.js';
+import type { ProviderRegistry, RegisterMeta, ModelRegistryEntry } from './registry.js';
+import { EgressRejectedError, projectRequestForEgress } from './egress.js';
+import { describeRedacted, redactSecret } from './redact.js';
 
 /**
  * The OneKey gateway (Doc 2 §7; Doc 16 §6.4).
@@ -38,12 +41,17 @@ import { redactSecret } from './redact.js';
  * select, route, suspend and replace any provider, and a learner is never
  * charged, blocked or interrupted while that happens.
  *
- * The ladder, in order:
- *   Tier 0 — deterministic cached curriculum, no provider required
- *   Tier 1 — primary approved hosted model
- *   Tier 2 — secondary approved hosted model
- *   Tier 3 — local or open model
- *   Tier 4 — human support or deferred response
+ * The ladder is SIX rungs, not five (Doc 16 §6.6): Tier 0 is visited TWICE.
+ *   1. Tier 0 — deterministic cached curriculum, no provider required
+ *   2. Tier 1 — primary approved hosted model
+ *   3. Tier 2 — secondary approved hosted model
+ *   4. Tier 3 — local or open model
+ *   5. Tier 0 — the §6.6 step-5 last resort, once every model has failed
+ *   6. Tier 4 — human support or deferred response
+ *
+ * The second Tier 0 visit is the 2 -> 3 -> 0 -> 4 sequence of §6.6 step 5: a
+ * deterministic lesson still beats a deferral, so a learner is never denied
+ * core learning. The six-rung shape is asserted in gateway.test.ts.
  */
 
 /** One rung of the ladder, recorded for the audit trail. */
@@ -80,7 +88,39 @@ export interface GatewayMeta {
 
 export interface GatewayCompletionResult extends CompletionResult {
   meta: GatewayMeta;
+  /**
+   * The nine-element compliance emission that was actually delivered (ARC-I1..I9).
+   * F3-18: the gateway used to compute this and then discard it, making the
+   * compliance contract unauditable. Present on learner-facing completions;
+   * absent when no emission was built (`learnerFacing: false`).
+   */
+  emission?: AccessibilityEmission;
 }
+
+/**
+ * The typed LEARNER-FACING failure (audit findings F3-07 and F3-15).
+ *
+ * It extends the audit-grade AllTiersExhaustedError so existing catchers keep
+ * working, but overrides `message` with neutral, operations-free text: no HTTP
+ * status, provider id, credential vocabulary or credit wording may reach a
+ * learner. The raw attempt chain stays on `.attempts` (the audit trail only).
+ */
+export class LearningUnavailableError extends AllTiersExhaustedError {
+  constructor(attempts: Array<{ tier: FallbackTier; providerId?: string; reason: string }>) {
+    super(attempts);
+    this.name = 'LearningUnavailableError';
+    this.message =
+      'Learning is temporarily unavailable. Your teacher has been notified and core learning continues.';
+  }
+}
+
+/** Doc 6 §3.1 mapping from a request safety tier to its emission risk tier. */
+const SAFETY_TIER_TO_RISK_TIER: Record<SafetyTier, RiskTier> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+};
 
 /**
  * The gateway, with the extra surface the audit trail and the failover drill
@@ -179,16 +219,33 @@ export interface GatewayOptions {
   now?: () => number;
   /** Called for every attempt, for live audit streaming. */
   onAttempt?: (attempt: GatewayAttempt) => void;
+  /** Max per-request attempt trails retained (F3-25). Default 1000. */
+  maxAttemptTrails?: number;
+  /** How long an attempt trail is retained in ms (F3-25). Default 300_000. */
+  attemptTrailTtlMs?: number;
 }
 
 function describeError(err: unknown): string {
-  const message = err instanceof Error ? err.message : String(err);
-  // A provider error can quote a request header; never let a credential land
-  // in the audit trail.
-  return redactSecret(message);
+  // A provider error can be a string, an Error, or an arbitrary object/array
+  // (F3-26). Every shape goes through the redactor before it can land in the
+  // audit trail; the familiar Error path keeps its message-only shape.
+  if (err instanceof Error) {
+    return redactSecret(err.message);
+  }
+  return describeRedacted(err);
 }
 
 export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImpl {
+  // F3-36: the gateway MUST own the policy engine so the breaker and kill
+  // switch used at decision time are the same instances used at execution
+  // time. An injected engine was built with its own breaker/kill switch (the
+  // PolicyEngine contract does not expose them), so accepting it would create
+  // two independent, silently diverging safety states. Refuse that shape.
+  if (opts.policyEngine) {
+    throw new Error(
+      'GatewayOptions.policyEngine is not supported: the gateway owns its policy engine so the breaker and kill switch are shared. Build a gateway and use gateway.policyEngine instead.',
+    );
+  }
   const registry = opts.registry ?? createProviderRegistry();
   const breaker = opts.breaker ?? createCircuitBreaker();
   const killSwitch = opts.killSwitch ?? createKillSwitch();
@@ -203,9 +260,57 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
       const report = equivalenceReport(emission);
       return { ok: report.ok, missing: report.missing };
     });
-  const policyEngine =
-    opts.policyEngine ?? createPolicyEngine({ registry, breaker, killSwitch, policyVersion });
-  const attemptsByRequest = new Map<string, GatewayAttempt[]>();
+  // One engine, built from the gateway's own safety primitives.
+  const policyEngine = createPolicyEngine({ registry, breaker, killSwitch, policyVersion });
+  const maxAttemptTrails = opts.maxAttemptTrails ?? 1_000;
+  const attemptTrailTtlMs = opts.attemptTrailTtlMs ?? 300_000;
+  interface AttemptTrail {
+    attempts: GatewayAttempt[];
+    at: number;
+  }
+  const attemptsByRequest = new Map<string, AttemptTrail>();
+
+  /** F3-25: bound the trail map by size and TTL; oldest first. */
+  const storeTrail = (requestId: string, attempts: GatewayAttempt[]): void => {
+    const cutoff = now() - attemptTrailTtlMs;
+    for (const [id, trail] of attemptsByRequest) {
+      if (trail.at < cutoff) {
+        attemptsByRequest.delete(id);
+      }
+    }
+    // A re-used request id is a fresh trail; delete first so it becomes newest.
+    attemptsByRequest.delete(requestId);
+    attemptsByRequest.set(requestId, { attempts, at: now() });
+    while (attemptsByRequest.size > maxAttemptTrails) {
+      const oldest = attemptsByRequest.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      attemptsByRequest.delete(oldest);
+    }
+  };
+
+  /**
+   * F8-07: the ONLY path from a routed request to a registered adapter.
+   *
+   * Project once here and hand the adapter only the egress-safe shape. Before
+   * this seam the raw request — including `context` with the full SourceLineage
+   * (licence, retrieval time, tier, source id) — was passed straight through,
+   * so every adapter except Qwen was an unguarded egress path. Centralising the
+   * call makes skipping the projection a single place to audit rather than one
+   * missed call site per adapter. The projection is idempotent, so an adapter
+   * that still projects internally (Qwen) is not broken by projecting first.
+   */
+  const callAdapter = async (
+    entry: ModelRegistryEntry,
+    rawReq: CompletionRequest,
+    requestCtx: RequestContext,
+  ): Promise<CompletionResult> => {
+    const projected = projectRequestForEgress(rawReq, {
+      maxDataClass: entry.adapter.maxDataClass,
+    });
+    return entry.adapter.complete(projected as unknown as CompletionRequest, requestCtx);
+  };
 
   const gateway: OneKeyGatewayImpl = {
     policyEngine,
@@ -225,7 +330,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
     ): Promise<GatewayCompletionResult> {
       const decision = await policyEngine.route(policy, req, ctx);
       const attempts: GatewayAttempt[] = [];
-      attemptsByRequest.set(ctx.requestId, attempts);
+      storeTrail(ctx.requestId, attempts);
 
       const record = (
         tier: FallbackTier,
@@ -292,11 +397,20 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
           );
           continue;
         }
-        if (breaker.state(candidate.providerId) === 'open') {
-          record(candidate.tier, candidate.providerId, 'skipped', 'the circuit is open');
+        // F3-28: claiming the single half-open probe replaces the old read of
+        // state(). A closed circuit is admitted; an open/cooling circuit or a
+        // half-open circuit whose probe is already in flight is skipped.
+        if (!breaker.tryAcquireProbe(candidate.providerId)) {
+          record(
+            candidate.tier,
+            candidate.providerId,
+            'skipped',
+            'the circuit is open or a half-open probe is already in flight',
+          );
           continue;
         }
         if (ctx.budget.remaining() <= 0) {
+          breaker.releaseProbe(candidate.providerId);
           record(
             candidate.tier,
             candidate.providerId,
@@ -309,12 +423,27 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
         let result: CompletionResult;
         try {
           paidAttempted = true;
-          result = await entry.adapter.complete(req, ctx);
+          result = await callAdapter(entry, req, ctx);
         } catch (err) {
+          if (err instanceof EgressRejectedError) {
+            // F8-07: the egress boundary refused this request for this provider
+            // (an unsafe locator, an unknown field or a class above its ceiling).
+            // Never fall back to sending the raw request: record the refusal and
+            // walk to the next tier, exactly like any other provider failure.
+            breaker.releaseProbe(candidate.providerId);
+            record(
+              candidate.tier,
+              candidate.providerId,
+              'failed',
+              `the egress boundary refused the request: ${err.reason}`,
+            );
+            continue;
+          }
           if (err instanceof BudgetExceededError) {
             // A budget refusal is NOT a health failure: the provider is fine,
             // the pool is empty. It must not trip the circuit, and the request
             // falls through to the next tier.
+            breaker.releaseProbe(candidate.providerId);
             record(
               candidate.tier,
               candidate.providerId,
@@ -332,6 +461,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
             // provider out of routing for a reason the circuit cannot fix.
             // The attempt is recorded as a GOVERNANCE failure so the incident
             // is visible in the audit trail.
+            breaker.releaseProbe(candidate.providerId);
             record(
               candidate.tier,
               candidate.providerId,
@@ -344,6 +474,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
             // A 429 is a rate limit on a HEALTHY provider (audit finding
             // F3-13). The provider is busy, not sick: it must not open the
             // health circuit, and the request falls through to the next tier.
+            breaker.releaseProbe(candidate.providerId);
             record(
               candidate.tier,
               candidate.providerId,
@@ -388,6 +519,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
           });
         } catch (err) {
           if (err instanceof BudgetExceededError) {
+            breaker.releaseProbe(candidate.providerId);
             record(
               candidate.tier,
               candidate.providerId,
@@ -400,6 +532,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
           // be made". It must never escape `complete()`: an untyped error
           // thrown here would bypass the fallback ladder and reach the
           // learner as a raw failure.
+          breaker.releaseProbe(candidate.providerId);
           record(
             candidate.tier,
             candidate.providerId,
@@ -524,7 +657,10 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
           );
         }
       }
-      throw new AllTiersExhaustedError(
+      // F3-07/F3-15: the audit-grade attempt chain is preserved, but the
+      // learner-facing message is neutral — no HTTP status, provider id,
+      // credential vocabulary or credit wording.
+      throw new LearningUnavailableError(
         attempts.map((attempt) => ({
           tier: attempt.tier,
           providerId: attempt.providerId,
@@ -545,8 +681,13 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
       return registry.listProviders();
     },
 
-    killSwitch(providerId: string, reason: string): void {
-      killSwitch.killSwitch(providerId, reason);
+    killSwitch(
+      providerId: string,
+      reason: string,
+      actor?: string,
+      classification?: KillClassification,
+    ): void {
+      killSwitch.killSwitch(providerId, reason, actor, classification);
     },
 
     circuitState(providerId: string): 'closed' | 'open' | 'half_open' {
@@ -558,7 +699,7 @@ export function createOneKeyGateway(opts: GatewayOptions = {}): OneKeyGatewayImp
     },
 
     attemptsFor(requestId: string): GatewayAttempt[] {
-      return [...(attemptsByRequest.get(requestId) ?? [])];
+      return [...(attemptsByRequest.get(requestId)?.attempts ?? [])];
     },
   };
 
@@ -602,10 +743,14 @@ async function deliver(input: DeliverInput): Promise<GatewayCompletionResult> {
     verify,
   } = input;
   let text = result.text;
+  // F3-18: the emission is a compliance artifact, not a local temporary. Hoist
+  // it so the DELIVERED emission (post-guardian) can be attached to the result.
+  let emission: AccessibilityEmission | undefined;
 
   if (ctx.learnerFacing) {
-    const emission = buildEmission(result, policy, req, clock, verify);
-    const verdict = await ctx.guardian.intercept(emission, {
+    const built = buildEmission(result, policy, req, clock, verify);
+    emission = built;
+    const verdict = await ctx.guardian.intercept(built, {
       locale: req.locale,
       safetyTier: req.safetyTier,
     });
@@ -643,7 +788,7 @@ async function deliver(input: DeliverInput): Promise<GatewayCompletionResult> {
     attempts: [...attempts],
   };
 
-  return { ...result, text, meta };
+  return { ...result, text, meta, ...(emission ? { emission } : {}) };
 }
 
 /**
@@ -706,7 +851,10 @@ function buildEmission(
       taskClass: policy.taskClass,
     },
     source_lineage: result.sourceLineage ?? [],
-    risk_tier: 1,
+    // F3-21: derive the AI risk tier from the request's safety tier (Doc 6
+    // §3.1) rather than hardcoding 1. `low` maps to 1, preserving the previous
+    // behaviour for the default request; higher safety tiers map higher.
+    risk_tier: SAFETY_TIER_TO_RISK_TIER[req.safetyTier] ?? 1,
     language: { primary: req.locale ?? 'en' },
     reading_level: { band: 'unspecified' },
     sensory_profile: {

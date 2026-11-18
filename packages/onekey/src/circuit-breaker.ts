@@ -25,10 +25,23 @@ export interface CircuitSnapshot {
 }
 
 export interface CircuitBreaker {
-  /** Current state, promoting `open` to `half_open` once the cooldown elapsed. */
+  /**
+   * Current state. Once the cooldown elapsed an open circuit is reported as
+   * `half_open`, but READING this never grants probe permission (audit finding
+   * F3-28): use `tryAcquireProbe` for that.
+   */
   state(providerId: string): CircuitState;
   /** True while the circuit is open — such a provider is never routed to. */
   isTripped(providerId: string): boolean;
+  /**
+   * Claim the single in-flight half-open probe. Returns true for the one
+   * caller allowed to probe (and for normal, closed routing); false while the
+   * circuit is cooling down or another probe is already in flight. The latch
+   * is released by `recordSuccess`, `recordFailure` or `releaseProbe`.
+   */
+  tryAcquireProbe(providerId: string): boolean;
+  /** Release an in-flight probe without recording an outcome (idempotent). */
+  releaseProbe(providerId: string): void;
   recordFailure(providerId: string, detail?: string): void;
   recordSuccess(providerId: string): void;
   reset(providerId: string): void;
@@ -40,6 +53,8 @@ interface CircuitEntry {
   consecutiveFailures: number;
   openedAt: number;
   lastDetail?: string;
+  /** True while the single half-open probe is in flight. */
+  probeInFlight: boolean;
 }
 
 export function createCircuitBreaker(opts: CircuitBreakerOptions = {}): CircuitBreaker {
@@ -61,7 +76,7 @@ export function createCircuitBreaker(opts: CircuitBreakerOptions = {}): CircuitB
     if (existing) {
       return existing;
     }
-    const created: CircuitEntry = { state: 'closed', consecutiveFailures: 0, openedAt: 0 };
+    const created: CircuitEntry = { state: 'closed', consecutiveFailures: 0, openedAt: 0, probeInFlight: false };
     entries.set(providerId, created);
     return created;
   };
@@ -72,17 +87,50 @@ export function createCircuitBreaker(opts: CircuitBreakerOptions = {}): CircuitB
       if (!entry) {
         return 'closed';
       }
+      // F3-28: a READ is pure. The cooldown making a circuit probe-eligible is
+      // reported as `half_open`, but promoting the stored entry (and admitting
+      // a probe) happens only through tryAcquireProbe, never through a read.
       if (entry.state === 'open' && now() - entry.openedAt >= cooldownMs) {
-        // The cooldown elapsed: allow exactly one probe (half-open).
-        entry.state = 'half_open';
+        return 'half_open';
       }
       return entry.state;
     },
     isTripped(providerId: string): boolean {
       return breaker.state(providerId) === 'open';
     },
+    tryAcquireProbe(providerId: string): boolean {
+      const entry = entries.get(providerId);
+      if (!entry) {
+        // No circuit state exists: normal routing, not a probe.
+        return true;
+      }
+      if (entry.state === 'closed') {
+        return true;
+      }
+      if (entry.state === 'open') {
+        if (now() - entry.openedAt < cooldownMs) {
+          return false;
+        }
+        // Cooldown elapsed: this caller promotes the circuit to half-open and
+        // claims the single probe slot.
+        entry.state = 'half_open';
+      }
+      // Half-open (either already, or just promoted): exactly one probe.
+      if (entry.probeInFlight) {
+        return false;
+      }
+      entry.probeInFlight = true;
+      return true;
+    },
+    releaseProbe(providerId: string): void {
+      const entry = entries.get(providerId);
+      if (entry) {
+        entry.probeInFlight = false;
+      }
+    },
     recordFailure(providerId: string, detail?: string): void {
       const entry = entryFor(providerId);
+      entry.probeInFlight = false;
       entry.consecutiveFailures += 1;
       if (detail !== undefined) {
         entry.lastDetail = detail;
@@ -100,6 +148,7 @@ export function createCircuitBreaker(opts: CircuitBreakerOptions = {}): CircuitB
     },
     recordSuccess(providerId: string): void {
       const entry = entryFor(providerId);
+      entry.probeInFlight = false;
       entry.state = 'closed';
       entry.consecutiveFailures = 0;
       entry.openedAt = 0;

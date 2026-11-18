@@ -75,7 +75,7 @@ test('TAMPER: editing a stored payload breaks the chain at that seq', () => {
   store.append('grant_awarded', { amount_cents: 250_000 });
   assert.equal(store.verify().ok, true);
 
-  const entries = store.all();
+  const entries = store.rawEntries();
   const first = entries[0];
   assert.ok(first);
   first.payload['amount_cents'] = 9_999_999;
@@ -92,7 +92,7 @@ test('TAMPER: editing a previousEntryHash breaks the chain at that seq', () => {
   store.append('sponsor_deposit', { amount_cents: 500_000 });
   store.append('grant_awarded', { amount_cents: 250_000 });
 
-  const entries = store.all();
+  const entries = store.rawEntries();
   const second = entries[1];
   assert.ok(second);
   second.previousEntryHash = 'f'.repeat(64);
@@ -107,7 +107,7 @@ test('TAMPER: deleting an entry breaks the chain', () => {
   const store = makeStore();
   store.append('sponsor_pledge', { amount_cents: 1_000_000 });
   store.append('sponsor_deposit', { amount_cents: 500_000 });
-  const entries = store.all();
+  const entries = store.rawEntries();
   entries.splice(0, 1);
   const result = store.verify();
   assert.equal(result.ok, false);
@@ -122,7 +122,7 @@ test('TAMPER: assertChainIntact throws the contract error with the broken seq', 
     assertChainIntact(store);
   });
 
-  const entries = store.all();
+  const entries = store.rawEntries();
   const second = entries[1];
   assert.ok(second);
   second.entryHash = '0'.repeat(64);
@@ -361,11 +361,12 @@ test('the sequence belongs to the store: removing an entry cannot make the store
   const second = store.append('sponsor_deposit', { amount_cents: 200 });
   assert.equal(second.seq, 2);
 
-  // The store hands out its live array on purpose (tamper evidence needs an
-  // auditor to be able to reach the stored bytes). A caller that removes an
-  // entry must NOT be able to make the store slide its sequence back: seq 2
-  // is already issued and must never be issued again.
-  store.all().splice(0, 1);
+  // The RAW accessor hands out the live array on purpose (tamper evidence
+  // needs an auditor to be able to reach the stored bytes); `all()` hands out
+  // defensive copies. A caller that removes an entry must NOT be able to make
+  // the store slide its sequence back: seq 2 is already issued and must never
+  // be issued again.
+  store.rawEntries().splice(0, 1);
 
   assert.throws(
     () => {
@@ -399,7 +400,7 @@ test('the sequence belongs to the store: an entry injected into the chain is ref
     entryHash: '',
   };
   injected.entryHash = computeEntryHash(injected);
-  store.all().push(injected);
+  store.rawEntries().push(injected);
 
   // The store must not adopt it: it never issued that seq, and the chain it
   // is about to extend is not the chain it wrote.
@@ -445,7 +446,7 @@ test('two appends in the same tick produce two distinct seq values and one unbro
   assert.equal(outer.seq, 2);
 
   // ONE chain, not two: the second entry links to the first.
-  const entries = store.all();
+  const entries = store.rawEntries();
   const first = entries[0];
   const second = entries[1];
   assert.ok(first);
@@ -458,7 +459,7 @@ test('a tampered entry makes a read throw', () => {
   store.append('sponsor_pledge', { amount_cents: 1_000_000 });
   store.append('sponsor_deposit', { amount_cents: 500_000 });
 
-  const second = store.all()[1];
+  const second = store.rawEntries()[1];
   assert.ok(second);
   second.payload['amount_cents'] = 999;
 
@@ -479,7 +480,7 @@ test('the merkle root of a tampered chain is refused', () => {
   store.append('sponsor_pledge', { amount_cents: 1_000_000 });
   store.append('sponsor_deposit', { amount_cents: 500_000 });
 
-  const second = store.all()[1];
+  const second = store.rawEntries()[1];
   assert.ok(second);
   second.payload['amount_cents'] = 999;
 
@@ -520,7 +521,7 @@ test('verify() reports a broken chain instead of throwing', () => {
   store.append('sponsor_pledge', { amount_cents: 1_000_000 });
   store.append('sponsor_deposit', { amount_cents: 500_000 });
 
-  const second = store.all()[1];
+  const second = store.rawEntries()[1];
   assert.ok(second);
   second.payload['amount_cents'] = 999;
 
@@ -537,7 +538,7 @@ test('a read refusal names the same seq and detail verify() reports', () => {
   store.append('sponsor_pledge', { amount_cents: 1_000_000 });
   store.append('sponsor_deposit', { amount_cents: 500_000 });
 
-  const second = store.all()[1];
+  const second = store.rawEntries()[1];
   assert.ok(second);
   second.payload['amount_cents'] = 999;
 
@@ -560,7 +561,7 @@ test('all() still hands out the raw chain after a break: the auditor must be abl
   store.append('sponsor_pledge', { amount_cents: 1_000_000 });
   store.append('sponsor_deposit', { amount_cents: 500_000 });
 
-  const second = store.all()[1];
+  const second = store.rawEntries()[1];
   assert.ok(second);
   second.payload['amount_cents'] = 999;
 
@@ -587,4 +588,79 @@ test('ledger: a NEGATIVE money amount is refused', () => {
       return true;
     },
   );
+});
+
+test('ledger: a homoglyph or zero-width spelling of a forbidden field is refused at append', () => {
+  // F5-13: the field-name rule must see what a human READER sees, not the raw
+  // code points. A Cyrillic look-alike and a zero-width joiner both collapse
+  // onto the forbidden token after normalisation.
+  const store = makeStore();
+  const cyrillic = `l\u0435arnerid`; // Cyrillic small letter IE
+  const zeroWidth = `learner\u200Bid`; // ZERO WIDTH SPACE inside the token
+
+  assert.equal(store.all().length, 0);
+  assert.throws(() => {
+    store.append('sponsor_deposit', { amount_cents: 100, [cyrillic]: 'x' });
+  }, LedgerPiiError);
+  assert.throws(() => {
+    store.append('sponsor_deposit', { amount_cents: 100, [zeroWidth]: 'x' });
+  }, LedgerPiiError);
+  assert.equal(store.all().length, 0, 'neither evasion was adopted into the chain');
+});
+
+test('ledger: a non-ISO but parseable timestamp is refused (strict ISO-8601 only)', () => {
+  // F5-12: Date.parse accepts many locale-dependent spellings. A public chain
+  // needs one canonical, unambiguous encoding, so only strict ISO-8601 instant
+  // strings are admitted.
+  const store = makeStore();
+  const nonIso = ['2026/01/05', 'January 5, 2026', '2026-01-05', '05-01-2026'];
+  for (const value of nonIso) {
+    assert.equal(Number.isNaN(Date.parse(value)), false, `${value} is parseable by Date.parse`);
+    assert.throws(
+      () => {
+        store.append('sponsor_pledge', { amount_cents: 100 }, value);
+      },
+      LedgerPayloadError,
+      `${value} is not strict ISO-8601 and must be refused`,
+    );
+  }
+  assert.equal(store.all().length, 0);
+});
+
+test('ledger: equivalent ISO-8601 spellings of one instant share the canonical hash', () => {
+  // F5-12: the preimage hashes the NORMALISED timestamp, so two spellings of
+  // the same instant are not two different auditable facts.
+  const build = (at: string): LedgerEntry =>
+    createLedgerStore({ now: (): string => at }).append('sponsor_pledge', { amount_cents: 100 }, at);
+
+  const withZ = build('2026-01-05T00:00:00Z');
+  const withMillis = build('2026-01-05T00:00:00.000Z');
+  const withOffset = build('2026-01-05T03:00:00+03:00');
+
+  assert.equal(withZ.at, '2026-01-05T00:00:00.000Z');
+  assert.equal(withOffset.at, '2026-01-05T00:00:00.000Z');
+  assert.equal(withZ.entryHash, withMillis.entryHash);
+  assert.equal(withZ.entryHash, withOffset.entryHash);
+});
+
+test('all() returns defensive copies: in-process mutation cannot change a stored entry', () => {
+  // F5-04: `all()` is the convenient read accessor. A caller holding a
+  // reference from it must not be able to alter a published entry; the RAW
+  // accessor (`rawEntries`) remains for auditor/tamper-test tooling.
+  const store = makeStore();
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 });
+
+  const snapshot = store.all();
+  const first = snapshot[0];
+  assert.ok(first);
+  first.payload['amount_cents'] = 0;
+  first.entryHash = 'tampered';
+  first.previousEntryHash = 'tampered';
+  snapshot.splice(0, 1);
+
+  const stored = store.all();
+  assert.equal(stored.length, 1, 'splicing the returned array did not remove the stored entry');
+  assert.equal(stored[0]?.payload['amount_cents'], 1_000_000);
+  assert.equal(stored[0]?.entryHash !== 'tampered', true);
+  assert.equal(store.verify().ok, true, 'the chain the store wrote is untouched');
 });

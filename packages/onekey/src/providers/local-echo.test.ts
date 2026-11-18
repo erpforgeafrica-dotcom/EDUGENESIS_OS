@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { BudgetExceededError } from '@edugenesis/contracts';
 import { createLocalEchoProvider } from './local-echo.js';
 import { createBudgetLedger } from '../budget.js';
-import { createContext, createRequest } from '../testing/support.js';
+import { createContext, createRequest, createSource } from '../testing/support.js';
 
 test('local echo: the same request yields byte-identical output', async () => {
   const adapter = createLocalEchoProvider();
@@ -51,4 +51,31 @@ test('local echo: it reports coherent capabilities and health', async () => {
   assert.equal(typeof health.ok, 'boolean');
   assert.equal(typeof health.consecutiveFailures, 'number');
   await adapter.dispose();
+});
+
+test('local echo: the input-token estimate includes the system prompt and grounded context', async () => {
+  const adapter = createLocalEchoProvider();
+
+  const baseline = await adapter.complete(
+    createRequest({ prompt: 'Explain photosynthesis' }),
+    createContext(),
+  );
+  const withContext = await adapter.complete(
+    createRequest({
+      prompt: 'Explain photosynthesis',
+      system: 'You are a tutor. Answer briefly.',
+      context: [
+        {
+          source: createSource({ locator: 'curriculum:science/photosynthesis' }),
+          text: 'Light becomes chemical energy. Photosynthesis converts light into glucose using chlorophyll.',
+        },
+      ],
+    }),
+    createContext(),
+  );
+
+  assert.ok(
+    withContext.usage.inputTokens > baseline.usage.inputTokens,
+    'the estimate must charge for system and context tokens, not only the prompt',
+  );
 });

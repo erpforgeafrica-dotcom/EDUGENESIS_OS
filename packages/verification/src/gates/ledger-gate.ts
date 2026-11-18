@@ -48,6 +48,8 @@ interface LedgerLike {
   append(type: string, payload: LedgerPayload): unknown;
   all(): unknown[];
   verify(): unknown;
+  /** Auditor/tamper-test accessor; absent on older facades. */
+  rawEntries?(): unknown[];
 }
 
 /** Narrow an unknown value to a ledger store. */
@@ -62,11 +64,14 @@ function asLedger(candidate: unknown, label: string): LedgerLike | undefined {
   const appendFn = append as (type: string, payload: LedgerPayload) => unknown;
   const allFn = all as () => unknown[];
   const verifyFn = verify as () => unknown;
+  const raw = candidate['rawEntries'];
+  const rawFn = typeof raw === 'function' ? (raw as () => unknown[]) : undefined;
   return {
     label,
     append: (type, payload) => appendFn.call(candidate, type, payload),
     all: () => allFn.call(candidate),
     verify: () => verifyFn.call(candidate),
+    ...(rawFn ? { rawEntries: () => rawFn.call(candidate) } : {}),
   };
 }
 
@@ -179,23 +184,28 @@ export const ledgerGate: Gate = {
     }
 
     // ---- 2. tampering is detected --------------------------------------------------
+    // F5-04 made `all()` return defensive copies, so mutating a caller's copy
+    // no longer exercises the chain: that is the fix, not a regression. The
+    // ledger facade exposes `rawEntries()` for exactly this auditor/tamper
+    // seam. Use it when present; only fall back to `all()` on an older facade.
+    const readLive = (): unknown[] => (ledger.rawEntries ? ledger.rawEntries() : ledger.all());
     const entries = ledger.all();
     let tamperApplied = false;
     let tamperDetail = '';
     if (entries.length >= 2) {
-      const target = entries[1];
+      const target = readLive()[1];
       if (isRecord(target)) {
         const payload = target['payload'];
         if (isRecord(payload)) {
           try {
             payload['tamper_probe'] = 'x';
-            const reread = ledger.all()[1];
+            const reread = readLive()[1];
             tamperApplied =
               isRecord(reread) &&
               isRecord(reread['payload']) &&
               reread['payload']['tamper_probe'] === 'x';
             tamperDetail = tamperApplied
-              ? 'mutated the payload of entry 2 in place'
+              ? `mutated the payload of entry 2 in place via ${ledger.rawEntries ? 'rawEntries()' : 'all()'}`
               : 'the ledger returned detached copies, so the entry could not be mutated';
           } catch (error) {
             tamperDetail = `the entry is immutable: ${error instanceof Error ? error.message : String(error)}`;

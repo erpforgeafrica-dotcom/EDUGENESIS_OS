@@ -89,6 +89,11 @@ export interface QwenAdapterOptions {
   fetchImpl?: FetchLike;
   /** Upper bound on the request timeout, in ms. */
   timeoutMs?: number;
+  /**
+   * Injectable monotonic clock in ms, used to measure provider latency.
+   * Defaults to Date.now(); tests inject a deterministic clock.
+   */
+  now?: () => number;
 }
 
 /** The OpenAI-compatible chat-completions request body. */
@@ -215,6 +220,7 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
   const clearedSafetyTiers = opts.clearedSafetyTiers ?? ['low', 'medium'];
   const fetchImpl = opts.fetchImpl ?? platformFetch;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const now = opts.now ?? (() => Date.now());
 
   // Held in a mutable binding so dispose() can release it (Doc 2 exit
   // procedure: a provider must be able to drop its credential).
@@ -349,6 +355,7 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
           signal: controller.signal,
         };
 
+        const startedAt = now();
         let response: FetchResponseLike;
         try {
           response = await fetchImpl(`${baseUrl}/chat/completions`, init);
@@ -362,6 +369,7 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
           }
           throw new ProviderUnavailableError(id, `the provider could not be reached: ${redactSecret(message)}`);
         }
+        const latencyMs = Math.max(0, now() - startedAt);
 
         // ---- Error mapping --------------------------------------------------
         if (!response.ok) {
@@ -385,7 +393,15 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
             // F3-13). It is raised as its own type so the gateway can keep it
             // off the health circuit.
             const retryAfter = response.headers.get('retry-after');
-            const hint = retryAfter ? `retry after ${retryAfter}s` : 'no retry-after header was returned';
+            // The hint is advisory: this adapter does NOT retry. Retrying here
+            // would sleep for the provider's backoff on the learner's critical
+            // path and would also hide the throttle from the gateway's tier
+            // failover (F3-30). So advertise the value but say plainly that no
+            // retry is made, rather than promising behaviour that never happens.
+            const noRetry = 'this adapter does not retry; the gateway fails over to the next tier';
+            const hint = retryAfter
+              ? `advisory "retry after ${retryAfter}s" (${noRetry})`
+              : `no retry-after header was returned (${noRetry})`;
             throw new ProviderRateLimitedError(
               id,
               `the provider is rate limited (HTTP 429): ${detail}; ${hint}`,
@@ -416,7 +432,7 @@ export function createQwenAdapter(opts: QwenAdapterOptions = {}): ProviderAdapte
           providerId: id,
           modelId: payload.model ?? modelId,
           usage,
-          latencyMs: 0,
+          latencyMs,
           sourceLineage: [],
         };
       } finally {
@@ -462,5 +478,5 @@ async function readErrorDetail(response: FetchResponseLike): Promise<string> {
   } catch {
     // A body that is not JSON is not a problem; fall through.
   }
-  return response.statusText || 'no detail was returned';
+  return redactSecret(response.statusText || 'no detail was returned');
 }

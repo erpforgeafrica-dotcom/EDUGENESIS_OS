@@ -152,3 +152,48 @@ test('records with no cohort attribution are counted separately, never merged', 
   assert.equal(view.cohorts.length, 0);
   assert.equal(view.learnerCount, 0);
 });
+
+test('F5-08: a sealed private store holds no plaintext record at rest', () => {
+  // Isolation at rest is a property of the stored bytes, not a convention.
+  // The exported rows are what a durable sink receives; none of the private
+  // field names, values or even the record id may appear in plaintext.
+  const store = createPrivateStore();
+  store.put(assessment('r1', 'Kisumu-G7-A', 'L1', 'Kisumu', 'algebra'));
+
+  const sealed = store.exportSealed();
+  const atRest = JSON.stringify(sealed);
+  assert.equal(store.sealedAtRest, true);
+  // Structural proof first: a sealed row has only a keyed lookup digest and an
+  // encrypted envelope. No id/data field exists to leak at all.
+  assert.deepEqual(Object.keys(sealed[0] ?? {}).sort(), ['key', 'seal']);
+  assert.equal(atRest.includes('tutorNote'), false);
+  assert.equal(atRest.includes('Struggled with fractions'), false);
+  assert.equal(atRest.includes('Kisumu-G7-A'), false);
+  // Do NOT search for the two-character id 'r1' in base64: a short random
+  // string appears in ciphertext by chance and makes this test flaky. Assert
+  // the plaintext JSON shape that would actually constitute a leak instead.
+  assert.equal(atRest.includes('"id":"r1"'), false);
+
+  // Sealing is transparent to the caller: the record still reads back.
+  assert.equal(store.get('r1')?.data['cohort'], 'Kisumu-G7-A');
+});
+
+test('F5-08: sealed rows restore with the correct key and refuse a wrong key', () => {
+  // DURABLE: the service persists `exportSealed()` and hands the rows back on
+  // the next run. ISOLATED: a different key cannot open them — the store fails
+  // loudly instead of returning plaintext under the wrong authority.
+  const key = 'the-owner-master-key';
+  const first = createPrivateStore({ atRestKey: key });
+  first.put(assessment('r1', 'Kisumu-G7-A', 'L1', 'Kisumu', 'algebra'));
+  const rows = first.exportSealed();
+
+  const restored = createPrivateStore({ atRestKey: key, sealedRows: rows });
+  assert.deepEqual(restored.get('r1'), first.get('r1'));
+  assert.deepEqual(restored.all(), first.all());
+
+  assert.throws(
+    () => createPrivateStore({ atRestKey: 'a-different-key', sealedRows: rows }),
+    /sealed/i,
+    'a wrong key must be refused, not silently produce an empty store',
+  );
+});

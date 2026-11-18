@@ -1,10 +1,38 @@
-# EduGenesis OS — continuous integration.
+# EduGenesis OS — continuous integration, mapped to GL-01..GL-08.
+#
+# This file is the DECLARATIVE pipeline of Doc 09 §9.2. Every machine-checkable
+# stage maps to a real job below; the four loops that only a person, an incident
+# or a governance board can complete are recorded as owner gates, NOT faked as
+# green steps. Nothing here claims a run that has not happened.
+#
+#   §9.2 stage                          Loop                          This workflow
+#   ----------------------------------  ----------------------------  ------------------------------------
+#   0 Intake                            GL-01 Strategic Planning      gl01_intake (register + doctor)
+#   1 Branch + build                    GL-02 Development             gl02_development (typecheck)
+#   2 Static analysis                   GL-02 -> GL-05                gl02_static_analysis + static gates in gl08_verify
+#   3 Independent review                GL-03 Independent Review      OWNER GATED — independent reviewers, sign-off
+#   4 Rework (conditional)              GL-04 Redevelopment           OWNER GATED — finding-to-commit mapping
+#   5 Loop testing                      GL-05 Loop Testing            gl05_loop_testing + gl05_accessibility (ARC-I1 fixtures)
+#   6 Correction / restoration (cond.)  GL-06 Correction/Restoration  OWNER GATED — incident containment, DR rehearsal
+#   7 Resolution / fixing (conditional) GL-07 Resolution/Fixing       OWNER GATED — reporter/ reviewer confirmation
+#   8 Package, sign, deploy             GL-08 Repository & Deployment gl08_package_sign + gl08_verify (attestation)
+#
+# OWNER GATE — THIS PIPELINE CANNOT CURRENTLY RUN.
+# GitHub Actions billing is locked on the owner's account, so NO check ever
+# reports and there is NO CI run to open. The jobs below declare what WILL run
+# once that gate is cleared; they are not a green claim. Because the Render
+# service sets autoDeployTrigger: checksPass and no check reports, deployment is
+# hand-triggered, not the result of a passing run. P0-3 in docs/exit-criteria.json
+# records the same shortfall as owner-blocked (no CI run URL exists to cite).
+# Unblock: Repository Owner enables GitHub Actions billing and pushes `main`;
+# the run URL is then recorded against P0-3 and GL-01..GL-08 become evidenced.
 #
 # Every job runs on Node 22 (the supported floor) and uses only the project's
 # own scripts. There is no third-party action beyond the GitHub-maintained
 # checkout, setup-node and upload-artifact actions.
 #
-# A green pipeline is the only claim this repository makes.
+# A green pipeline is the only claim this repository makes — and it is made only
+# when a run actually exists.
 
 name: CI
 
@@ -22,8 +50,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  typecheck:
-    name: Typecheck
+  gl01_intake:
+    name: "GL-01 Strategic Planning — Intake"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      # The machine-checkable part of intake: the register parses, the settings
+      # are schema-valid and the tree passes the secrets check. The requirement
+      # ID, named owner, KPI and safeguarding flags are owner-supplied.
+      - name: Intake health — environment, settings and secrets
+        run: npm run doctor
+
+  gl02_development:
+    name: "GL-02 Development — Typecheck"
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tree
@@ -38,8 +87,30 @@ jobs:
       - name: Typecheck every workspace project
         run: npm run typecheck
 
-  test:
-    name: Test
+  # GL-03 Independent Review — OWNER GATED (see header): cross-team reviewers
+  # independent of the authoring team, safeguarding sign-off and a signed
+  # verdict cannot be produced by a build step.
+  # GL-04 Redevelopment — OWNER GATED (conditional): every rework references its
+  # review finding ID and adds regression tests; no silent rewrite.
+
+  gl02_static_analysis:
+    name: "GL-02 -> GL-05 Static Analysis — Secrets scan"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tree
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Scan the published tree and git history for secrets
+        run: npm run secrets:scan
+
+  gl05_loop_testing:
+    name: "GL-05 Loop Testing — Test suite"
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tree
@@ -56,8 +127,8 @@ jobs:
       - name: Run the test suite
         run: npm run test:only
 
-  accessibility:
-    name: Accessibility (an ARC-I1 violation must fail the build)
+  gl05_accessibility:
+    name: "GL-05 Loop Testing — Accessibility (an ARC-I1 violation must fail the build)"
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tree
@@ -85,24 +156,13 @@ jobs:
       - name: The accessibility contract gate must pass on the real tree
         run: node tools/verify-all.mjs
 
-  secrets:
-    name: Secrets scan
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out the tree
-        uses: actions/checkout@v4
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-      - name: Scan the published tree for secrets
-        run: npm run secrets:scan
+  # GL-06 Correction / Restoration and GL-07 Resolution / Fixing — OWNER GATED
+  # (conditional): incident containment, a rehearsed restore, and confirmation
+  # of closure by the reporter or an independent reviewer are human acts. The
+  # rollback procedure itself is documented in README.md -> Deployment.
 
-  sbom:
-    name: SBOM
+  gl08_package_sign:
+    name: "GL-08 Package/Sign — CycloneDX SBOM"
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tree
@@ -124,8 +184,8 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  verify:
-    name: Verify
+  gl08_verify:
+    name: "GL-08 Repository & Deployment — Full verification chain"
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tree

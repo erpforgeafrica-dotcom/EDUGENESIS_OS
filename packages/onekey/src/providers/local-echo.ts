@@ -78,7 +78,14 @@ export function createLocalEchoProvider(opts: LocalEchoOptions = {}): ProviderAd
       const head = req.prompt.split('\n')[0] ?? '';
       const raw = `[${id}] deterministic offline completion ${digest} :: ${head}`;
       const text = clampToTokens(raw, req.maxOutputTokens);
-      const usage = { inputTokens: estimateTokens(req.prompt), outputTokens: estimateTokens(text) };
+      // Charge for everything that actually reaches the model: the prompt,
+      // the system instruction and every grounded context passage (F3-35).
+      // Counting only the prompt under-charges the ledger on the offline tier.
+      const inputText =
+        req.prompt +
+        (req.system ?? '') +
+        (req.context ?? []).map((item) => item.text).join('');
+      const usage = { inputTokens: estimateTokens(inputText), outputTokens: estimateTokens(text) };
 
       // The adapter refuses to spend what the pool cannot pay for, so an
       // over-budget request is rejected BEFORE the provider is called.

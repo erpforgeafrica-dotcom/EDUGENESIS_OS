@@ -209,6 +209,38 @@ const DIGEST_PATTERN = /^[0-9a-f]{32,}$/i;
 const COMPACT_DATE_PATTERN = /^(?:19|20)\d{2}(?:0[1-9]|1[0-2])(?:[0-2]\d|3[01])$/;
 
 /**
+ * Invisible characters an attacker can insert between the digits or letters
+ * of an identifier to break the contiguous run the value rules match.
+ * Folding them before scanning makes the obfuscation invisible to the scan.
+ */
+const INVISIBLE_CHARS_PATTERN = /[\u200B-\u200F\u2060\uFEFF]/g;
+
+/** V4 — an email whose at-sign and dot have been spelled out or bracketed. */
+const OBFUSCATED_EMAIL_PATTERN =
+  /\b[A-Za-z0-9._%+-]+\s*(?:\[\s*at\s*\]|\(\s*at\s*\)|\bat\b)\s*[A-Za-z0-9-]+\s*(?:\[\s*dot\s*\]|\(\s*dot\s*\)|\bdot\b)\s*[A-Za-z0-9-]+/i;
+
+/** V5 — a person's full name: two capitalised words in free text. */
+const PERSON_NAME_PATTERN = /\b[A-Z][a-z]{1,24}\s+[A-Z][a-z]{1,24}\b/g;
+
+/**
+ * Organisational endings that make a two-capitalised-word value a company or
+ * an institution, not a person. This is the explicit false-positive guard for
+ * V5: the detector is an extension, never a narrowing of what was legal.
+ */
+const ORGANISATION_SUFFIX_PATTERN =
+  /\b(Foundation|Ltd|Limited|Inc|Corp|Corporation|Company|Trust|Group|School|University|College|Institute|Agency|Holdings|Partners|Services|Solutions)\b/i;
+
+/**
+ * Keys whose values are known to name organisations, categories or cohorts
+ * rather than people. V5 skips these so a legitimate payload stays legal.
+ */
+const ORGANISATIONAL_VALUE_KEYS: ReadonlySet<string> = new Set([
+  'sponsorname', 'sponsorref', 'organisation', 'organization', 'org', 'company',
+  'category', 'cohort', 'region', 'learningarea', 'schoolname', 'institution',
+  'vendor', 'provider', 'merchant', 'district', 'groupname', 'teamname',
+]);
+
+/**
  * A date-like prefix, e.g. `2026-11-12` or `12-11-2026`.
  *
  * Timestamps are everywhere in a ledger payload and must not be mistaken for
@@ -244,6 +276,8 @@ export const VALUE_DETECTION_RULES: readonly string[] = [
   'V1 email-address: a string containing an email-shaped substring (local part, at-sign, domain, dot, top-level domain).',
   'V2 long-digit-string: a string containing 8 or more consecutive digits, unless the run is a compact date (YYYYMMDD) or the whole string is a hex digest of 32+ characters.',
   'V3 phone-shape: a candidate of 9 or more digits joined by space/dash/dot/parenthesis separators that begins with "+" or "0", unless it is date-like.',
+  'V4 obfuscated email: an at-sign or dot written as a word or in brackets (e.g. "ada [at] example [dot] org"); compatibility forms and zero-width characters are folded before every value rule runs.',
+  'V5 personal name: two capitalised words in free text under a key that is not a known organisational/categorical key; organisation suffixes are an explicit false-positive exemption.',
   'Numbers are never scanned by V2/V3: money is held as integer minor units, so a large amount legitimately looks like a long digit string. The field-name rule governs money keys.',
 ];
 
@@ -287,19 +321,26 @@ export function findPersonalDataValues(value: unknown, rootPath = ''): string[] 
   const walk = (node: unknown, path: string): void => {
     if (typeof node === 'string') {
       const pathLabel = path === '' ? '<root>' : path;
-      if (EMAIL_PATTERN.test(node)) {
+      // F5-07: fold compatibility forms and strip invisible separators BEFORE
+      // matching. An obfuscated value must be scanned in the form a reader
+      // sees, not in the raw code points the attacker chose.
+      const scanText = node.normalize('NFKC').replace(INVISIBLE_CHARS_PATTERN, '');
+      if (EMAIL_PATTERN.test(scanText)) {
         found.push(`${pathLabel}: possible email address in value`);
       }
-      const isDigest = DIGEST_PATTERN.test(node);
+      if (OBFUSCATED_EMAIL_PATTERN.test(scanText)) {
+        found.push(`${pathLabel}: obfuscated email address in value`);
+      }
+      const isDigest = DIGEST_PATTERN.test(scanText);
       if (!isDigest) {
-        const runs = node.match(LONG_DIGITS_PATTERN);
+        const runs = scanText.match(LONG_DIGITS_PATTERN);
         if (runs) {
           for (const run of runs) {
             if (COMPACT_DATE_PATTERN.test(run)) continue;
             found.push(`${pathLabel}: long digit string (${run.length} digits) in value`);
           }
         }
-        const candidates = node.match(PHONE_CANDIDATE_PATTERN);
+        const candidates = scanText.match(PHONE_CANDIDATE_PATTERN);
         if (candidates) {
           for (const candidate of candidates) {
             if (digitCount(candidate) < 9) continue;
@@ -309,6 +350,19 @@ export function findPersonalDataValues(value: unknown, rootPath = ''): string[] 
             if (!startsWithPlus && !startsWithTrunkZero) continue;
             found.push(`${pathLabel}: phone-shaped value (${digitCount(candidate)} digits)`);
           }
+        }
+        // V5: a person's name in free text under an innocuous key. Known
+        // organisational values/keys and organisation suffixes are exempted
+        // so this stays an extension of the allowed set, not a narrowing.
+        const lastDot = path.lastIndexOf('.');
+        const leaf = lastDot === -1 ? path : path.slice(lastDot + 1);
+        const leafKey = normalizeFieldName(leaf.replace(/\[\d+\]$/, ''));
+        if (
+          !ORGANISATIONAL_VALUE_KEYS.has(leafKey) &&
+          !ORGANISATION_SUFFIX_PATTERN.test(scanText) &&
+          scanText.match(PERSON_NAME_PATTERN)
+        ) {
+          found.push(`${pathLabel}: possible personal name in value`);
         }
       }
       return;

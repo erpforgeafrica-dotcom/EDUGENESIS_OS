@@ -2,6 +2,7 @@ import type {
   CompletionRequest,
   DataClass,
   FallbackTier,
+  ProviderCapabilities,
   RequestContext,
   RoutingDecision,
   SafetyTier,
@@ -27,6 +28,12 @@ import { redactSecret } from './redact.js';
 export const TIER_ZERO_PROVIDER_ID = 'tier-zero';
 /** Provider id used for the human-support / deferred-response tier. */
 export const TIER_FOUR_PROVIDER_ID = 'human-support';
+/**
+ * Sentinel for an honest "nothing will serve this" decision (F3-19). It is NOT
+ * a provider: it exists so a decision without an offline tier never promises a
+ * Tier 0 delivery it cannot make.
+ */
+export const NO_PROVIDER_DECISION_ID = 'no-eligible-provider';
 
 const DATA_CLASS_RANK: Record<DataClass, number> = {
   public: 0,
@@ -100,7 +107,7 @@ export interface PolicyRejection {
   providerId: string;
   tier: FallbackTier;
   /** Which hard rule rejected the provider. */
-  rule: 'status' | 'data-class' | 'safety-tier' | 'circuit' | 'killed' | 'budget';
+  rule: 'status' | 'data-class' | 'safety-tier' | 'locale' | 'circuit' | 'killed' | 'budget';
   detail: string;
 }
 
@@ -117,6 +124,12 @@ export interface PolicyEngineOptions {
   registry: ProviderRegistry;
   breaker: CircuitBreaker;
   killSwitch: KillSwitch;
+  /**
+   * Whether the deployment has an offline Tier 0 the gateway can actually
+   * serve (F3-19). Defaults to false: without this declaration the decision
+   * must NOT promise an offline delivery. The gateway that owns Tier 0 opts in.
+   */
+  offlineAvailable?: boolean;
   /** Recorded on the decision and on the result, for audit. */
   policyVersion?: string;
 }
@@ -130,12 +143,17 @@ export interface PolicyEngine {
 export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
   const { registry, breaker, killSwitch } = opts;
   const policyVersion = opts.policyVersion ?? 'policy-v1';
+  const offlineAvailable = opts.offlineAvailable ?? false;
 
-  /** The stricter of the declared capability ceiling and the adapter's own. */
-  const effectiveMaxDataClass = (entry: ModelRegistryEntry): DataClass => {
-    const declared = dataClassRank(entry.capabilities.maxDataClass);
+  /**
+   * The stricter of the adapter's CURRENT capability ceiling and its own
+   * declaration. Capabilities are re-read from the adapter at decision time,
+   * never taken from the registration snapshot (F3-32).
+   */
+  const effectiveMaxDataClass = (entry: ModelRegistryEntry, live: ProviderCapabilities): DataClass => {
+    const declared = dataClassRank(live.maxDataClass);
     const adapterDeclared = dataClassRank(entry.adapter.maxDataClass);
-    return declared <= adapterDeclared ? entry.capabilities.maxDataClass : entry.adapter.maxDataClass;
+    return declared <= adapterDeclared ? live.maxDataClass : entry.adapter.maxDataClass;
   };
 
   const trace = async (
@@ -158,6 +176,9 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
     for (const entry of registry.entries()) {
       const providerId = entry.providerId;
       const tier = entry.tier;
+      // F3-32: re-read capabilities NOW. The snapshot on the registry entry is
+      // for inspection; a clearance revoked mid-flight must take effect here.
+      const live = entry.adapter.capabilities();
 
       // Rule 0 — a provider disabled in the registry is not a candidate.
       if (entry.status !== 'active') {
@@ -173,7 +194,7 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
       // Rule 1 — data class. Restricted data must never reach an unapproved
       // provider (Doc 2 §27). This is checked first because it is the
       // strongest constraint: no other consideration may override it.
-      const providerMax = effectiveMaxDataClass(entry);
+      const providerMax = effectiveMaxDataClass(entry, live);
       if (dataClassRank(providerMax) < dataClassRank(effectiveDataClass)) {
         rejections.push({
           providerId,
@@ -184,13 +205,27 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
         continue;
       }
 
-      // Rule 2 — safety tier clearance (Doc 6 §3.1).
-      if (!entry.capabilities.clearedSafetyTiers.includes(effectiveSafetyTier)) {
+      // Rule 2 — safety tier clearance (Doc 6 §3.1), from LIVE capabilities.
+      if (!live.clearedSafetyTiers.includes(effectiveSafetyTier)) {
         rejections.push({
           providerId,
           tier,
           rule: 'safety-tier',
           detail: `provider is not cleared for safety tier '${effectiveSafetyTier}'`,
+        });
+        continue;
+      }
+
+      // Rule 2.5 — locale is an eligibility rule WHERE DECLARED (F3-31).
+      // A `*` locale declares no limit and always passes; a provider that
+      // declares a language it does not serve is ineligible, not merely ranked
+      // lower. Tier 0 declares no locale limit and is not hard-filtered here.
+      if (!localeCovered(entry.locales, locale)) {
+        rejections.push({
+          providerId,
+          tier,
+          rule: 'locale',
+          detail: `provider locales '${entry.locales.join(', ')}' do not cover requested locale '${locale ?? ''}'`,
         });
         continue;
       }
@@ -238,8 +273,9 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
       .map((entry, index) => ({
         entry,
         index,
+        live: entry.adapter.capabilities(),
         modalityMatch: preferredModality
-          ? entry.capabilities.modalities.includes(preferredModality)
+          ? entry.adapter.capabilities().modalities.includes(preferredModality)
           : false,
         localeMatch: localeCovered(entry.locales, locale),
       }))
@@ -271,18 +307,43 @@ export function createPolicyEngine(opts: PolicyEngineOptions): PolicyEngine {
       budgetRemaining: budget.remaining(),
       budgetCap: budget.hardCapUnits,
       circuitState: selected ? breaker.state(selected.entry.providerId) : 'closed',
-      providerMax: selected ? effectiveMaxDataClass(selected.entry) : undefined,
+      providerMax: selected ? effectiveMaxDataClass(selected.entry, selected.live) : undefined,
+      offlineAvailable,
     });
 
-    const decision: RoutingDecision = {
-      providerId: selected ? selected.entry.providerId : TIER_ZERO_PROVIDER_ID,
-      modelId: selected ? selected.entry.modelId : 'offline-curriculum',
-      tier: selected ? selected.entry.tier : 0,
-      reason,
-      fallbackChain,
-      budgetPoolId: budget.poolId,
-      servedOffline: !selected,
-    };
+    // F3-19: only promise a Tier 0 delivery when the deployment actually has
+    // an offline tier. Otherwise report an honest "nothing will serve this"
+    // decision — the fallbackChain still shows the ladder, but the primary
+    // selection never claims a service the gateway cannot make.
+    const decision: RoutingDecision = selected
+      ? {
+          providerId: selected.entry.providerId,
+          modelId: selected.entry.modelId,
+          tier: selected.entry.tier,
+          reason,
+          fallbackChain,
+          budgetPoolId: budget.poolId,
+          servedOffline: false,
+        }
+      : offlineAvailable
+        ? {
+            providerId: TIER_ZERO_PROVIDER_ID,
+            modelId: 'offline-curriculum',
+            tier: 0,
+            reason,
+            fallbackChain,
+            budgetPoolId: budget.poolId,
+            servedOffline: true,
+          }
+        : {
+            providerId: NO_PROVIDER_DECISION_ID,
+            modelId: 'none',
+            tier: 4,
+            reason,
+            fallbackChain,
+            budgetPoolId: budget.poolId,
+            servedOffline: false,
+          };
 
     return { decision, eligible: ranked.map((candidate) => candidate.entry), rejections };
   };
@@ -310,6 +371,8 @@ interface ReasonInput {
   budgetCap: number;
   circuitState: string;
   providerMax: DataClass | undefined;
+  /** Whether the deployment has an offline Tier 0 (F3-19). */
+  offlineAvailable: boolean;
 }
 
 /** Build the human-readable policy trace attached to a routing decision. */
@@ -334,9 +397,13 @@ function buildReason(input: ReasonInput): string {
     parts.push(
       `hard rules passed: data class '${input.effectiveDataClass}' within provider max '${input.providerMax ?? 'unknown'}', safety tier '${input.effectiveSafetyTier}' cleared, circuit ${input.circuitState}, not killed, budget remaining ${input.budgetRemaining}/${input.budgetCap} units`,
     );
-  } else {
+  } else if (input.offlineAvailable) {
     parts.push(
       'no provider was eligible for this request; the deterministic offline tier 0 is selected so the learner is never blocked',
+    );
+  } else {
+    parts.push(
+      'no provider was eligible for this request and no offline tier is available; this decision does not promise a delivery',
     );
   }
 

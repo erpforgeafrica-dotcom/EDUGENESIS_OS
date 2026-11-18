@@ -51,6 +51,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** The governance classifications the onekey kill switch may carry (F8-11). */
+const CLASSIFICATIONS = ['safety', 'residency', 'licence', 'operational'] as const;
+
+/**
+ * Copy the optional governance fields without inventing values.
+ *
+ * Older state has neither field; that is legal. A present but malformed field
+ * is NOT legal — dropping it on load would forge a weaker governance decision,
+ * so the persisted state is refused instead.
+ */
+function governanceOf(entry: Record<string, unknown>): {
+  actor?: string;
+  classification?: (typeof CLASSIFICATIONS)[number];
+} {
+  const actor = entry['actor'];
+  const classification = entry['classification'];
+  if (actor !== undefined && typeof actor !== 'string') {
+    throw new Error('The persisted kill-switch state is corrupt: actor must be a string.');
+  }
+  if (
+    classification !== undefined &&
+    !CLASSIFICATIONS.includes(classification as (typeof CLASSIFICATIONS)[number])
+  ) {
+    throw new Error('The persisted kill-switch state is corrupt: unknown kill classification.');
+  }
+  return {
+    ...(actor === undefined ? {} : { actor }),
+    ...(classification === undefined
+      ? {}
+      : { classification: classification as (typeof CLASSIFICATIONS)[number] }),
+  };
+}
+
 /**
  * Parse a persisted payload into a kill-switch state, refusing anything that
  * is not exactly one.
@@ -74,7 +107,11 @@ function parseState(data: Record<string, unknown>): KillSwitchState {
         'The persisted kill-switch state is corrupt: a killed entry needs a providerId and a reason.',
       );
     }
-    return { providerId: entry['providerId'], reason: entry['reason'] };
+    return {
+      providerId: entry['providerId'],
+      reason: entry['reason'],
+      ...governanceOf(entry),
+    };
   });
 
   const records = recordsRaw.map((entry): KillSwitchRecord => {
@@ -97,6 +134,7 @@ function parseState(data: Record<string, unknown>): KillSwitchState {
       reason: entry['reason'],
       at: entry['at'],
       kind,
+      ...governanceOf(entry),
     };
   });
 
@@ -131,12 +169,18 @@ export function createSqliteKillSwitchStore(options: SqliteKillSwitchStoreOption
           killed: state.killed.map((entry) => ({
             providerId: entry.providerId,
             reason: entry.reason,
+            ...(entry.actor === undefined ? {} : { actor: entry.actor }),
+            ...(entry.classification === undefined ? {} : { classification: entry.classification }),
           })),
           records: state.records.map((record) => ({
             providerId: record.providerId,
             reason: record.reason,
             at: record.at,
             kind: record.kind,
+            ...(record.actor === undefined ? {} : { actor: record.actor }),
+            ...(record.classification === undefined
+              ? {}
+              : { classification: record.classification }),
           })),
         },
       });

@@ -57,9 +57,11 @@
  *   - `verify()` never throws. It REPORTS. An auditor must be able to read a
  *     broken chain and be told exactly where it broke; that report is the
  *     same one the refusals quote.
- *   - `all()` is the RAW access and deliberately does not refuse: tamper
- *     evidence needs an auditor to be able to reach the stored bytes of a
- *     broken chain and see what was done to them.
+ *   - `all()` is the safe read accessor: it returns defensive copies and
+ *     deliberately does not refuse, so a broken chain stays readable.
+ *     `rawEntries()` is the RAW access for auditor/tamper-test tooling — it
+ *     hands out the stored objects so a break can be exercised and reported
+ *     at the right seq.
  *
  * PAYLOAD SHAPE
  * The frozen contract types a payload as `Record<string, string | number |
@@ -102,6 +104,16 @@ export type LedgerPayload = Record<string, string | number | boolean | null>;
  */
 export interface LedgerStoreFacade extends LedgerStore {
   append(type: LedgerEntryType, payload: Record<string, unknown>, at?: string): LedgerEntry;
+  /**
+   * The RAW, live chain — for auditors and tamper tests only (F5-04).
+   *
+   * `all()` is the safe read accessor and returns defensive copies. This
+   * accessor deliberately hands out the stored objects so an auditor can try
+   * to alter them and see `verify()` report the break. It is NOT a trust
+   * boundary and must never be used to hand data to a third party; use
+   * `exportPublic()` for that.
+   */
+  rawEntries(): LedgerEntry[];
 }
 
 /** Options for `createLedgerStore`. */
@@ -292,14 +304,38 @@ function canonicalisePayload(payload: Record<string, unknown>): LedgerPayload {
   return out;
 }
 
-/** Validate an ISO-8601 timestamp. */
-function assertTimestamp(at: string): void {
+/**
+ * Strict ISO-8601 instant form.
+ *
+ * F5-12: `Date.parse` accepts many locale-dependent spellings (`2026/01/05`,
+ * `January 5, 2026`, a bare date with no time). A public, hash-chained record
+ * needs ONE unambiguous encoding, so only an ISO-8601 instant with an explicit
+ * time and a `Z` or numeric UTC offset is admitted. The stored and hashed form
+ * is then always the normalised UTC `toISOString()` of that instant.
+ */
+const ISO_8601_INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/** Validate a strict ISO-8601 instant and return its normalised UTC form. */
+function normalizeTimestamp(at: string): string {
   if (typeof at !== 'string' || at.length === 0) {
-    throw new LedgerPayloadError('A ledger entry needs an ISO-8601 timestamp.');
+    throw new LedgerPayloadError('A ledger entry needs a strict ISO-8601 timestamp.');
   }
-  if (Number.isNaN(Date.parse(at))) {
-    throw new LedgerPayloadError(`"${at}" is not a parseable ISO-8601 timestamp.`);
+  if (!ISO_8601_INSTANT.test(at)) {
+    throw new LedgerPayloadError(
+      `"${at}" is not a strict ISO-8601 timestamp; expected e.g. 2026-01-05T00:00:00.000Z.`,
+    );
   }
+  const milliseconds = Date.parse(at);
+  if (Number.isNaN(milliseconds)) {
+    throw new LedgerPayloadError(`"${at}" is not a valid ISO-8601 instant.`);
+  }
+  return new Date(milliseconds).toISOString();
+}
+
+/** Defensive copy of a stored entry (the payload is flat scalar data). */
+function cloneEntry(entry: LedgerEntry): LedgerEntry {
+  return { ...entry, payload: { ...entry.payload } };
 }
 
 /**
@@ -473,8 +509,7 @@ export function createLedgerStore(options: LedgerStoreOptions = {}): LedgerStore
     }
 
     const flatPayload = canonicalisePayload(payload);
-    const timestamp = at ?? now();
-    assertTimestamp(timestamp);
+    const timestamp = normalizeTimestamp(at ?? now());
 
     // THE CHAIN IS VERIFIED BEFORE IT IS EXTENDED. A broken chain must not
     // grow: a compensating entry cannot repair a severed hash link, so
@@ -520,25 +555,21 @@ export function createLedgerStore(options: LedgerStoreOptions = {}): LedgerStore
   };
 
   const all = (): LedgerEntry[] => {
-    // The LIVE entry array.
-    //
-    // WHY: the chain is tamper-EVIDENT, not tamper-resistant (Doc 2 §15). An
-    // auditor must be able to reach the stored bytes to try to alter them, and
-    // `verify()` must then report the break with the right seq. A copy here
-    // would make the tamper scenario untestable and would give a false sense
-    // of immutability.
-    //
-    // THIS IS THE RAW ACCESS, NOT A TRUST BOUNDARY, and it deliberately does
-    // NOT refuse a broken chain: an auditor must be able to read the stored
-    // bytes of a broken chain and see exactly what was done to them. The
-    // TRUSTED reads are `exportPublic()` and `merkleRoot()`, and the write
-    // path is `append()`; those refuse with `LedgerTamperError`.
-    //
-    // TREAT THE RESULT AS READ-ONLY. Do not sort, splice or push into it: the
-    // sequence numbers are the chain, and the store keeps its own record of
-    // what it wrote, so an entry that is spliced in here is detected as one
-    // the store never wrote. `exportPublic()` is the safe, copy-returning
-    // accessor for anything you hand to somebody else.
+    // F5-04: the safe read accessor returns DEFENSIVE COPIES. Holding a
+    // reference from `all()` can no longer mutate, splice or push into the
+    // published chain, so append-only is a property of the code and not a
+    // matter of caller discipline. A broken chain is still readable here —
+    // this accessor never refuses; the TRUSTED reads (`exportPublic()`,
+    // `merkleRoot()`) and the write path do.
+    return entries.map(cloneEntry);
+  };
+
+  const rawEntries = (): LedgerEntry[] => {
+    // The LIVE entry array, moved here from `all()` so tamper evidence stays
+    // exercisable. Auditor/tamper-test tooling only: mutating a row here is how
+    // a test asks `verify()` to report a break at the right seq. The store's
+    // own `written` record still detects an inserted/removed entry even when
+    // the hashes of the altered chain are internally consistent.
     return entries;
   };
 
@@ -584,7 +615,7 @@ export function createLedgerStore(options: LedgerStoreOptions = {}): LedgerStore
     return root.toString('hex');
   };
 
-  return { append, all, verify, exportPublic, merkleRoot };
+  return { append, all, rawEntries, verify, exportPublic, merkleRoot };
 }
 
 /** Input for `appendCorrection`. */

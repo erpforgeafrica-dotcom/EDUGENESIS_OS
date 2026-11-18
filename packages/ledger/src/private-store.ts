@@ -24,13 +24,17 @@
  * not a feature request: it is a violation of Doc 2 §2.5 and it is a bug.
  *
  * STORAGE
- * The store is in-memory by design. Node 24 ships `node:sqlite` and it was
- * verified to work on this build host, but a ledger package that persists
- * identity records would have to own a data directory, a retention policy and a
- * wipe path — none of which belong in a package whose job is to prove a
- * boundary. Persistence is a concern of the service that owns the data, behind
- * this interface.
+ * Rows live in memory by design, but F5-08 makes isolation a property of the
+ * bytes, not a naming convention: every record is sealed with AES-256-GCM
+ * before it is stored, keyed by a digest of its id, and decrypted only on the
+ * way out. `exportSealed()` hands opaque rows to a durable sink owned by the
+ * service (which owns the data directory, retention policy and wipe path) and
+ * `sealedRows` restores them with the same master key. A wrong key is refused
+ * loudly. Persistence remains the owning service's concern; this package
+ * guarantees that whatever it hands over is never plaintext.
  */
+
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 
 import type { PrivateRecord, PrivateRecordKind, PrivateStore } from '@edugenesis/contracts';
 
@@ -138,25 +142,154 @@ function copyData(data: Record<string, unknown>): Record<string, unknown> {
   }
 }
 
+/** One opaque at-rest row: neither the id nor the payload is plaintext. */
+export interface SealedPrivateRecord {
+  /** Keyed digest of the record id — a lookup token, never the id itself. */
+  readonly key: string;
+  /** Base64 AES-256-GCM envelope: IV(12) || tag(16) || ciphertext. */
+  readonly seal: string;
+}
+
+/** The at-rest surface a durable sink and an auditor use. */
+export interface PrivateStoreAtRest {
+  /**
+   * The exact rows a durable sink must persist. No plaintext id, kind,
+   * timestamp or payload appears in them (F5-08).
+   */
+  exportSealed(): SealedPrivateRecord[];
+  /** True: every record is sealed at rest, in memory and in the exported rows. */
+  readonly sealedAtRest: boolean;
+}
+
+/** Options for `createPrivateStore`. */
+export interface CreatePrivateStoreOptions {
+  /**
+   * Master key (a passphrase or raw bytes, hashed to 32 bytes). Omitted, a
+   * per-store random key is generated: records are still sealed, but a
+   * snapshot cannot be reopened by another process. Supply the SAME key on
+   * restore to reopen sealed rows; a different key is refused loudly.
+   */
+  readonly atRestKey?: Uint8Array | string;
+  /** Sealed rows exported from an earlier store (durable restore). */
+  readonly sealedRows?: readonly SealedPrivateRecord[];
+}
+
+/** Separator used inside the encrypted envelope, never in a JSON payload. */
+const ENVELOPE_SEPARATOR = '\u0000';
+
 /**
  * Create the private operational store.
  *
- * In-memory, process-local, and never reachable from the ledger. `put` copies
- * the caller's payload so a later mutation of the caller's object cannot change
- * what the store holds; `get`/`all`/`byKind` copy on the way out so a caller
- * cannot mutate stored identity data by accident.
+ * F5-08: isolation at rest is a property of the STORED BYTES, not a naming
+ * convention. Every record is sealed with AES-256-GCM before it enters the
+ * store; `put` keys the row by a digest of its id, and `get`/`all`/`byKind`
+ * decrypt on the way out so the public contract is unchanged. Sealed rows can
+ * be handed to a durable sink (`exportSealed`) and restored with the same key.
+ * The store never imports the ledger and has no path to it.
  */
-export function createPrivateStore(): PrivateStore {
-  const records = new Map<string, PrivateRecord>();
+export function createPrivateStore(
+  options: CreatePrivateStoreOptions = {},
+): PrivateStore & PrivateStoreAtRest {
+  const keyMaterial =
+    options.atRestKey === undefined
+      ? randomBytes(32)
+      : typeof options.atRestKey === 'string'
+        ? Buffer.from(options.atRestKey, 'utf8')
+        : Buffer.from(options.atRestKey);
+  const masterKey = createHash('sha256').update(keyMaterial).digest();
 
-  const clone = (record: PrivateRecord): PrivateRecord => ({
-    id: record.id,
-    kind: record.kind,
-    at: record.at,
-    data: copyData(record.data),
-  });
+  const idKey = (id: string): string =>
+    createHash('sha256').update(masterKey).update(id, 'utf8').digest('hex');
+
+  /** Serialise the payload, refusing every lossy case (no silent data change). */
+  const serialise = (data: Record<string, unknown>, id: string): string => {
+    const text = JSON.stringify(data, (field: string, value: unknown): unknown => {
+      if (value === undefined) {
+        throw new TypeError(`field "${field}" is undefined and would be dropped from the record`);
+      }
+      if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+        throw new TypeError(`field "${field}" cannot be stored as plain data`);
+      }
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        throw new TypeError(`field "${field}" is not a finite number`);
+      }
+      return value;
+    });
+    if (typeof text !== 'string') {
+      throw new Error(`The private record "${id}" produced no JSON.`);
+    }
+    return text;
+  };
+
+  const sealRecord = (record: PrivateRecord): SealedPrivateRecord => {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', masterKey, iv);
+    const envelope = [
+      record.id,
+      record.kind,
+      record.at,
+      serialise(copyData(record.data), record.id),
+    ].join(ENVELOPE_SEPARATOR);
+    const encrypted = Buffer.concat([cipher.update(envelope, 'utf8'), cipher.final()]);
+    return {
+      key: idKey(record.id),
+      seal: Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString('base64'),
+    };
+  };
+
+  const openRecord = (row: SealedPrivateRecord): PrivateRecord => {
+    const raw = Buffer.from(row.seal, 'base64');
+    if (raw.length <= 28) {
+      throw new Error('A sealed private record is corrupt (too short to carry an AES-GCM envelope).');
+    }
+    let envelope: string;
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', masterKey, raw.subarray(0, 12));
+      decipher.setAuthTag(raw.subarray(12, 28));
+      envelope = Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
+    } catch {
+      throw new Error('A sealed private record cannot be opened with this key.');
+    }
+    const parts = envelope.split(ENVELOPE_SEPARATOR);
+    const [id, kind, at, dataText] = parts;
+    if (id === undefined || kind === undefined || at === undefined || dataText === undefined) {
+      throw new Error('A sealed private record has a malformed envelope.');
+    }
+    if (!PRIVATE_RECORD_KINDS.includes(kind as PrivateRecordKind)) {
+      throw new Error(
+        `A sealed private record has an unknown kind "${String(kind)}". ` +
+          `Expected one of: ${PRIVATE_RECORD_KINDS.join(', ')}.`,
+      );
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dataText);
+    } catch {
+      throw new Error(`The sealed private record "${id}" does not contain valid JSON.`);
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(`The sealed private record "${id}" does not contain a JSON object.`);
+    }
+    return { id, kind: kind as PrivateRecordKind, at, data: parsed as Record<string, unknown> };
+  };
+
+  const rows = new Map<string, SealedPrivateRecord>();
+  if (options.sealedRows !== undefined) {
+    for (const row of options.sealedRows) {
+      // Decrypt EVERY restored row: a wrong key or a tampered envelope must
+      // fail loudly at construction, never leave a silently empty store.
+      const record = openRecord(row);
+      rows.set(idKey(record.id), row);
+    }
+  }
 
   return {
+    sealedAtRest: true,
+
+    exportSealed(): SealedPrivateRecord[] {
+      return [...rows.values()].map((row) => ({ key: row.key, seal: row.seal }));
+    },
+
     put(record: PrivateRecord): void {
       if (!record || typeof record.id !== 'string' || record.id.length === 0) {
         throw new Error('A private record needs a non-empty id.');
@@ -170,23 +303,26 @@ export function createPrivateStore(): PrivateStore {
       if (typeof record.at !== 'string' || Number.isNaN(Date.parse(record.at))) {
         throw new Error('A private record needs a parseable ISO-8601 timestamp.');
       }
-      if (record.data === null || typeof record.data !== 'object') {
+      if (record.data === null || typeof record.data !== 'object' || Array.isArray(record.data)) {
         throw new Error('A private record needs a data object.');
       }
-      records.set(record.id, clone(record));
+      const sealed = sealRecord(record);
+      rows.set(sealed.key, sealed);
     },
 
     get(id: string): PrivateRecord | undefined {
-      const found = records.get(id);
-      return found ? clone(found) : undefined;
+      const row = rows.get(idKey(id));
+      return row ? openRecord(row) : undefined;
     },
 
     all(): PrivateRecord[] {
-      return [...records.values()].map(clone);
+      return [...rows.values()].map(openRecord);
     },
 
     byKind(kind: PrivateRecordKind): PrivateRecord[] {
-      return [...records.values()].filter((record) => record.kind === kind).map(clone);
+      return [...rows.values()]
+        .map(openRecord)
+        .filter((record) => record.kind === kind);
     },
   };
 }

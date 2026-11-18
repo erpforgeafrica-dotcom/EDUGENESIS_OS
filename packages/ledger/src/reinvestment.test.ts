@@ -131,3 +131,76 @@ test('a funding entry with unusable money is excluded with a reason, not counted
 test('the funding types are the three documented ones', () => {
   assert.deepEqual([...FUNDING_ENTRY_TYPES], ['sponsor_pledge', 'sponsor_deposit', 'grant_awarded']);
 });
+
+test('F5-10: a funding event recorded twice with the same event_ref is counted once', () => {
+  // Two entries carrying the same economic-event reference are one fact. The
+  // engine must not let a double posting inflate the eligible base.
+  const store = createLedgerStore({ now: (): string => '2026-01-01T00:00:00.000Z' });
+  const payload = { amount_cents: 400_000, sponsor_ref: 'SP-100', event_ref: 'pledge-evt-1' };
+  store.append('sponsor_pledge', payload, '2026-01-05T00:00:00.000Z');
+  store.append('sponsor_pledge', payload, '2026-01-05T00:00:00.000Z');
+
+  const result = createReinvestmentEngine().compute(store.all(), PERIOD);
+  assert.equal(result.eligibleBase, 400_000, 'the duplicate must not enlarge the base');
+  const duplicates = result.excluded.filter((item) => /duplicate/i.test(item.reason));
+  assert.equal(duplicates.length, 1);
+  assert.equal(duplicates[0]?.seq, 2);
+  assert.match(duplicates[0]?.reason ?? '', /seq 1/);
+});
+
+test('F5-10: a semantically duplicated allocation is detected and counted once', () => {
+  // Without an explicit event_ref, an identical allocation (same type, amount,
+  // category and posting instant) is the same economic event recorded twice.
+  const store = createLedgerStore({ now: (): string => '2026-01-01T00:00:00.000Z' });
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 }, '2026-01-05T00:00:00.000Z');
+  const allocation = { amount_cents: 700_000, category: 'devices' };
+  store.append('reinvestment_allocation', allocation, '2026-02-10T00:00:00.000Z');
+  store.append('reinvestment_allocation', allocation, '2026-02-10T00:00:00.000Z');
+
+  const result = createReinvestmentEngine().compute(store.all(), PERIOD);
+  assert.deepEqual(result.allocated, { devices: 700_000 });
+  const duplicates = result.excluded.filter((item) => /duplicate/i.test(item.reason));
+  assert.equal(duplicates.length, 1);
+  assert.equal(duplicates[0]?.seq, 3);
+});
+
+test('F5-09: a late allocation is excluded by default and attributed when enabled', () => {
+  const store = createLedgerStore({ now: (): string => '2026-01-01T00:00:00.000Z' });
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 }, '2026-01-05T00:00:00.000Z');
+  store.append(
+    'reinvestment_allocation',
+    { amount_cents: 700_000, category: 'devices' },
+    '2026-05-01T00:00:00.000Z',
+  );
+  const entries = store.all();
+
+  const strict = createReinvestmentEngine().compute(entries, PERIOD);
+  assert.equal(strict.compliant, false, 'a posting-after-period allocation is out by default');
+  assert.match(strict.excluded.find((item) => item.seq === 2)?.reason ?? '', /outside period/);
+
+  const attributed = createReinvestmentEngine({
+    allocationAttribution: 'include-late',
+    lateAllocationCutoff: '2026-06-30T23:59:59.999Z',
+  }).compute(entries, PERIOD);
+  assert.equal(attributed.compliant, true, 'the late allocation now funds this period');
+  assert.deepEqual(attributed.allocated, { devices: 700_000 });
+  assert.match(attributed.excluded.find((item) => item.seq === 2)?.reason ?? '', /late allocation/i);
+});
+
+test('F5-09: late attribution never reaches an allocation beyond the cutoff', () => {
+  const store = createLedgerStore({ now: (): string => '2026-01-01T00:00:00.000Z' });
+  store.append('sponsor_pledge', { amount_cents: 1_000_000 }, '2026-01-05T00:00:00.000Z');
+  store.append(
+    'reinvestment_allocation',
+    { amount_cents: 700_000, category: 'devices' },
+    '2026-12-01T00:00:00.000Z',
+  );
+
+  const result = createReinvestmentEngine({
+    allocationAttribution: 'include-late',
+    lateAllocationCutoff: '2026-06-30T23:59:59.999Z',
+  }).compute(store.all(), PERIOD);
+  assert.equal(result.compliant, false);
+  assert.deepEqual(result.allocated, {});
+  assert.match(result.excluded.find((item) => item.seq === 2)?.reason ?? '', /outside period/);
+});

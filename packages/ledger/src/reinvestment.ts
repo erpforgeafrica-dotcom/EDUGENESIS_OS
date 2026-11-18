@@ -69,6 +69,20 @@ export interface ReinvestmentEngineOptions {
   allocationType?: LedgerEntryType;
   /** The category value used when an allocation carries no category. */
   uncategorisedCategory?: string;
+  /**
+   * How an allocation posted OUTSIDE the period is attributed (F5-09).
+   *
+   * `posting-date` (the default) keeps the original, explicit behaviour: only
+   * an allocation whose timestamp is inside the period contributes.
+   * `include-late` counts an allocation posted after `period.to` but no later
+   * than `lateAllocationCutoff` against THIS period's obligation, because an
+   * allocation can fund a period after that period has closed. The cutoff is
+   * mandatory with this mode so a far-future posting is never silently pulled
+   * into an earlier period.
+   */
+  allocationAttribution?: 'posting-date' | 'include-late';
+  /** Latest posting instant accepted as a late allocation (with `include-late`). */
+  lateAllocationCutoff?: string;
 }
 
 /** The period a computation covers. */
@@ -99,6 +113,25 @@ export function createReinvestmentEngine(options: ReinvestmentEngineOptions = {}
     );
   }
 
+  const attribution = options.allocationAttribution ?? 'posting-date';
+  if (attribution !== 'posting-date' && attribution !== 'include-late') {
+    throw new Error(
+      `Unknown allocation attribution mode "${String(attribution)}"; expected posting-date or include-late.`,
+    );
+  }
+  let lateCutoffMs = NaN;
+  if (attribution === 'include-late') {
+    if (
+      typeof options.lateAllocationCutoff !== 'string' ||
+      Number.isNaN(Date.parse(options.lateAllocationCutoff))
+    ) {
+      throw new Error(
+        'A lateAllocationCutoff timestamp is required with allocationAttribution: include-late.',
+      );
+    }
+    lateCutoffMs = Date.parse(options.lateAllocationCutoff);
+  }
+
   const compute = (entries: LedgerEntry[], period: ReinvestmentPeriod): ReinvestmentResult => {
     const fromMs = Date.parse(period.from);
     const toMs = Date.parse(period.to);
@@ -114,12 +147,45 @@ export function createReinvestmentEngine(options: ReinvestmentEngineOptions = {}
     const allocatedByCategory = new Map<string, bigint>();
     const excluded: Array<{ seq: number; reason: string }> = [];
 
+    /**
+     * F5-10: the seq of the FIRST entry that carried a given economic-event
+     * business key. A later entry with the same key is a duplicate posting,
+     * not new money, and is excluded instead of inflating a total.
+     *
+     * A dedicated event reference (`event_ref`, `idempotency_key`,
+     * `dedupe_key`) is authoritative. Without one, the canonical shape
+     * (type + amount + category + posting instant) catches the same event
+     * recorded twice without false-positiving two different allocations that
+     * merely happen to share an amount.
+     */
+    const seenEvents = new Map<string, number>();
+    const duplicateOf = (entry: LedgerEntry, amountCents: number): number | undefined => {
+      const explicit = ['event_ref', 'eventRef', 'idempotency_key', 'idempotencyKey', 'dedupe_key']
+        .map((key) => entry.payload[key])
+        .find((value): value is string => typeof value === 'string' && value.trim().length > 0);
+      const rawCategory = entry.payload['category'];
+      const category = typeof rawCategory === 'string' ? rawCategory.trim() : '';
+      const key =
+        explicit !== undefined
+          ? `ref:${explicit.trim()}`
+          : `shape:${entry.type}:${String(amountCents)}:${category}:${entry.at}`;
+      const earlier = seenEvents.get(key);
+      if (earlier !== undefined) return earlier;
+      seenEvents.set(key, entry.seq);
+      return undefined;
+    };
+
     for (const entry of ordered) {
       const atMs = Date.parse(entry.at);
       if (Number.isNaN(atMs)) {
         excluded.push({ seq: entry.seq, reason: `unparseable timestamp "${entry.at}"` });
         continue;
       }
+
+      const isFunding = fundingTypes.includes(entry.type);
+      const isAllocation = entry.type === allocationType;
+      let lateAttribution = false;
+
       if (atMs < fromMs) {
         excluded.push({
           seq: entry.seq,
@@ -128,15 +194,25 @@ export function createReinvestmentEngine(options: ReinvestmentEngineOptions = {}
         continue;
       }
       if (atMs > toMs) {
-        excluded.push({
-          seq: entry.seq,
-          reason: `outside period: entry at ${entry.at} is after the period end ${period.to}`,
-        });
-        continue;
+        // F5-09: an allocation can fund a period after that period has closed.
+        // Attribute it explicitly only when the caller opted in AND the
+        // posting is within the declared cutoff; never pull a far-future
+        // posting into an earlier period.
+        if (
+          attribution === 'include-late' &&
+          isAllocation &&
+          atMs <= lateCutoffMs &&
+          lateCutoffMs > toMs
+        ) {
+          lateAttribution = true;
+        } else {
+          excluded.push({
+            seq: entry.seq,
+            reason: `outside period: entry at ${entry.at} is after the period end ${period.to}`,
+          });
+          continue;
+        }
       }
-
-      const isFunding = fundingTypes.includes(entry.type);
-      const isAllocation = entry.type === allocationType;
 
       if (isFunding) {
         const amount = readAmountCents(entry.payload);
@@ -144,6 +220,14 @@ export function createReinvestmentEngine(options: ReinvestmentEngineOptions = {}
           excluded.push({
             seq: entry.seq,
             reason: `funding entry "${entry.type}" has no usable money field: ${amount.reason ?? 'unknown reason'}`,
+          });
+          continue;
+        }
+        const duplicate = duplicateOf(entry, amount.cents);
+        if (duplicate !== undefined) {
+          excluded.push({
+            seq: entry.seq,
+            reason: `duplicate economic event: same business key as seq ${duplicate}; not counted again`,
           });
           continue;
         }
@@ -160,6 +244,14 @@ export function createReinvestmentEngine(options: ReinvestmentEngineOptions = {}
           });
           continue;
         }
+        const duplicate = duplicateOf(entry, amount.cents);
+        if (duplicate !== undefined) {
+          excluded.push({
+            seq: entry.seq,
+            reason: `duplicate economic event: same business key as seq ${duplicate}; not counted again`,
+          });
+          continue;
+        }
         const rawCategory = entry.payload['category'];
         const category =
           typeof rawCategory === 'string' && rawCategory.trim().length > 0
@@ -170,9 +262,12 @@ export function createReinvestmentEngine(options: ReinvestmentEngineOptions = {}
         // The allocation is counted on the allocated side, not the base side;
         // it is still recorded as excluded from the base so that the audit
         // trail shows every entry that did not enlarge the eligible base.
+        // A late attribution is spelled out so the timing decision is visible.
         excluded.push({
           seq: entry.seq,
-          reason: `not a funding entry type ("${entry.type}"): counted in the allocation, not in the eligible base`,
+          reason: lateAttribution
+            ? `late allocation posted at ${entry.at} after the period end ${period.to}, attributed to this period (cutoff ${String(options.lateAllocationCutoff)})`
+            : `not a funding entry type ("${entry.type}"): counted in the allocation, not in the eligible base`,
         });
         continue;
       }

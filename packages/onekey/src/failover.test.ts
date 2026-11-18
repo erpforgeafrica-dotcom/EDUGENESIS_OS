@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { AllTiersExhaustedError } from '@edugenesis/contracts';
+import { createOneKeyGateway } from './gateway.js';
 import { DEFERRED_RESPONSE_TEXT, runFailoverDrill, runFailoverScenario } from './failover.js';
 import { TIER_ZERO_FALLBACK_NOTICE, TIER_ZERO_FALLBACK_UNRELATED_NOTICE, createTierZeroProvider } from './providers/tier-zero.js';
 import { createPolicy, createRequest } from './testing/support.js';
@@ -180,4 +181,38 @@ test('failover drill: the documented report exercises all five tiers and the §6
     true,
     'the negative control must report an exhausted ladder',
   );
+});
+
+// F3-16: one request (not a Set union of three) must walk all five rungs, and
+// the report must show the Tier 0 double visit of the §6.6 3 -> 0 -> 4 step.
+// `tiersExercised` stays the distinct union because the verification gate
+// compares it with the distinct set of reached tiers; the repeated visit is
+// recorded explicitly in the new per-scenario rung fields.
+test('failover: one request walks all five rungs and the report records the double Tier 0 visit', async () => {
+  const report = await runFailoverDrill();
+
+  assert.deepEqual(
+    report.rungSequences['human-deferral'],
+    [0, 1, 2, 3, 0, 4],
+    'a single request must visit Tier 0 twice: before the paid ladder and as the §6.6 last resort',
+  );
+  assert.deepEqual(report.fullLadderWalk, [0, 1, 2, 3, 0, 4]);
+  assert.equal(report.tierZeroVisits, 2, 'the §6.6 3 -> 0 -> 4 step is a second Tier 0 visit');
+  assert.deepEqual(
+    report.tiersExercised,
+    [0, 1, 2, 3, 4],
+    'the distinct union is still published for the verification gate',
+  );
+});
+
+// F3-33: the built-in drill must be genuinely offline; if a deployment injects
+// its own gateway the result must be marked as NOT offline, so a live run can
+// never be presented as the offline drill.
+test('failover drill: the built-in drill is offline and an injected gateway is not claimed offline', async () => {
+  const builtIn = await runFailoverScenario();
+  assert.equal(builtIn.offline, true, 'the built-in drill builds its own offline gateway');
+
+  const injectedGateway = createOneKeyGateway({ policyVersion: 'injected-probe' });
+  const injected = await runFailoverScenario({ gateway: injectedGateway });
+  assert.equal(injected.offline, false, 'an injected gateway may be live, so the offline claim is withdrawn');
 });

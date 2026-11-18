@@ -216,6 +216,11 @@ export interface AgeAssurance {
 export interface EnrolmentService {
   /** Issue a guardian consent token. The secret is returned once. */
   issueGuardianConsentToken(input: IssueGuardianConsentTokenInput): IssuedGuardianConsentToken;
+  /**
+   * Revoke an unexpired guardian consent token. A revoked token is treated as
+   * spent: it can no longer enrol a learner, exactly like a used one (F0-08).
+   */
+  revokeGuardianConsentToken(tokenId: string): void;
   /** Enrol a learner provisionally on a guardian's consent token. */
   enrolWithGuardianConsent(input: GuardianConsentEnrolmentInput): Promise<EnrolmentResult>;
   /** The passkey path. Refuses — the ceremony is deferred (D-05). */
@@ -267,6 +272,12 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
   const issuedTokens = new Map<string, GuardianConsentToken>();
   /** Token ids that have already been spent. A token is single-use. */
   const usedTokenIds = new Set<string>();
+  /**
+   * Token ids revoked before expiry (F0-08). A revoked id is refused exactly
+   * like a spent one, so a token captured in transit can be neutralised at
+   * once rather than staying usable for the rest of its TTL.
+   */
+  const revokedTokenIds = new Set<string>();
 
   function record(event: EnrolmentAuditEvent): void {
     audit.push(event);
@@ -352,10 +363,43 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
     return { token, secret: credential.secret };
   }
 
+  function revokeGuardianConsentToken(tokenId: string): void {
+    const token = issuedTokens.get(tokenId);
+    if (!token) {
+      refuse('the consent token was not issued by this service', 'guardian_consent_token', tokenId, {
+        consentTokenId: tokenId,
+      });
+    }
+    if (usedTokenIds.has(tokenId) || revokedTokenIds.has(tokenId)) {
+      refuse('the consent token is already spent', 'guardian_consent_token', token.learnerId, {
+        consentTokenId: tokenId,
+        guardianId: token.guardianId,
+      });
+    }
+
+    revokedTokenIds.add(tokenId);
+    // The revocation is an audit event too: the trail must show that the
+    // guardian (or the platform) withdrew the token before it expired.
+    record({
+      at: clock().toISOString(),
+      subjectId: token.learnerId,
+      method: 'guardian_consent_token',
+      outcome: 'refused',
+      provisional: false,
+      guardianId: token.guardianId,
+      consentTokenId: tokenId,
+      detail: 'the guardian consent token was revoked before expiry',
+    });
+  }
+
   /**
    * True when the presented token is exactly the one this service issued.
    * Every claim is compared: a caller that widens the scopes or redirects the
    * token to another learner must be refused, not obeyed.
+   *
+   * The scope list is compared as a SET, not by position (F0-10): a client
+   * that only normalises the order presents the same set and is admitted,
+   * while a client that adds or drops a scope is still refused.
    */
   function matchesIssuedToken(presented: GuardianConsentToken, issued: GuardianConsentToken): boolean {
     return (
@@ -365,7 +409,7 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
       presented.issuedAt === issued.issuedAt &&
       presented.expiresAt === issued.expiresAt &&
       presented.scopes.length === issued.scopes.length &&
-      presented.scopes.every((scope, index) => scope === issued.scopes[index])
+      issued.scopes.every((scope) => presented.scopes.includes(scope))
     );
   }
 
@@ -390,6 +434,9 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
 
     if (usedTokenIds.has(token.tokenId)) {
       refuse('the consent token was already used', method, subjectId, { consentTokenId: token.tokenId });
+    }
+    if (revokedTokenIds.has(token.tokenId)) {
+      refuse('the consent token was revoked', method, subjectId, { consentTokenId: token.tokenId });
     }
 
     const expiresAt = new Date(token.expiresAt).getTime();
@@ -439,7 +486,8 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
           // ABAC rule that guards learner records reads this attribute.
           guardianConsent: true,
           enrolmentStatus: 'provisional',
-          enrolmentMethod: method,
+          // The path taken is recorded in the enrolment audit trail (the
+          // record of truth), not as a dead principal attribute (F0-09).
           // An unverified band is recorded as a flag, never as a band.
           ...(input.ageBand !== undefined && ageBand === undefined
             ? { ageBandUnverified: true }
@@ -525,6 +573,7 @@ export function createEnrolmentService(options: EnrolmentServiceOptions): Enrolm
 
   return {
     issueGuardianConsentToken,
+    revokeGuardianConsentToken,
     enrolWithGuardianConsent,
     enrolWithPasskey,
     auditTrail,

@@ -475,3 +475,76 @@ test('qwen: the normalised base URL carries no trailing separator', () => {
   );
   assert.throws(() => assertSafeBaseUrl('not a url'), /valid URL/);
 });
+
+test('qwen: a credential in the provider status line is redacted before it enters the audit trail', async () => {
+  // Assembled from fragments so this fixture is not itself a key-shaped literal
+  // in the scanned source tree (the secrets-scan gate reads this file too).
+  const secret = ['sk', '-', 'abcdefgh12345678'].join('');
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    fetchImpl: async () => ({
+      ok: false,
+      status: 500,
+      statusText: `upstream refused ${secret}`,
+      headers: { get: () => null },
+      // A non-JSON body forces readErrorDetail() down its statusText fallback.
+      json: async () => 'not a json error body',
+    }),
+  });
+
+  await assert.rejects(
+    () => adapter.complete(createRequest(), createContext()),
+    (err: unknown) => {
+      assert.ok(err instanceof ProviderUnavailableError);
+      const detail = err.detail ?? '';
+      assert.doesNotMatch(detail, /abcdefgh12345678/, 'the status-line secret must never reach the audit trail');
+      assert.match(detail, /\[redacted\]/, 'the status line must be redacted');
+      return true;
+    },
+  );
+});
+
+test('qwen: the 429 hint is advisory - no retry is promised or attempted', async () => {
+  const calls: RecordedCall[] = [];
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    fetchImpl: recordingFetch(calls, {
+      status: 429,
+      body: { error: { message: 'rate limited' } },
+      headers: { 'retry-after': '30' },
+    }),
+  });
+
+  await assert.rejects(
+    () => adapter.complete(createRequest(), createContext()),
+    (err: unknown) => {
+      assert.ok(err instanceof ProviderRateLimitedError);
+      const detail = err.detail ?? '';
+      assert.match(detail, /retry after 30s/i, 'the provider hint is still surfaced to the operator');
+      assert.match(detail, /does not retry/i, 'the message must not promise a retry the adapter never makes');
+      return true;
+    },
+  );
+  assert.equal(calls.length, 1, 'no retry may be attempted - failover is the gateway job, not the adapter job');
+});
+
+test('qwen: latencyMs is the measured round-trip time, not a hardcoded zero', async () => {
+  let nowMs = 1_000;
+  const adapter = createQwenAdapter({
+    apiKey: FAKE_KEY,
+    now: () => nowMs,
+    fetchImpl: async () => {
+      nowMs += 137; // the provider took 137 ms to answer
+      return {
+        ok: true,
+        status: 200,
+        statusText: 'stub',
+        headers: { get: () => null },
+        json: async () => OPENAI_COMPATIBLE_RESPONSE,
+      };
+    },
+  });
+
+  const result = await adapter.complete(createRequest(), createContext());
+  assert.equal(result.latencyMs, 137, 'latencyMs must reflect the measured latency, not a constant zero');
+});

@@ -24,7 +24,9 @@ import { createTierZeroProvider } from './providers/tier-zero.js';
  * walks the FULL five-tier ladder against deliberately failing providers and
  * records every transition.
  *
- * The drill is offline: no key, no network, no hosted provider.
+ * The built-in drill is offline: no key, no network, no hosted provider.
+ * A caller may inject a gateway, but that result is marked `offline: false`
+ * so a live run cannot be presented as the offline drill (F3-33).
  */
 
 /** One rung of the ladder, as it actually happened. */
@@ -50,10 +52,20 @@ export interface FailoverDrillResult {
   result?: GatewayCompletionResult;
   /** The typed failure, when the ladder was exhausted. */
   error?: AllTiersExhaustedError;
+  /**
+   * True only when the drill built its OWN offline gateway (F3-33). An
+   * injected gateway may contain live providers, so its result is marked live
+   * and can never be presented as the offline drill.
+   */
+  offline: boolean;
 }
 
 export interface FailoverDrillOptions {
-  /** The gateway under test. A drill gateway is built when omitted. */
+  /**
+   * A gateway under test. Prefer omitting this: the built-in gateway is
+   * deliberately offline. When supplied, the result is marked `offline: false`
+   * so a live run is not reported as the offline drill (F3-33).
+   */
   gateway?: OneKeyGatewayImpl;
   /**
    * Which ladder outcome to exercise. Defaults to `offline-rescue`.
@@ -305,6 +317,7 @@ export async function runFailoverScenario(
     transitions,
     ...(served ? { servedBy: { tier: served.tier, providerId: served.providerId } } : {}),
     exhausted: result === undefined,
+    offline: opts.gateway === undefined,
     decision,
     ...(result ? { result } : {}),
     ...(error ? { error } : {}),
@@ -328,8 +341,16 @@ export interface FailoverDrillReport {
     exhausted: FailoverDrillResult;
     'no-human-support': FailoverDrillResult;
   };
-  /** Every tier reached by at least one scenario, ascending. */
+  /** Every tier reached by at least one scenario, ascending and distinct.
+   * Kept in this shape because the verification gate compares it with the
+   * distinct set of reached tiers; the repeated visit is below. */
   tiersExercised: FallbackTier[];
+  /** Per-scenario ordered rung sequences, not a Set union (F3-16). */
+  rungSequences: Record<FailoverScenario, FallbackTier[]>;
+  /** The ordered rungs of the ONE scenario that walks all five tiers. */
+  fullLadderWalk: FallbackTier[];
+  /** How many times Tier 0 was visited in that walk (§6.6 3 -> 0 -> 4). */
+  tierZeroVisits: number;
 }
 
 export async function runFailoverDrill(): Promise<FailoverDrillReport> {
@@ -338,20 +359,38 @@ export async function runFailoverDrill(): Promise<FailoverDrillReport> {
   const exhausted = await runFailoverScenario({ scenario: 'exhausted' });
   const noHumanSupport = await runFailoverScenario({ scenario: 'no-human-support' });
 
+  const scenarios = {
+    'offline-rescue': rescue,
+    'human-deferral': deferral,
+    exhausted,
+    'no-human-support': noHumanSupport,
+  };
+
+  // F3-16: report the actual rung SEQUENCE per scenario, not a Set union that
+  // hides the repeated Tier 0. Find the single scenario that walks all five
+  // rungs and publish its sequence so the §6.6 3 -> 0 -> 4 return is visible.
+  const rungSequences = Object.fromEntries(
+    (Object.keys(scenarios) as FailoverScenario[]).map((name) => [
+      name,
+      scenarios[name].transitions.map((transition) => transition.tier),
+    ]),
+  ) as Record<FailoverScenario, FallbackTier[]>;
+
+  const fullWalk = (Object.keys(scenarios) as FailoverScenario[]).find((name) => {
+    return new Set(rungSequences[name]).size === 5;
+  });
   const tiers = new Set<FallbackTier>();
-  for (const run of [rescue, deferral, exhausted, noHumanSupport]) {
-    for (const transition of run.transitions) {
-      tiers.add(transition.tier);
+  for (const name of Object.keys(scenarios) as FailoverScenario[]) {
+    for (const tier of rungSequences[name]) {
+      tiers.add(tier);
     }
   }
 
   return {
-    scenarios: {
-      'offline-rescue': rescue,
-      'human-deferral': deferral,
-      exhausted,
-      'no-human-support': noHumanSupport,
-    },
+    scenarios,
     tiersExercised: [...tiers].sort((a, b) => a - b),
+    rungSequences,
+    fullLadderWalk: fullWalk ? rungSequences[fullWalk] : [...tiers].sort((a, b) => a - b),
+    tierZeroVisits: fullWalk ? rungSequences[fullWalk].filter((tier) => tier === 0).length : 0,
   };
 }

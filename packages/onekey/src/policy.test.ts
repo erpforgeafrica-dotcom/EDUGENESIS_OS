@@ -1,10 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FALLBACK_TIER_ROLE } from '@edugenesis/contracts';
+import type { DataClass, ProviderAdapter, SafetyTier } from '@edugenesis/contracts';
 import { createBudgetLedger } from './budget.js';
 import { createCircuitBreaker } from './circuit-breaker.js';
 import { createKillSwitch } from './kill-switch.js';
 import { createPolicyEngine, TIER_FOUR_PROVIDER_ID, TIER_ZERO_PROVIDER_ID } from './policy.js';
+import type { PolicyEngineOptions } from './policy.js';
 import { createProviderRegistry } from './registry.js';
 import { createContext, createMockAdapter, createPolicy, createRequest } from './testing/support.js';
 import type { ProviderRegistry } from './registry.js';
@@ -18,11 +20,21 @@ interface Harness {
   engine: ReturnType<typeof createPolicyEngine>;
 }
 
-function harness(): Harness {
+function harness(overrides: Partial<PolicyEngineOptions> = {}): Harness {
   const registry = createProviderRegistry();
   const breaker = createCircuitBreaker({ failureThreshold: 2, cooldownMs: 30_000, now: () => 1_000 });
   const killSwitch = createKillSwitch();
-  const engine = createPolicyEngine({ registry, breaker, killSwitch, policyVersion: 'policy-test-1' });
+  // The test harness owns an offline tier by default so the pre-existing
+  // routing tests keep their meaning; F3-19 overrides it to prove the absence
+  // of a Tier 0 promise when no offline tier is available.
+  const engine = createPolicyEngine({
+    registry,
+    breaker,
+    killSwitch,
+    policyVersion: 'policy-test-1',
+    offlineAvailable: true,
+    ...overrides,
+  });
   return { registry, breaker, killSwitch, engine };
 }
 
@@ -201,4 +213,111 @@ test('routing: the contract names a role for every tier, and tier 0 needs no pro
     'tier 0 is the offline floor — it must not be describable as needing a provider',
   );
   assert.match(FALLBACK_TIER_ROLE[4], /human/i, 'the last rung must be a person, not a model');
+});
+
+// F3-19: a routing decision is the contract-level promise of a delivery. It
+// may only promise Tier 0 when the caller has declared an offline tier.
+test('routing: a decision never promises Tier 0 when no offline tier is available', async () => {
+  const h = harness({ offlineAvailable: false });
+  // No provider is registered, so nothing is eligible.
+  const decision = await h.engine.route(createPolicy(), createRequest(), createContext());
+
+  assert.equal(decision.servedOffline, false, 'with no offline tier there is no offline-delivery promise');
+  assert.notEqual(decision.providerId, TIER_ZERO_PROVIDER_ID, 'the decision must not name the offline provider');
+  assert.notEqual(decision.tier, 0, 'the decision must not claim the offline rung');
+  assert.match(decision.reason, /no offline tier/i, 'the reason must be honest about the absence');
+});
+
+// F3-31: locale coverage is an eligibility rule where a provider DECLARES a
+// locale (only `*` declares no limit), not a mere ranking hint.
+test('routing: a declared locale is an eligibility rule, not only a tie-break', async () => {
+  const h = harness();
+  h.registry.register(createMockAdapter({ id: 'sw-only', tier: 1 }).adapter, { locales: ['sw'] });
+  h.registry.register(createMockAdapter({ id: 'english', tier: 1 }).adapter, { locales: ['en'] });
+
+  const trace = await h.engine.trace(
+    createPolicy({ locale: 'en-KE' }),
+    createRequest({ locale: 'en-KE' }),
+    createContext(),
+  );
+
+  assert.equal(trace.decision.providerId, 'english', 'the provider that covers en-KE must be selected');
+  assert.ok(
+    trace.rejections.some((r) => r.providerId === 'sw-only' && r.rule === 'locale'),
+    'a provider declaring only sw must be rejected for an en-KE request, with a locale rule',
+  );
+  assert.match(trace.decision.reason, /locale/i);
+});
+
+// F3-31: the offline tier is not hard-filtered by locale at decision time —
+// the two halves of the ladder must agree that locale is eligibility where
+// declared, and Tier 0 declares no locale limit.
+test('routing: the offline tier is not hard-filtered by locale', async () => {
+  const h = harness(); // offlineAvailable: true, no registered providers
+  const decision = await h.engine.route(
+    createPolicy({ locale: 'zu-ZA' }),
+    createRequest({ locale: 'zu-ZA' }),
+    createContext(),
+  );
+
+  assert.equal(decision.servedOffline, true, 'a locale no provider covers must not block the offline tier');
+  assert.equal(decision.providerId, TIER_ZERO_PROVIDER_ID);
+});
+
+// F3-32: the safety/data-class hard rules must read the adapter's CURRENT
+// capabilities, not the snapshot frozen at registration.
+test('routing: capabilities are re-read at decision time, not the registration snapshot', async () => {
+  const h = harness();
+  let cleared: SafetyTier[] = ['low', 'high'];
+  let maxDataClass: DataClass = 'secret';
+  const adapter: ProviderAdapter = {
+    id: 'revocable',
+    modelId: 'revocable-v1',
+    tier: 1,
+    get maxDataClass() {
+      return maxDataClass;
+    },
+    capabilities() {
+      return {
+        modalities: ['text'],
+        supportsContextCaching: false,
+        maxContextTokens: 8_000,
+        maxDataClass,
+        clearedSafetyTiers: [...cleared],
+      };
+    },
+    async complete() {
+      throw new Error('the adapter must not be called during routing');
+    },
+    async health() {
+      return { ok: true, consecutiveFailures: 0 };
+    },
+    async dispose() {
+      /* nothing held */
+    },
+  };
+  h.registry.register(adapter);
+  // Clearance is narrowed at runtime, after registration.
+  cleared = ['low'];
+  maxDataClass = 'public';
+
+  const high = await h.engine.trace(
+    createPolicy({ safetyTier: 'high' }),
+    createRequest({ safetyTier: 'high' }),
+    createContext(),
+  );
+  assert.ok(
+    high.rejections.some((r) => r.providerId === 'revocable' && r.rule === 'safety-tier'),
+    'a safety tier revoked after registration must be rejected at decision time',
+  );
+
+  const sensitive = await h.engine.trace(
+    createPolicy({ dataClass: 'sensitive' }),
+    createRequest({ dataClass: 'sensitive' }),
+    createContext(),
+  );
+  assert.ok(
+    sensitive.rejections.some((r) => r.providerId === 'revocable' && r.rule === 'data-class'),
+    'a data class narrowed after registration must be rejected at decision time',
+  );
 });
