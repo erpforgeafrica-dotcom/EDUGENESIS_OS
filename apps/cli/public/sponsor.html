@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="light" />
+    <title>EduGenesis OS — Sponsor report</title>
+    <link rel="icon" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/assets/edugenesis-tokens.css" />
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body data-surface="sponsor">
+    <a class="skip-link" href="#main">Skip to the sponsor report</a>
+
+    <main class="db-main" id="main" tabindex="-1">
+      <header class="db-header">
+        <p class="label">EduGenesis OS</p>
+        <h1>Sponsor report</h1>
+        <p class="lede">
+          Aggregates only. This surface reports what a contribution funded and how the
+          programme was verified. It never names an individual learner.
+        </p>
+      </header>
+
+      <p class="eg-status" id="page-status" role="status" aria-live="polite"></p>
+
+      <section class="db-section" aria-labelledby="funding-heading">
+        <h2 id="funding-heading">Funding</h2>
+        <div class="db-grid" id="funding-grid" aria-busy="false"></div>
+        <p class="db-empty" id="funding-empty" hidden>
+          No funding figures have been published yet. Committed and disbursed totals will
+          appear here once the programme reports them.
+        </p>
+      </section>
+
+      <section class="db-section" aria-labelledby="impact-heading">
+        <h2 id="impact-heading">Impact</h2>
+        <div class="db-grid" id="impact-grid" aria-busy="false"></div>
+        <p class="db-empty" id="impact-empty" hidden>
+          No impact figures have been published yet. Lesson totals and the reporting
+          period will appear here once the programme reports them.
+        </p>
+        <p class="db-note" id="impact-suppression-note" hidden>
+          The number of learners reached is withheld: the group is too small to report
+          without risking the identification of a person.
+        </p>
+      </section>
+
+      <section class="db-section" aria-labelledby="ledger-heading">
+        <h2 id="ledger-heading">Ledger proof</h2>
+        <div class="card">
+          <dl class="db-kv">
+            <dt>Ledger root</dt>
+            <dd class="db-ledger" id="ledger-root">Not available</dd>
+            <dt>Verification state</dt>
+            <dd><span class="db-badge" id="ledger-state">Not available</span></dd>
+            <dt>Last anchored</dt>
+            <dd id="ledger-anchored">Not available</dd>
+          </dl>
+        </div>
+        <p class="db-note">
+          The root is a digest of the append-only event ledger. It can be recomputed from
+          the events it records; this page displays the value the server returns.
+        </p>
+      </section>
+
+      <section class="db-section" aria-labelledby="report-heading">
+        <h2 id="report-heading">Report</h2>
+        <div class="card">
+          <p><span class="db-badge" id="report-status">Not available</span></p>
+          <p class="db-note" id="report-note">No report information has been received from the server.</p>
+          <a class="btn btn--secondary" id="report-download" hidden download>Download report</a>
+        </div>
+      </section>
+
+      <footer class="db-footer">
+        <p>EduGenesis OS · sponsor reporting is aggregate and never identifies a learner.</p>
+      </footer>
+    </main>
+
+    <script src="/dashboard.js" defer></script>
+  </body>
+</html>

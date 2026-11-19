@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "id": "starter-core-v1",
+  "version": "0.1.0-draft",
+  "locale": "en",
+  "status": "draft",
+  "reviewRequired": true,
+  "lessons": [
+    {
+      "id": "algebra/linear-eq",
+      "title": "Solving a linear equation",
+      "body": "Draft lesson for review. A linear equation places an equals sign between two expressions that hold the same value. To find the unknown, undo each operation in reverse order, subtracting or dividing on both sides so the balance is kept.\n\nOnce a value is found, substitute it into the original equation and check that both sides agree. That check catches arithmetic slips and confirms the result is genuine rather than assumed.",
+      "taskClasses": ["explain", "solve"],
+      "keywords": ["algebra", "equation", "variable", "unknown", "coefficient"],
+      "promptPatterns": ["\\d+\\s*[a-z]\\s*=", "\\b[xyz]\\s*=\\s*[-+]?\\d+"],
+      "licence": "CC-BY-4.0",
+      "retrievedAt": "2026-01-05T00:00:00.000Z",
+      "locales": ["en"]
+    },
+    {
+      "id": "math/fractions-basics",
+      "title": "Fractions and how to compare them",
+      "body": "Draft lesson for review. A fraction names an equal part of a whole using a numerator above a denominator. When two fractions share a denominator, the larger numerator is the larger fraction, and the comparison needs no conversion.\n\nFor unlike denominators, find a common denominator first, then compare the rewritten numerators. Keep each value unchanged by multiplying the top and bottom of a fraction by the same amount.",
+      "taskClasses": ["explain", "compare"],
+      "keywords": ["fraction", "numerator", "denominator", "ratio"],
+      "promptPatterns": ["\\d+\\s*/\\s*\\d+", "\\b(?:fraction|numerator|denominator)\\b"],
+      "licence": "CC-BY-4.0",
+      "retrievedAt": "2026-01-05T00:00:00.000Z",
+      "locales": ["en"]
+    },
+    {
+      "id": "science/photosynthesis",
+      "title": "Photosynthesis in two stages",
+      "body": "Draft lesson for review. Photosynthesis is the process by which green plants convert light into chemical energy. Chlorophyll in the leaves absorbs light, and carbon dioxide from the air combines with water drawn up through the stem.\n\nThe products are glucose, which stores energy for growth, and oxygen, which is released into the air. Without this process, the energy entering most food chains would not be captured.",
+      "taskClasses": ["explain", "describe"],
+      "keywords": ["photosynthesis", "chlorophyll", "glucose", "oxygen"],
+      "licence": "CC-BY-4.0",
+      "retrievedAt": "2026-01-05T00:00:00.000Z",
+      "locales": ["en"]
+    },
+    {
+      "id": "science/water-cycle",
+      "title": "The water cycle",
+      "body": "Draft lesson for review. The water cycle describes how water moves between the sea, the sky, and the land. Heat from the sun turns surface water into vapour, which rises and cools into clouds.\n\nWater returns as rain or snow, collects in rivers and soil, and eventually flows back to the sea. The same water is used many times, so the cycle has no true beginning or end.",
+      "taskClasses": ["explain", "describe"],
+      "keywords": ["evaporation", "condensation", "precipitation", "cycle"],
+      "licence": "CC-BY-4.0",
+      "retrievedAt": "2026-01-05T00:00:00.000Z",
+      "locales": ["en"]
+    },
+    {
+      "id": "biology/cell-structure",
+      "title": "Cell structure",
+      "body": "Draft lesson for review. A cell is the smallest unit that carries out the processes of life. Animal and plant cells share a membrane, cytoplasm, and a nucleus that holds the genetic instructions.\n\nPlant cells also have a rigid cell wall and chloroplasts that capture light. These parts work together so the cell can take in nutrients, release energy, and reproduce.",
+      "taskClasses": ["describe", "list"],
+      "keywords": ["cell", "nucleus", "membrane", "chloroplast", "cytoplasm"],
+      "licence": "CC-BY-4.0",
+      "retrievedAt": "2026-01-05T00:00:00.000Z",
+      "locales": ["en"]
+    },
+    {
+      "id": "physics/gravity",
+      "title": "Gravity and motion",
+      "body": "Draft lesson for review. Gravity is the attraction between objects that have mass. Near the surface of the earth it gives every free object the same downward acceleration, whatever its mass, when air resistance is ignored.\n\nThe strength of the pull grows with the masses involved and weakens with the square of the distance between them. This same force keeps the planets in their paths around the sun.",
+      "taskClasses": ["explain", "describe"],
+      "keywords": ["gravity", "mass", "acceleration", "orbit"],
+      "licence": "CC-BY-4.0",
+      "retrievedAt": "2026-01-05T00:00:00.000Z",
+      "locales": ["en"]
+    },
+    {
+      "id": "safety/digital-safety",
+      "title": "Digital safety habits",
+      "body": "Draft lesson for review. Digital safety is the set of habits that keep personal information private while using the internet. Strong, unique passwords and care about what is shared reduce the chance that an account is misused.\n\nBefore opening a link, check who sent it and whether the address looks genuine. If something seems wrong, stop and ask a trusted adult rather than replying or paying.",
+      "taskClasses": ["explain", "list"],
+      "keywords": ["password", "privacy", "phishing", "security"],
+      "licence": "CC-BY-4.0",
+      "retrievedAt": "2026-01-05T00:00:00.000Z",
+      "locales": ["en"]
+    },
+    {
+      "id": "life/financial-literacy",
+      "title": "Reading money clearly",
+      "body": "Draft lesson for review. Financial literacy is the ability to read and reason about money. Income is what comes in, expenses are what goes out, and the difference over a period is what remains for saving.\n\nA simple record of income and spending makes it possible to see where money goes and to plan ahead. Borrowing adds a future obligation, so the terms should be read carefully before any agreement is made.",
+      "taskClasses": ["explain", "define"],
+      "keywords": ["income", "expense", "saving", "budget", "borrowing"],
+      "licence": "CC-BY-4.0",
+      "retrievedAt": "2026-01-05T00:00:00.000Z",
+      "locales": ["en"]
+    }
+  ]
+}

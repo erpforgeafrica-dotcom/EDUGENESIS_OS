@@ -25,6 +25,7 @@
  *   an enrolment.
  */
 import { createAccessibilityGuardian, createAccessibilityValidator } from '@edugenesis/accessibility';
+import { loadPack, toTierZeroEntries } from '@edugenesis/curriculum';
 import type {
   AccessibilityEmission,
   AccessibilityGuardian,
@@ -32,6 +33,7 @@ import type {
   ProviderAdapter,
   RequestContext,
   TaskPolicy,
+  TaskClass,
   TierZeroProvider,
   ValidationContext,
 } from '@edugenesis/contracts';
@@ -51,7 +53,10 @@ import {
   type OneKeyGatewayImpl,
   wireConfiguredProvider,
 } from '@edugenesis/onekey';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createSqliteKillSwitchStore } from './kill-switch-store.js';
+import { PROJECT_ROOT } from './paths.js';
 import { loadSettings, type SettingsFile } from './settings-store.js';
 
 /** How long a learner request may take before it is abandoned. */
@@ -164,6 +169,38 @@ function learnerPolicy(): TaskPolicy {
   return { taskClass: 'explain', safetyTier: 'low', dataClass: 'public' };
 }
 
+/**
+ * The default offline curriculum is a VERSIONED, VALIDATED PACK (PG-09), not a
+ * hardcoded three-lesson array. The pack ships inside the project, so the
+ * portable copy reads its own copy. An invalid or missing pack is a build
+ * defect: fall back to the built-in bundle rather than deny a learner, but the
+ * validator's issues would fail the verify gate in CI, so this path is a last
+ * resort, never a silent substitute in a released build.
+ */
+function defaultTierZero() {
+  try {
+    const raw = readFileSync(
+      join(PROJECT_ROOT, 'packages', 'curriculum', 'packs', 'starter-core-v1.json'),
+      'utf8',
+    );
+    const parsed = loadPack(raw);
+    if (parsed.ok) {
+      const entries = toTierZeroEntries(parsed.pack).map((entry) => ({
+        ...entry,
+        taskClasses: [...entry.taskClasses] as TaskClass[],
+        keywords: entry.keywords === undefined ? undefined : [...entry.keywords],
+        promptPatterns:
+          entry.promptPatterns === undefined ? undefined : [...entry.promptPatterns],
+        locales: entry.locales === undefined ? undefined : [...entry.locales],
+      }));
+      return createTierZeroProvider({ entries });
+    }
+  } catch {
+    // The honest built-in floor still serves a learner; never deny core learning.
+  }
+  return createTierZeroProvider();
+}
+
 /** The request a learner question becomes. */
 function learnerRequest(prompt: string): CompletionRequest {
   return {
@@ -242,7 +279,7 @@ export function createLearnerServices(options: LearnerServicesOptions): LearnerS
   // switch is SHARED: every replica over this data directory sees the same
   // killed set (audit finding F3-11).
   const gateway: OneKeyGatewayImpl = createOneKeyGateway({
-    tierZero: options.tierZero ?? createTierZeroProvider(),
+    tierZero: options.tierZero ?? defaultTierZero(),
     killSwitch,
   });
   // The settings' primary provider first, then any explicit adapters, so an

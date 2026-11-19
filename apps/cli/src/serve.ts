@@ -75,6 +75,16 @@ const STATIC_ROUTES: Record<string, string> = {
   '/sw.js': 'sw.js',
   '/manifest.webmanifest': 'manifest.webmanifest',
   '/icon.svg': 'icon.svg',
+  // The three dashboards (PG-07). Each is one page with honest states, built to
+  // the design constitution and scanned by the same gates as /learn.
+  '/dashboard': 'dashboard.html',
+  '/dashboard.html': 'dashboard.html',
+  '/sponsor': 'sponsor.html',
+  '/sponsor.html': 'sponsor.html',
+  '/operator': 'operator.html',
+  '/operator.html': 'operator.html',
+  '/dashboard.js': 'dashboard.js',
+  '/dashboard.css': 'dashboard.css',
 };
 
 /**
@@ -816,6 +826,119 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
       const draft = url.searchParams.get('draft') === '1';
       const result = sponsor.sponsorReport({ sponsorId, draft });
       sendJson(response, result.ok ? 200 : 409, result);
+      return;
+    }
+
+    // ---- dashboard surfaces (PG-07) -------------------------------------
+    // Every number comes from a real source. When a source has no data the
+    // response carries null/empty, which the pages render as an honest empty
+    // state — never a plausible-looking zero.
+    if (pathname === '/api/dashboard/learner') {
+      if (method !== 'GET') { sendJson(response, 405, { ok: false, error: 'Use GET.' }); return; }
+      sendJson(response, 200, {
+        ok: true,
+        progress: null,
+        nextLesson: null,
+        generatedAt: new Date().toISOString(),
+      });
+      return;
+    }
+
+    if (pathname === '/api/dashboard/sponsor') {
+      if (method !== 'GET') { sendJson(response, 405, { ok: false, error: 'Use GET.' }); return; }
+      const read = authorizeAuthenticatedRead(sessionOf(request, sessions), 'sponsor:read');
+      if (!read.allowed) { sendJson(response, 403, { ok: false, error: read.reason }); return; }
+      const view = sponsor.publicLedger();
+      const entries = view.entries as readonly {
+        readonly type?: string;
+        readonly payload?: Record<string, unknown>;
+      }[];
+      const pledgedCents = entries.reduce((total, entry) => {
+        if (entry.type !== 'sponsor_pledge') return total;
+        const value = Number(entry.payload?.['amount_cents']);
+        return Number.isFinite(value) ? total + value : total;
+      }, 0);
+      sendJson(response, 200, {
+        ok: true,
+        funding: {
+          totalCommitted: pledgedCents,
+          totalDisbursed: null,
+          currency: 'USD',
+        },
+        impact: {
+          lessonsDelivered: null,
+          learnersReached: null,
+          reportingPeriod: null,
+        },
+        ledger: {
+          root: view.merkleRoot.length > 0 ? view.merkleRoot : null,
+          verificationState: view.verification.ok ? 'verified' : 'unverified',
+          lastAnchoredAt: null,
+        },
+        report: { status: 'draft', url: null, generatedAt: null },
+      });
+      return;
+    }
+
+    if (pathname === '/api/dashboard/operator') {
+      if (method !== 'GET') { sendJson(response, 405, { ok: false, error: 'Use GET.' }); return; }
+      const read = authorizeAuthenticatedRead(sessionOf(request, sessions), 'settings:read');
+      if (!read.allowed) { sendJson(response, 403, { ok: false, error: read.reason }); return; }
+      const ledger = sponsor.publicLedger();
+      const trail = authStore.auditTrail();
+      sendJson(response, 200, {
+        ok: true,
+        health: { status: ledger.verification.ok ? 'operational' : 'degraded', checkedAt: new Date().toISOString() },
+        tiers: [
+          { tier: 'Tier 0', provider: 'offline curriculum pack', status: 'available' },
+          { tier: 'Tier 1', provider: loaded.settings.providers.primary, status: 'unknown' },
+        ],
+        budget: { unitsUsed: null, unitsCap: null, tokensUsed: null, burnRatePerHour: null },
+        controls: { state: 'unknown', lastAction: null },
+        audit: trail.map((event) => ({
+          at: event.at,
+          action: event.action,
+          actor: event.actor,
+          approver: null,
+          reason: event.outcome,
+        })),
+      });
+      return;
+    }
+
+    if (pathname === '/api/dashboard/operator/control') {
+      if (method !== 'POST') { sendJson(response, 405, { ok: false, error: 'Use POST.' }); return; }
+      const write = authorizeAuthenticatedWrite(
+        sessionOf(request, sessions),
+        headerValue(request, 'x-csrf-token'),
+        'operator:kill',
+      );
+      if (!write.allowed) { sendJson(response, 403, { ok: false, error: write.reason }); return; }
+      let body: unknown;
+      try { body = await readBody(request); } catch (error) {
+        sendJson(response, 400, { ok: false, error: `Could not read the request body: ${(error as Error).message}` });
+        return;
+      }
+      const payload = isPlainObject(body) ? body : {};
+      const action = String(payload['action'] ?? '');
+      const actor = String(payload['actor'] ?? '');
+      const reason = String(payload['reason'] ?? '');
+      const approver = String(payload['approver'] ?? '');
+      // Server-side two-person rule: the client gate is a guard, not authority.
+      if (!['kill', 'revive'].includes(action) || actor.length === 0 || reason.length === 0 ||
+          approver.length === 0 || approver === actor) {
+        sendJson(response, 400, { ok: false, error: 'A kill/revive needs an action, actor, reason and a different approver.' });
+        return;
+      }
+      const providerId = String(loaded.settings.providers.primary || 'primary');
+      if (action === 'kill') learner.killProvider(providerId, `${reason} [actor=${actor} approver=${approver}]`);
+      else learner.reviveProvider(providerId, `${reason} [actor=${actor} approver=${approver}]`);
+      authStore.auditEvent({ actor, action, target: providerId, outcome: `approved-by:${approver}; ${reason}` });
+      sendJson(response, 200, {
+        ok: true,
+        message: `The server recorded the ${action} for ${providerId}.`,
+        state: action === 'kill' ? 'halted' : 'running',
+      });
       return;
     }
 

@@ -13,9 +13,9 @@
     "apps/*"
   ],
   "scripts": {
-    "build": "tsc -b --force packages/contracts packages/accessibility packages/auth packages/onekey packages/ledger packages/identity packages/verification apps/cli",
-    "clean": "tsc -b --clean packages/contracts packages/accessibility packages/auth packages/onekey packages/ledger packages/identity packages/verification apps/cli",
-    "typecheck": "tsc -b --force --pretty false packages/contracts packages/accessibility packages/auth packages/onekey packages/ledger packages/identity packages/verification apps/cli",
+    "build": "tsc -b --force packages/contracts packages/accessibility packages/auth packages/curriculum packages/onekey packages/ledger packages/identity packages/verification apps/cli",
+    "clean": "tsc -b --clean packages/contracts packages/accessibility packages/auth packages/curriculum packages/onekey packages/ledger packages/identity packages/verification apps/cli",
+    "typecheck": "tsc -b --force --pretty false packages/contracts packages/accessibility packages/auth packages/curriculum packages/onekey packages/ledger packages/identity packages/verification apps/cli",
     "test": "npm run build && npm run test:only",
     "test:only": "node tools/assert-tests-ran.mjs --min 20 -- node --test --test-reporter=spec \"packages/*/dist/**/*.test.js\" \"apps/*/dist/**/*.test.js\"",
     "doctor": "node apps/cli/dist/doctor.js",
@@ -26,7 +26,9 @@
     "secrets:scan": "node tools/secrets-scan.mjs",
     "tsconfig:fix": "node tools/fix-tsconfig-paths.mjs",
     "verify": "npm run build && npm run test:only && node tools/verify-all.mjs && npm run secrets:scan && npm run sbom && node tools/checksums.mjs && node tools/attest.mjs",
-    "verify:repro": "node tools/verify-repro.mjs"
+    "verify:repro": "node tools/verify-repro.mjs",
+    "ci:local": "node tools/ci-local.mjs",
+    "release": "node tools/release.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

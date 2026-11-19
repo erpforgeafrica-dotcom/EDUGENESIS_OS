@@ -1,0 +1,218 @@
+/* ==========================================================================
+   EduGenesis OS — dashboard surfaces (learner, sponsor, operator).
+
+   Every colour, space, radius, type size, motion value and focus style comes
+   from the Aurora token stylesheet (/assets/edugenesis-tokens.css). This file
+   declares no colour literal. Focus rings are authored ONLY in that token
+   stylesheet and are never suppressed here.
+   ========================================================================== */
+
+.lede {
+  color: var(--eg-text-secondary);
+  max-width: var(--eg-container-prose);
+  margin-top: var(--eg-space-3);
+}
+
+.db-main {
+  width: 100%;
+  max-width: var(--eg-container);
+  margin: 0 auto;
+  padding: var(--eg-space-8) var(--eg-space-6) var(--eg-space-12);
+}
+
+.db-header {
+  border-bottom: 1px solid var(--eg-border-subtle);
+  padding-bottom: var(--eg-space-6);
+  margin-bottom: var(--eg-space-6);
+}
+
+.db-header h1 {
+  margin-top: var(--eg-space-2);
+  text-wrap: balance;
+}
+
+.db-section {
+  margin-bottom: var(--eg-space-10);
+}
+
+.db-section > h2 {
+  font-size: var(--eg-text-h2);
+  margin-bottom: var(--eg-space-4);
+  text-wrap: balance;
+}
+
+/* Live regions. Honest tone is data, never decoration: ok and error are stated
+   in the message text as well as reflected by the token colour. */
+.eg-status {
+  margin: 0 0 var(--eg-space-4);
+  font-size: var(--eg-text-caption);
+  min-height: 1.5em;
+}
+.eg-status[data-tone="ok"] { color: var(--eg-success); }
+.eg-status[data-tone="error"] { color: var(--eg-danger); }
+
+/* Metric cards. Values are tabular so columns of figures line up and can be
+   read without a ruler. */
+.db-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--eg-space-4);
+}
+.db-metric__value {
+  font-size: var(--eg-text-h2);
+  font-variant-numeric: tabular-nums;
+  margin-bottom: var(--eg-space-1);
+  overflow-wrap: anywhere;
+}
+.db-metric__label {
+  color: var(--eg-text-secondary);
+  font-size: var(--eg-text-caption);
+  margin: 0;
+}
+
+/* Empty states state what will appear, in a quiet voice. They are not hints:
+   they describe a region, not an owning control. */
+.db-empty {
+  color: var(--eg-text-secondary);
+  font-size: var(--eg-text-caption);
+  max-width: var(--eg-container-prose);
+  margin: 0;
+}
+.db-note {
+  color: var(--eg-text-secondary);
+  font-size: var(--eg-text-caption);
+  max-width: var(--eg-container-prose);
+}
+
+/* Ledger proof key/value pairs. */
+.db-kv {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) 1fr;
+  gap: var(--eg-space-2) var(--eg-space-4);
+  margin: 0;
+}
+.db-kv dt {
+  color: var(--eg-text-secondary);
+  font-size: var(--eg-text-caption);
+}
+.db-kv dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.db-ledger {
+  font-family: var(--eg-font-mono);
+  font-size: var(--eg-text-caption);
+  overflow-wrap: anywhere;
+}
+
+/* State badges. The word carries the state; the border only reinforces it, so
+   meaning never rests on colour alone. */
+.db-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--eg-space-6);
+  padding: var(--eg-space-1) var(--eg-space-3);
+  border: 1px solid var(--eg-border-strong);
+  border-radius: var(--eg-radius-pill);
+  font-size: var(--eg-text-caption);
+  font-weight: var(--eg-weight-semibold);
+}
+.db-badge[data-tone="draft"] { border-color: var(--eg-warning); color: var(--eg-text-primary); }
+.db-badge[data-tone="ok"] { border-color: var(--eg-success); color: var(--eg-text-primary); }
+.db-badge[data-tone="error"] { border-color: var(--eg-danger); color: var(--eg-text-primary); }
+
+/* Lists: provider rows and audit entries. */
+.db-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--eg-space-3);
+}
+.db-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--eg-space-2) var(--eg-space-4);
+  border-bottom: 1px solid var(--eg-border-subtle);
+  padding-bottom: var(--eg-space-3);
+}
+.db-list time {
+  font-family: var(--eg-font-mono);
+  font-size: var(--eg-text-caption);
+  color: var(--eg-text-tertiary);
+}
+.db-audit-detail {
+  color: var(--eg-text-secondary);
+  font-size: var(--eg-text-caption);
+}
+
+/* Two-person control form. */
+.db-inputs {
+  display: grid;
+  gap: var(--eg-space-4);
+  max-width: var(--eg-container-prose);
+  margin-bottom: var(--eg-space-6);
+}
+.db-input-group label,
+.db-check label {
+  display: block;
+  font-weight: var(--eg-weight-semibold);
+  font-size: var(--eg-text-body);
+  margin-bottom: var(--eg-space-2);
+}
+.db-input-group input {
+  width: 100%;
+  min-height: var(--eg-touch-target);
+  padding: var(--eg-space-3) var(--eg-space-4);
+  border: 1px solid var(--eg-border-strong);
+  border-radius: var(--eg-radius-md);
+  background: var(--eg-raised);
+  color: var(--eg-text-primary);
+  font-family: var(--eg-font-text);
+  font-size: var(--eg-text-body);
+}
+.hint {
+  color: var(--eg-text-tertiary);
+  font-size: var(--eg-text-caption);
+  margin: var(--eg-space-1) 0 0;
+}
+
+/* The checkbox and its label share one tall hit target. */
+.db-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--eg-space-2) var(--eg-space-3);
+}
+.db-check input {
+  width: var(--eg-space-5);
+  height: var(--eg-space-5);
+  accent-color: var(--eg-gold);
+}
+.db-check label {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--eg-touch-target);
+  margin-bottom: 0;
+  cursor: pointer;
+}
+.db-check .hint {
+  flex-basis: 100%;
+  margin-left: calc(var(--eg-space-5) + var(--eg-space-3));
+}
+
+.db-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--eg-space-3);
+}
+
+.db-footer {
+  border-top: 1px solid var(--eg-border-subtle);
+  margin-top: var(--eg-space-12);
+  padding-top: var(--eg-space-6);
+  color: var(--eg-text-tertiary);
+  font-size: var(--eg-text-caption);
+}

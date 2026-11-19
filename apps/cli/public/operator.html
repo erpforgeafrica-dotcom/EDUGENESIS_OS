@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="light" />
+    <title>EduGenesis OS — Operator console</title>
+    <link rel="icon" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/assets/edugenesis-tokens.css" />
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body data-surface="operator">
+    <a class="skip-link" href="#main">Skip to the operator console</a>
+
+    <main class="db-main" id="main" tabindex="-1">
+      <header class="db-header">
+        <p class="label">EduGenesis OS</p>
+        <h1>Operator console</h1>
+        <p class="lede">
+          The cost-and-custody view of the same events a learner sees as lessons. This
+          surface reports system state and spending, never a learner's identity.
+        </p>
+      </header>
+
+      <p class="eg-status" id="page-status" role="status" aria-live="polite"></p>
+
+      <section class="db-section" aria-labelledby="health-heading">
+        <h2 id="health-heading">System health</h2>
+        <div class="card">
+          <p><span class="db-badge" id="health-state">Not available</span></p>
+          <p class="db-note" id="health-time">No health reading has been received.</p>
+        </div>
+      </section>
+
+      <section class="db-section" aria-labelledby="tiers-heading">
+        <h2 id="tiers-heading">Tiers and providers</h2>
+        <ul class="db-list" id="tiers-list"></ul>
+        <p class="db-empty" id="tiers-empty" hidden>
+          No provider information has been reported yet. Tier availability will appear
+          here when the server reports it.
+        </p>
+      </section>
+
+      <section class="db-section" aria-labelledby="budget-heading">
+        <h2 id="budget-heading">Budget and token burn</h2>
+        <div class="db-grid" id="budget-grid" aria-busy="false"></div>
+        <p class="db-empty" id="budget-empty" hidden>
+          No budget figures have been reported yet. Units used, the hard cap, tokens used
+          and the hourly burn rate will appear here when available.
+        </p>
+      </section>
+
+      <section class="db-section" aria-labelledby="control-heading">
+        <h2 id="control-heading">System control</h2>
+        <div class="card">
+          <p class="db-note" id="control-state-note">Current state has not been reported by the server.</p>
+          <p class="db-note">
+            Two-person rule: a kill or revive requires an actor, a reason, a second
+            person, and an explicit confirmation. Both buttons stay disabled until all
+            four are present. The server must confirm the action before any status
+            claim is shown.
+          </p>
+          <div class="db-inputs">
+            <div class="db-input-group">
+              <label for="ctl-actor">Actor</label>
+              <input id="ctl-actor" name="actor" type="text" autocomplete="off" spellcheck="false" aria-describedby="hint-ctl-actor" />
+              <p class="hint" id="hint-ctl-actor">The operator performing this action.</p>
+            </div>
+            <div class="db-input-group">
+              <label for="ctl-reason">Reason</label>
+              <input id="ctl-reason" name="reason" type="text" autocomplete="off" aria-describedby="hint-ctl-reason" />
+              <p class="hint" id="hint-ctl-reason">Why this control action is needed.</p>
+            </div>
+            <div class="db-input-group">
+              <label for="ctl-approver">Second person (approver)</label>
+              <input id="ctl-approver" name="approver" type="text" autocomplete="off" spellcheck="false" aria-describedby="hint-ctl-approver" />
+              <p class="hint" id="hint-ctl-approver">A different person must review and approve this action.</p>
+            </div>
+            <div class="db-check">
+              <input id="ctl-confirm" name="confirm" type="checkbox" aria-describedby="hint-ctl-confirm" />
+              <label for="ctl-confirm">I confirm the named second person has approved this action</label>
+              <p class="hint" id="hint-ctl-confirm">Required before either control button can be used.</p>
+            </div>
+          </div>
+          <div class="db-controls">
+            <button type="button" class="btn btn--secondary" id="ctl-kill" disabled>Engage kill switch</button>
+            <button type="button" class="btn btn--secondary" id="ctl-revive" disabled>Revive system</button>
+          </div>
+          <p class="eg-status" id="control-status" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="db-section" aria-labelledby="audit-heading">
+        <h2 id="audit-heading">Audit trail</h2>
+        <ul class="db-list" id="audit-list"></ul>
+        <p class="db-empty" id="audit-empty" hidden>
+          No control actions have been recorded yet. Each approved kill or revive will
+          appear here with its actor, reason, approver, and time.
+        </p>
+      </section>
+
+      <footer class="db-footer">
+        <p>EduGenesis OS · every control action is recorded and attributed.</p>
+      </footer>
+    </main>
+
+    <script src="/dashboard.js" defer></script>
+  </body>
+</html>

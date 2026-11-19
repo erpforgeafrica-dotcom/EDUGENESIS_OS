@@ -19,6 +19,7 @@
     "@edugenesis/accessibility": "0.1.0",
     "@edugenesis/auth": "0.1.0",
     "@edugenesis/contracts": "0.1.0",
+    "@edugenesis/curriculum": "0.1.0",
     "@edugenesis/identity": "0.1.0",
     "@edugenesis/ledger": "0.1.0",
     "@edugenesis/onekey": "0.1.0"

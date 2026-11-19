@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <!-- ADR-0011 / pwa-light-default gate: the light theme is declared on the
+         document itself. No colour literal appears in this page. -->
+    <meta name="color-scheme" content="light" />
+    <title>EduGenesis OS — Your learning</title>
+    <link rel="icon" href="/icon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="stylesheet" href="/assets/edugenesis-tokens.css" />
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body data-surface="learner">
+    <a class="skip-link" href="#main">Skip to your learning</a>
+
+    <main class="db-main" id="main" tabindex="-1">
+      <header class="db-header">
+        <p class="label">EduGenesis OS</p>
+        <h1>Your learning</h1>
+        <p class="lede">
+          A quiet record of the lessons you have finished and a suggestion for what you
+          might learn next. Nothing here is timed, ranked, or scored against anyone else.
+        </p>
+      </header>
+
+      <!-- Live region: every load, empty and offline outcome is announced here. -->
+      <p class="eg-status" id="page-status" role="status" aria-live="polite"></p>
+
+      <section class="db-section" aria-labelledby="progress-heading">
+        <h2 id="progress-heading">Progress</h2>
+        <div class="db-grid" id="progress-grid" aria-busy="false"></div>
+        <p class="db-empty" id="progress-empty" hidden>
+          No progress has been recorded yet. When you finish a lesson, the number of
+          lessons completed and the topics you have explored will appear here.
+        </p>
+      </section>
+
+      <section class="db-section" aria-labelledby="next-heading">
+        <h2 id="next-heading">Next lesson</h2>
+        <div class="card" id="next-card" hidden tabindex="-1" aria-labelledby="next-title">
+          <p class="label" id="next-topic"></p>
+          <h3 id="next-title"></h3>
+          <p id="next-description"></p>
+        </div>
+        <p class="db-empty" id="next-empty" hidden>
+          There is no suggested next lesson yet. After you ask a question, a relevant
+          next step will appear here.
+        </p>
+      </section>
+
+      <footer class="db-footer">
+        <p>EduGenesis OS · your learning stays yours.</p>
+      </footer>
+    </main>
+
+    <script src="/dashboard.js" defer></script>
+  </body>
+</html>
