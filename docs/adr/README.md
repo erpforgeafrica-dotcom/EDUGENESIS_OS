@@ -51,6 +51,8 @@ later ADR, not edited in place.
 | [ADR-0023](ADR-0023-operator-role-mapping.md) | Operator role maps to the existing `admin` contract role | Accepted | Chief Systems Architect | This directory |
 | [ADR-0024](ADR-0024-signed-tier-zero-bundle.md) | Ed25519-signed Tier 0 bundle with an owner-only key ceremony | Accepted | Chief Systems Architect | This directory |
 | [ADR-0025](ADR-0025-funding-to-learner-credit-rule.md) | Funding-to-learner-credit rule: 60 % reinvestment to a pseudonymous learner pool | Accepted | Chief Systems Architect | This directory |
+| [ADR-0026](ADR-0026-free-tier-durability.md) | Free-tier durability by sealed export/restore; persistent disk is an owner-only upgrade | Accepted | Chief Systems Architect | This directory |
+| [ADR-0027](ADR-0027-local-ci-and-release-gate.md) | Local CI equivalents and a release gate that refuses an unverified build | Accepted | Chief Systems Architect | This directory |
 
 ## ADR-0001 to ADR-0012
 
