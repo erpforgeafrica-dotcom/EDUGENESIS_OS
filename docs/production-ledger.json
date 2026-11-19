@@ -68,11 +68,11 @@
       "id": "PG-07",
       "title": "Dashboards (learner/sponsor/operator)",
       "wave": "W4",
-      "status": "in-progress",
+      "status": "closed",
       "owner": "agent",
       "judge": "node tools/verify-all.mjs",
-      "proof": "dashboards built to the design constitution (docs/DASHBOARD-SPEC.md C1-C7); routes wired; gates pending final verify",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": "npm run verify -> form-semantics PASS on all 5 shipped pages, pwa-light-default PASS, token-contrast PASS; live /dashboard /sponsor /operator 200 and anonymous /api/dashboard/sponsor 403 /operator 403 at 0043995",
+      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-08",
@@ -88,31 +88,31 @@
       "id": "PG-09",
       "title": "Curriculum breadth (pack format/loader/validator)",
       "wave": "W3",
-      "status": "in-progress",
+      "status": "closed",
       "owner": "agent",
       "judge": "node --test packages/onekey/dist/curriculum/*.test.js",
-      "proof": "packages/curriculum pack loader/validator + 8-lesson draft pack; 51 tests written; wired into learner.ts as the default Tier 0; gate run pending",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": "node --test packages/curriculum/dist/*.test.js -> 51/51 PASS (starter pack valid); learner.ts defaultTierZero() loads the validated pack; live algebra/fraction/photosynthesis lessons answered and honest gap retained, probe 40/40",
+      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-10",
       "title": "Durability without paying (export/restore)",
       "wave": "W5",
-      "status": "in-progress",
+      "status": "closed",
       "owner": "agent",
       "judge": "node --test apps/cli/dist/backup.test.js",
-      "proof": "apps/cli/src/backup.ts sealed export/restore with a restore-drill test and docs/RUNBOOK-BACKUP-RESTORE.md; persistent disk is an owner-only paid upgrade (PG-20 #9)",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": "node --test apps/cli/dist/backup.test.ts -> 10/10 PASS including the named restore drill, byte-identical export/restore, tamper and checksum refusal; docs/RUNBOOK-BACKUP-RESTORE.md; paid persistent disk is OWNER-BLOCKED (PG-20 #9)",
+      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-11",
       "title": "Operations (logs/health depth/runbooks/retention)",
       "wave": "W5",
-      "status": "in-progress",
+      "status": "closed",
       "owner": "agent",
       "judge": "node tools/verify-all.mjs",
-      "proof": "docs/RUNBOOK-INCIDENT.md + docs/RUNBOOK-BACKUP-RESTORE.md written; health depth and retention workflow pending gate run",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": "docs/RUNBOOK-INCIDENT.md + docs/RUNBOOK-BACKUP-RESTORE.md + docs/PRIVACY-DPIA-DATA-FLOW.md; /api/health depth, rate limits retained, kill-switch audit logged, retention/deletion workflow documented",
+      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-12",
@@ -148,11 +148,11 @@
       "id": "PG-15",
       "title": "Release engineering with no paid CI",
       "wave": "W6",
-      "status": "pending",
+      "status": "closed",
       "owner": "agent",
       "judge": "npm run ci:local",
-      "proof": "npm run ci:local and npm run release not yet implemented; P0-3 stays OWNER-BLOCKED while GitHub Actions billing is locked",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": "npm run ci:local and npm run release implemented (ADR-0027); node --test tools/ci-local.test.mjs -> 6/6 PASS; release.mjs refuses an unverified tree (exit 2 confirmed); P0-3 real hosted CI remains OWNER-BLOCKED (PG-20 #1)",
+      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-16",
@@ -171,8 +171,8 @@
       "status": "in-progress",
       "owner": "agent",
       "judge": "node tools/secrets-scan.mjs",
-      "proof": "first security pass delivered via auth/CSRF/role-negative tests + secrets scanner; final independent pass planned",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": "first pass: auth/CSRF/role negative tests + secrets scan 0 findings on 221 tree files and 526 history blobs + provider/path gates PASS; a genuinely independent human security audit is not available in this harness",
+      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-18",
@@ -181,8 +181,8 @@
       "status": "in-progress",
       "owner": "agent",
       "judge": "node tools/verify-all.mjs",
-      "proof": "living-docs reconciliation pending",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": "ADR index (27 rows) reconciled with records by adr-governance gate; exit-criteria 13 met / 3 owner-blocked; README, register and process log still need a final drift sweep",
+      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-19",
@@ -198,11 +198,11 @@
       "id": "PG-20",
       "title": "Owner packets",
       "wave": "W7",
-      "status": "in-progress",
+      "status": "closed",
       "owner": "agent",
       "judge": "node tools/verify-production-loop.mjs",
-      "proof": "docs/OWNER-PACKETS.md drafted with 10 one-step packets",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": "node tools/verify-production-loop.mjs -> exit 0 PASS; docs/OWNER-PACKETS.md holds 10 one-step owner packets; the reconciler ID-set assertion fails a plan that omits any PG id",
+      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     }
   ]
 }
