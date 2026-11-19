@@ -8,23 +8,23 @@
     "passed": 18,
     "blockersFailed": 0,
     "warnings": 0,
-    "filesVerified": 246
+    "filesVerified": 273
   },
   "subjects": [
     {
       "name": "artifacts/verify-report.json",
-      "sha256": "6000474dc050400cdbb2bbb87885618b58b302addb7850e682c3991079d68c89",
+      "sha256": "bae881412ec6eafc6702d8386d0fad55685df84c96f3c8e9921c09f15afd8937",
       "bytes": 4287
     },
     {
       "name": "artifacts/sbom.cdx.json",
-      "sha256": "263a4490b48a07adc5f31dae063befab81f9ff7f886df3f2b08d9d5290dc2dd2",
-      "bytes": 7958
+      "sha256": "d218fc414f4a331bb7f77c6893bd0e3703dc094ff14cf5657bfcc6b5f60fe5ef",
+      "bytes": 8498
     },
     {
       "name": "artifacts/checksums.sha256",
-      "sha256": "8bf6de6df51008d0a99c0c84c72ee24f3b8aa8402d7b79493c7b526fd5eabe93",
-      "bytes": 24963
+      "sha256": "0aadac4786eb58b6edaa6a5ac0820d2c79a3fd88b6da53fae1bb57c443208478",
+      "bytes": 27576
     }
   ],
   "toolchain": {

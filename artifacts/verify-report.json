@@ -36,28 +36,28 @@
       "title": "no-pii-in-source",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no personal data found in 177 source file(s)"
+      "detail": "no personal data found in 194 source file(s)"
     },
     {
       "id": "no-provider-leak",
       "title": "no-provider-leak",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no provider reference outside packages/onekey in 133 source file(s)"
+      "detail": "no provider reference outside packages/onekey in 150 source file(s)"
     },
     {
       "id": "path-portability",
       "title": "path-portability",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no absolute path in 221 shipped file(s)"
+      "detail": "no absolute path in 242 shipped file(s)"
     },
     {
       "id": "design-token-governance",
       "title": "design-token-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "no raw colour literal in 177 source file(s)"
+      "detail": "no raw colour literal in 194 source file(s)"
     },
     {
       "id": "contracts-baseline",
@@ -92,14 +92,14 @@
       "title": "form-semantics",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "every control on all 2 shipped page(s) is named, every hint is referenced, and status feedback is announced"
+      "detail": "every control on all 5 shipped page(s) is named, every hint is referenced, and status feedback is announced"
     },
     {
       "id": "adr-governance",
       "title": "adr-governance",
       "severity": "blocker",
       "result": "PASS",
-      "detail": "25 ADR index rows agree with their records, and every owner is a registered role"
+      "detail": "27 ADR index rows agree with their records, and every owner is a registered role"
     },
     {
       "id": "token-contrast",

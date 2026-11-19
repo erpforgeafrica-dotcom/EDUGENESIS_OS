@@ -1,7 +1,7 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:a5154b67-0290-5122-b144-07ae5cdb8f23",
+  "serialNumber": "urn:uuid:afc18e7c-cdd0-54c9-96c1-c70d0cb0f17a",
   "version": 1,
   "metadata": {
     "timestamp": null,
@@ -83,6 +83,20 @@
         {
           "alg": "SHA-256",
           "content": "4d6d5875e00faf55fadc30e80c2cfc85ac0aa418083de1307be6e240c02329c0"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/@edugenesis/curriculum@0.1.0",
+      "name": "@edugenesis/curriculum",
+      "version": "0.1.0",
+      "purl": "pkg:npm/@edugenesis/curriculum@0.1.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "12938fff64c450f220d5661671bb365f76daa6a340b575241ca4ac602bc794b9"
         }
       ]
     },
@@ -260,6 +274,7 @@
         "pkg:npm/@edugenesis/accessibility@0.1.0",
         "pkg:npm/@edugenesis/auth@0.1.0",
         "pkg:npm/@edugenesis/contracts@0.1.0",
+        "pkg:npm/@edugenesis/curriculum@0.1.0",
         "pkg:npm/@edugenesis/identity@0.1.0",
         "pkg:npm/@edugenesis/ledger@0.1.0",
         "pkg:npm/@edugenesis/onekey@0.1.0"
@@ -267,6 +282,10 @@
     },
     {
       "ref": "pkg:npm/@edugenesis/contracts@0.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/@edugenesis/curriculum@0.1.0",
       "dependsOn": []
     },
     {
