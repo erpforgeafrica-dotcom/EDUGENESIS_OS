@@ -1,0 +1,177 @@
+{
+  "tool": "tools/ci-parity.mjs",
+  "schemaVersion": 1,
+  "mode": "structure",
+  "hostedRun": null,
+  "hostedRunReason": "GitHub Actions is disabled at the account level: seven check-runs per commit are created with zero steps and zero output. No hosted run is claimed; P0-3 stays a placeholder until the owner clears it.",
+  "parity": "PASS",
+  "nodeFloor": "22",
+  "jobs": [
+    "gl01_intake",
+    "gl02_development",
+    "gl02_static_analysis",
+    "gl05_loop_testing",
+    "gl05_accessibility",
+    "gl08_package_sign",
+    "gl08_verify"
+  ],
+  "coveredByVerify": [
+    "gl05_loop_testing",
+    "gl08_package_sign",
+    "gl08_verify"
+  ],
+  "executed": [],
+  "verify": {
+    "present": false,
+    "bound": false
+  },
+  "checks": [
+    {
+      "name": "the workflow declares seven jobs",
+      "ok": true,
+      "detail": "7: gl01_intake, gl02_development, gl02_static_analysis, gl05_loop_testing, gl05_accessibility, gl08_package_sign, gl08_verify"
+    },
+    {
+      "name": "every GL-mapped job is present",
+      "ok": true,
+      "detail": "7 job(s)"
+    },
+    {
+      "name": "gl01_intake runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl01_intake checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl01_intake pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl02_development runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl02_development checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl02_development pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl02_static_analysis runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl02_static_analysis checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl02_static_analysis pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl05_loop_testing runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl05_loop_testing checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl05_loop_testing pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl05_accessibility runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl05_accessibility checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl05_accessibility pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl08_package_sign runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl08_package_sign checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl08_package_sign pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl08_verify runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl08_verify checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl08_verify pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "no action outside the GitHub-maintained allowlist is used",
+      "ok": true,
+      "detail": "3 allowlisted action(s)"
+    },
+    {
+      "name": "every workflow `npm run` names a real script",
+      "ok": true,
+      "detail": "7 script(s)"
+    },
+    {
+      "name": "every workflow `node tools/...` names a real file",
+      "ok": true,
+      "detail": "1 file(s)"
+    },
+    {
+      "name": "owner-gated stages are declared, never faked green",
+      "ok": true,
+      "detail": "7 owner-gated stage(s)"
+    },
+    {
+      "name": "the workflow never claims a green run in prose",
+      "ok": true,
+      "detail": "no green claim found"
+    },
+    {
+      "name": "the workflow states that a hosted run is not evidence it produced",
+      "ok": true,
+      "detail": "honesty marker present"
+    }
+  ],
+  "failed": [],
+  "note": "Structure only: the shipped workflow resolves and every action, script and tool it names exists. Execution and binding require --execute. This is NOT a hosted CI run."
+}

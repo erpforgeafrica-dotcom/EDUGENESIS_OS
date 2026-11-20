@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "tool": "eg-live-e2e.mjs",
+  "base": "https://edugenesis-web-yju6.onrender.com",
+  "ranAt": "2026-11-20T02:57:40.885Z",
+  "result": "PASS",
+  "passed": 30,
+  "total": 30,
+  "sponsorRef": "KEEP-Rotation-Engine",
+  "amountCents": 100000,
+  "ledgerEntries": 4,
+  "checks": [
+    {
+      "name": "the deployed instance answers /api/health",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the pilot operator can log in",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "login issues a session cookie and a CSRF token",
+      "ok": true,
+      "detail": "both cookies present"
+    },
+    {
+      "name": "the session identifies the operator",
+      "ok": true,
+      "detail": "HTTP 200, id matches: true"
+    },
+    {
+      "name": "anonymous GET /api/settings is refused",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "name": "anonymous GET /api/dashboard/operator is refused",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "name": "the first sponsor registers with a pseudonymous reference",
+      "ok": true,
+      "detail": "HTTP 200, sponsorId present: true"
+    },
+    {
+      "name": "the funding round commits and grants credits",
+      "ok": true,
+      "detail": "HTTP 200, credits granted: 6000"
+    },
+    {
+      "name": "replaying the same funding key is a no-op, not a double credit",
+      "ok": true,
+      "detail": "duplicate=true, credits=0"
+    },
+    {
+      "name": "the public ledger is readable without a session",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the public ledger carries the funding entry",
+      "ok": true,
+      "detail": "4 entries"
+    },
+    {
+      "name": "the public ledger verifies its own hash chain",
+      "ok": true,
+      "detail": "chain ok: true"
+    },
+    {
+      "name": "the public ledger exposes a merkle root",
+      "ok": true,
+      "detail": "merkleRoot present"
+    },
+    {
+      "name": "the public ledger carries no email address",
+      "ok": true,
+      "detail": "no @ in the payload"
+    },
+    {
+      "name": "the public ledger does not reveal account identifiers",
+      "ok": true,
+      "detail": "no account id in the payload"
+    },
+    {
+      "name": "the sponsor report renders from the real ledger",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the sponsor account can log in",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "a sponsor session can read the sponsor report",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "a sponsor session cannot write funding (operator-only)",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "name": "a sponsor session is refused the settings surface",
+      "ok": true,
+      "detail": "HTTP 403"
+    },
+    {
+      "name": "core learning answers without a session or a credit",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the lesson carries an answer and its tier",
+      "ok": true,
+      "detail": "tier 0, answer length 555"
+    },
+    {
+      "name": "the operator dashboard renders for the operator",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the operator can read settings",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the settings view echoes no credential",
+      "ok": true,
+      "detail": "no password in the payload"
+    },
+    {
+      "name": "the page / is served",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the page /learn is served",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the page /dashboard is served",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the page /sponsor is served",
+      "ok": true,
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "the page /operator is served",
+      "ok": true,
+      "detail": "HTTP 200"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+EduGenesis OS — accessible text tree, in document order
+
+HOW THIS WAS PRODUCED: tools/a11y-narration.mjs rendered each page from the
+real server and extracted headings, controls and fields in document order.
+It is the text a screen reader would speak — NOT a recording of an NVDA,
+Narrator or VoiceOver session. The human session remains an owner action.
+
+=== Learner (/learn) ===
+Learner page, EduGenesis OS — ask a question.
+Heading: What would you like to learn?.
+Subheading: Your lesson.
+Button: Ask.
+Button: What is a fraction?.
+Button: How do I solve 2x + 3 = 11?.
+Button: What is photosynthesis?.
+
+=== Learner dashboard (/dashboard) ===
+Learner dashboard page, EduGenesis OS — Your learning.
+Heading: Your learning.
+Subheading: Progress.
+Subheading: Next lesson.
+
+=== Sponsor dashboard (/sponsor) ===
+Sponsor dashboard page, EduGenesis OS — Sponsor report.
+Heading: Sponsor report.
+Subheading: Funding.
+Subheading: Impact.
+Subheading: Ledger proof.
+Subheading: Report.
+Link: Download report.
+
+=== Operator dashboard (/operator) ===
+Operator dashboard page, EduGenesis OS — Operator console.
+Heading: Operator console.
+Subheading: System health.
+Subheading: Tiers and providers.
+Subheading: Budget and token burn.
+Subheading: System control.
+Subheading: Audit trail.
+Button: Engage kill switch.
+Button: Revive system.

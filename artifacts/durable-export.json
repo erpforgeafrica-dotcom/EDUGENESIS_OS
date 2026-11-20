@@ -1,0 +1,14 @@
+{
+  "tool": "tools/durable-export.mjs",
+  "schemaVersion": 1,
+  "result": "PASS",
+  "file": "backup-2026-11-19T14-55-05.738Z.json",
+  "createdAt": "2026-11-19T14:55:05.738Z",
+  "files": 3,
+  "bytes": 28672,
+  "checksum": "15c3d8a8dd7a5aefe819974a0450069653f051fc74dab00b33b279af0a33751a",
+  "verified": true,
+  "kept": 1,
+  "removed": [],
+  "note": "A free instance is still ephemeral: this export is the durability, and restoring it is the drill. A paid persistent disk remains an owner upgrade (ADR-0026)."
+}

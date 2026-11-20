@@ -1,0 +1,70 @@
+{
+  "tool": "tools/a11y-narration.mjs",
+  "schemaVersion": 1,
+  "result": "PASS",
+  "judge": "automated extraction (NOT a screen-reader session)",
+  "pages": [
+    {
+      "path": "/learn",
+      "label": "Learner",
+      "status": 200,
+      "title": "EduGenesis OS — ask a question",
+      "lang": "en",
+      "headings": 2,
+      "controls": 4,
+      "unnamedControls": 0,
+      "fields": 1,
+      "unlabelledFields": 0,
+      "images": 0,
+      "imagesWithoutAlt": 0
+    },
+    {
+      "path": "/dashboard",
+      "label": "Learner dashboard",
+      "status": 200,
+      "title": "EduGenesis OS — Your learning",
+      "lang": "en",
+      "headings": 4,
+      "controls": 0,
+      "unnamedControls": 0,
+      "fields": 0,
+      "unlabelledFields": 0,
+      "images": 0,
+      "imagesWithoutAlt": 0
+    },
+    {
+      "path": "/sponsor",
+      "label": "Sponsor dashboard",
+      "status": 200,
+      "title": "EduGenesis OS — Sponsor report",
+      "lang": "en",
+      "headings": 5,
+      "controls": 1,
+      "unnamedControls": 0,
+      "fields": 0,
+      "unlabelledFields": 0,
+      "images": 0,
+      "imagesWithoutAlt": 0
+    },
+    {
+      "path": "/operator",
+      "label": "Operator dashboard",
+      "status": 200,
+      "title": "EduGenesis OS — Operator console",
+      "lang": "en",
+      "headings": 6,
+      "controls": 2,
+      "unnamedControls": 0,
+      "fields": 4,
+      "unlabelledFields": 0,
+      "images": 0,
+      "imagesWithoutAlt": 0
+    }
+  ],
+  "failed": [],
+  "limits": [
+    "No NVDA, Narrator or VoiceOver session was run; this is the accessible text tree.",
+    "Focus order, live-region announcements and speech timing are not tested here.",
+    "A human screen-reader pass is still required for the criterion to be met in full."
+  ]
+}

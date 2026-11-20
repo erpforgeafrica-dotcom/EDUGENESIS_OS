@@ -15,7 +15,7 @@ The release subject is a digest over every shipped source and document.
 | Excluded | `docs/RELEASE-APPROVAL.md`, `docs/RELEASE-APPROVAL.sig`, and everything git ignores (`**/dist/`, `**/node_modules/`, `*.tsbuildinfo`, `artifacts/`) |
 | Hashing | canonical LF form: CRLF becomes LF, nothing else changes, so a Windows and a Linux checkout of the same content hash identically |
 | Files covered | see `config/release-approval-subject.json` → `fileCount` and `files` |
-| Subject digest | `17e261a5621ccba874e0bd5f8dfe4f90c01186684638b046d80a2ed40e82cefc` |
+| Subject digest | `f677cf8696c731ab6bf455fad205c61d6182c50ff897f69ab723f12b56399e6d` |
 | Signer class | `PLACEHOLDER` (agent-held key) |
 | Key ID | `ph-ed25519-bf69f6994c4f90f7` |
 | Owner directive | `O-2026-11-19-1` |

@@ -1,0 +1,233 @@
+{
+  "tool": "tools/ci-parity.mjs",
+  "schemaVersion": 1,
+  "mode": "structure+execute+bind",
+  "hostedRun": null,
+  "hostedRunReason": "GitHub Actions is disabled at the account level: seven check-runs per commit are created with zero steps and zero output. No hosted run is claimed; P0-3 stays a placeholder until the owner clears it.",
+  "parity": "PASS",
+  "nodeFloor": "22",
+  "jobs": [
+    "gl01_intake",
+    "gl02_development",
+    "gl02_static_analysis",
+    "gl05_loop_testing",
+    "gl05_accessibility",
+    "gl08_package_sign",
+    "gl08_verify"
+  ],
+  "coveredByVerify": [
+    "gl05_loop_testing",
+    "gl08_package_sign",
+    "gl08_verify"
+  ],
+  "executed": [
+    {
+      "name": "GL-01 intake — doctor",
+      "passed": true,
+      "summary": "Summary: 8 PASS, 1 WARN, 0 FAIL. No failures."
+    },
+    {
+      "name": "GL-02 typecheck",
+      "passed": true,
+      "summary": "> tsc -b --force --pretty false packages/contracts packages/accessibility packages/auth packages/curriculum packages/onekey packages/ledger packages/identity packages/verification apps/cli"
+    },
+    {
+      "name": "GL-02 static analysis — secrets scan",
+      "passed": true,
+      "summary": "PASS  canary self-test: the scanner detected its canary in a file and in a historical blob (rules \"sk-prefixed-key\", \"sk-prefixed-key\") — the detector is live on both surfaces, not inert."
+    },
+    {
+      "name": "GL-05 accessibility negative fixtures",
+      "passed": true,
+      "summary": "ℹ duration_ms 7969.0318"
+    }
+  ],
+  "verify": {
+    "present": true,
+    "bound": true,
+    "sha256": "0b093b9d5059fbddea66b3aebe3bc4bbc3dc755a5f2c0fa7f89bd733c93d3c0e",
+    "result": "PASS",
+    "gates": 18,
+    "passed": 18,
+    "stable": true
+  },
+  "checks": [
+    {
+      "name": "the workflow declares seven jobs",
+      "ok": true,
+      "detail": "7: gl01_intake, gl02_development, gl02_static_analysis, gl05_loop_testing, gl05_accessibility, gl08_package_sign, gl08_verify"
+    },
+    {
+      "name": "every GL-mapped job is present",
+      "ok": true,
+      "detail": "7 job(s)"
+    },
+    {
+      "name": "gl01_intake runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl01_intake checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl01_intake pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl02_development runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl02_development checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl02_development pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl02_static_analysis runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl02_static_analysis checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl02_static_analysis pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl05_loop_testing runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl05_loop_testing checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl05_loop_testing pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl05_accessibility runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl05_accessibility checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl05_accessibility pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl08_package_sign runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl08_package_sign checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl08_package_sign pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "gl08_verify runs on a GitHub runner",
+      "ok": true,
+      "detail": "ubuntu-latest"
+    },
+    {
+      "name": "gl08_verify checks the tree out",
+      "ok": true,
+      "detail": "actions/checkout present"
+    },
+    {
+      "name": "gl08_verify pins Node 22",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "no action outside the GitHub-maintained allowlist is used",
+      "ok": true,
+      "detail": "3 allowlisted action(s)"
+    },
+    {
+      "name": "every workflow `npm run` names a real script",
+      "ok": true,
+      "detail": "7 script(s)"
+    },
+    {
+      "name": "every workflow `node tools/...` names a real file",
+      "ok": true,
+      "detail": "1 file(s)"
+    },
+    {
+      "name": "owner-gated stages are declared, never faked green",
+      "ok": true,
+      "detail": "7 owner-gated stage(s)"
+    },
+    {
+      "name": "the workflow never claims a green run in prose",
+      "ok": true,
+      "detail": "no green claim found"
+    },
+    {
+      "name": "the workflow states that a hosted run is not evidence it produced",
+      "ok": true,
+      "detail": "honesty marker present"
+    },
+    {
+      "name": "GL-01 intake — doctor",
+      "ok": true,
+      "detail": "Summary: 8 PASS, 1 WARN, 0 FAIL. No failures."
+    },
+    {
+      "name": "GL-02 typecheck",
+      "ok": true,
+      "detail": "> tsc -b --force --pretty false packages/contracts packages/accessibility packages/auth packages/curriculum packages/onekey packages/ledger packages/identity pa"
+    },
+    {
+      "name": "GL-02 static analysis — secrets scan",
+      "ok": true,
+      "detail": "PASS  canary self-test: the scanner detected its canary in a file and in a historical blob (rules \"sk-prefixed-key\", \"sk-prefixed-key\") — the detector is live o"
+    },
+    {
+      "name": "GL-05 accessibility negative fixtures",
+      "ok": true,
+      "detail": "ℹ duration_ms 7969.0318"
+    },
+    {
+      "name": "a verify report exists and is PASS",
+      "ok": true,
+      "detail": "PASS, 18/18 gates"
+    },
+    {
+      "name": "the verify report did not change while it was being checked",
+      "ok": true,
+      "detail": "0b093b9d5059fbddea66b3aebe3bc4bbc3dc755a5f2c0fa7f89bd733c93d3c0e"
+    }
+  ],
+  "failed": [],
+  "note": "Structure resolved, the steps not covered by the bound verify run passed locally, and the verify report is bound by SHA-256. This is NOT a hosted CI run."
+}

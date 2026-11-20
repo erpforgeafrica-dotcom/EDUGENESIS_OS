@@ -1,0 +1,61 @@
+{
+  "tool": "tools/docs-drift.mjs",
+  "schemaVersion": 1,
+  "result": "PASS",
+  "counts": {
+    "adrRecords": 16,
+    "adrRows": 16,
+    "promisedScripts": 7,
+    "promisedTools": 2,
+    "documentedRoutes": 8,
+    "adrOwners": 7
+  },
+  "checks": [
+    {
+      "name": "every ADR record has an index row",
+      "ok": true,
+      "detail": "16 record(s)"
+    },
+    {
+      "name": "every ADR index row points at a real record",
+      "ok": true,
+      "detail": "16 row(s)"
+    },
+    {
+      "name": "every `npm run` a doc promises is a real script",
+      "ok": true,
+      "detail": "7 script(s)"
+    },
+    {
+      "name": "every `node tools/...` a doc promises is a real file",
+      "ok": true,
+      "detail": "2 tool(s)"
+    },
+    {
+      "name": "every documented API route is served",
+      "ok": true,
+      "detail": "8 route(s)"
+    },
+    {
+      "name": "every ADR owner has an officer-register row",
+      "ok": true,
+      "detail": "7 owner(s)"
+    },
+    {
+      "name": "the plan and the ledger name the same backlog",
+      "ok": true,
+      "detail": "20 vs 20"
+    },
+    {
+      "name": "the owner packets cover every placeholder or owner item",
+      "ok": true,
+      "detail": "every non-closed record is named in docs/OWNER-PACKETS.md"
+    },
+    {
+      "name": "README makes no unqualified green-CI claim",
+      "ok": true,
+      "detail": "no such claim"
+    }
+  ],
+  "failed": []
+}

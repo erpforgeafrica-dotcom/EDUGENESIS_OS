@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "approvedAt": "2026-11-19T15:33:41.276Z",
+  "approvedAt": "2026-11-20T03:08:02.314Z",
   "scope": [
     "packages",
     "apps",
@@ -12,7 +12,7 @@
     "docs/RELEASE-APPROVAL.sig"
   ],
   "subjectMode": "git",
-  "fileCount": 274,
+  "fileCount": 275,
   "files": [
     {
       "path": "apps/cli/README.md",
@@ -246,18 +246,18 @@
     },
     {
       "path": "docs/OFFICERS.md",
-      "bytes": 5195,
-      "sha256": "651bc45ce8ca59a3924025cbcec0d6d9ccefd25a743642b4cc7aedeb142548b6"
+      "bytes": 5504,
+      "sha256": "db5eeeb1c2fdd00e40a142f6101be8e922750d2b17a7718b492ac9719ebd48f2"
     },
     {
       "path": "docs/OWNER-PACKETS.md",
-      "bytes": 4352,
-      "sha256": "67c38067675bdf123fa4ef824916ba71fa19373b608524b2574abf0a90415d19"
+      "bytes": 4465,
+      "sha256": "240b448df090679fd82182225fe8fff345f1657f855e82db5970a6e22de8a2c1"
     },
     {
       "path": "docs/PLACEHOLDER-CLOSURE-REGISTER.md",
-      "bytes": 6226,
-      "sha256": "e595cdcd2ea7a4fb8924588fbb3873927e7ff51f801ddb565fa7efcde4377325"
+      "bytes": 6682,
+      "sha256": "e7621328198eb310513b7a9890167d630c6f607b8409346bc289c86994ae8ca8"
     },
     {
       "path": "docs/PLAN_GAP_CLOSEOUT.md",
@@ -286,8 +286,8 @@
     },
     {
       "path": "docs/TIER-ZERO-KEY-REGISTER.md",
-      "bytes": 2390,
-      "sha256": "e657128d03c6e4a77c71cbf6ec217eb0fd3d4231bb75d1273575fa338b3df762"
+      "bytes": 2511,
+      "sha256": "fb3a620f809b20677992e2129f79d6f931a2907a8a1024ac20dee9d2d7dfe582"
     },
     {
       "path": "docs/TIER-ZERO-SIGNING-CEREMONY.md",
@@ -401,8 +401,8 @@
     },
     {
       "path": "docs/production-ledger.json",
-      "bytes": 15894,
-      "sha256": "c8f2e15c52686655f5c320e77c77a7af9e542f29d6cad82e573504e861e39deb"
+      "bytes": 15884,
+      "sha256": "6c6ecc754c09cdc96b7d630942a8f81fa47e2e6093cdb63d7bf369d1f3ca3fa7"
     },
     {
       "path": "docs/production-plan.json",
@@ -1295,6 +1295,11 @@
       "sha256": "34c4ef6b09c2657b5ae737ef229b1d558b90d3f4d2a4c9e4b3fe89b6342e8aca"
     },
     {
+      "path": "tools/live-e2e.mjs",
+      "bytes": 11666,
+      "sha256": "0614a483cc5c5cfa1f9dfe2b59d30bdd5d1c701c11c2f7928c4cb04402b43249"
+    },
+    {
       "path": "tools/perf-drill.mjs",
       "bytes": 9973,
       "sha256": "406332041936e270cf4a76c130e5801329fd2735ac3d8907ea4e5b863cfd5863"
@@ -1385,7 +1390,7 @@
       "sha256": "a1c19c506f4662a47f394a716b2e2c1aa9e91625d439af212b2ce8ad98ff66c6"
     }
   ],
-  "digest": "17e261a5621ccba874e0bd5f8dfe4f90c01186684638b046d80a2ed40e82cefc",
+  "digest": "f677cf8696c731ab6bf455fad205c61d6182c50ff897f69ab723f12b56399e6d",
   "keyId": "ph-ed25519-bf69f6994c4f90f7",
   "signerClass": "PLACEHOLDER",
   "ownerDirective": "O-2026-11-19-1",

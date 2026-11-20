@@ -1,0 +1,82 @@
+{
+  "tool": "tools/perf-drill.mjs",
+  "schemaVersion": 1,
+  "budget": {
+    "p95Ms": 1500,
+    "maxMs": 6000,
+    "rssGrowthMb": 160,
+    "sequential": 120,
+    "concurrency": 40
+  },
+  "rateLimitProbe": "hosted-mode server: the loopback exemption is applied only to a local (non-hosted) instance by design",
+  "result": "PASS",
+  "checks": [
+    {
+      "name": "the lesson path answers every sequential request",
+      "ok": true,
+      "detail": "0 error(s) of 120"
+    },
+    {
+      "name": "lesson p95 is within 1500 ms",
+      "ok": true,
+      "detail": "p50 15 ms, p95 46 ms"
+    },
+    {
+      "name": "lesson max is within 6000 ms",
+      "ok": true,
+      "detail": "114 ms"
+    },
+    {
+      "name": "a concurrent burst of health reads never errors",
+      "ok": true,
+      "detail": "0 error(s) of 40"
+    },
+    {
+      "name": "the burst completes within 20 s",
+      "ok": true,
+      "detail": "603 ms total"
+    },
+    {
+      "name": "the public ledger answers after the load",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "the public ledger verifies its chain after the load",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "a hosted question burst is rate-limited, not absorbed",
+      "ok": true,
+      "detail": "8 of 12 refused with 429, 4 allowed"
+    },
+    {
+      "name": "a rate-limited response states when to retry",
+      "ok": true,
+      "detail": "Retry-After: 60"
+    },
+    {
+      "name": "an oversized prompt is refused, not buffered",
+      "ok": true,
+      "detail": "400"
+    },
+    {
+      "name": "resident memory growth stays under 160 MB over 150 reads",
+      "ok": true,
+      "detail": "-1.6 MB"
+    },
+    {
+      "name": "the server restarts over the same durable stores",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "the ledger chain still verifies after the restart",
+      "ok": true,
+      "detail": "true"
+    }
+  ],
+  "failed": [],
+  "note": "Measured locally against the real server on an ephemeral port. Absolute numbers are machine-dependent; the budgets are the contract."
+}

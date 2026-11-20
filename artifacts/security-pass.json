@@ -1,0 +1,135 @@
+{
+  "tool": "tools/security-pass.mjs",
+  "schemaVersion": 1,
+  "mode": "hosted",
+  "judge": "same-harness agent (NOT an independent human audit)",
+  "result": "PASS",
+  "checks": [
+    {
+      "name": "anonymous GET /api/settings is 403",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "anonymous GET /api/dashboard/sponsor is 403",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "anonymous GET /api/dashboard/operator is 403",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "anonymous GET /api/auth/me is 401",
+      "ok": true,
+      "detail": "401"
+    },
+    {
+      "name": "anonymous sponsor funding is refused",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "anonymous operator control is refused",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "hosted enrolment is refused while its flag is off",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "hosted audit is refused while its flag is off",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "an operator can establish a session",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "an operator reads settings",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "the settings view carries no password or session secret",
+      "ok": true,
+      "detail": "no credential echoed"
+    },
+    {
+      "name": "an operator write without a CSRF token is refused",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "a learner can establish a session",
+      "ok": true,
+      "detail": "200"
+    },
+    {
+      "name": "a learner is refused the settings surface",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "a learner is refused the operator panel",
+      "ok": true,
+      "detail": "403"
+    },
+    {
+      "name": "a wrong password is refused",
+      "ok": true,
+      "detail": "401"
+    },
+    {
+      "name": "the refusal does not echo the attempted credential",
+      "ok": true,
+      "detail": "no credential echoed"
+    },
+    {
+      "name": "the refusal does not disclose whether the account exists",
+      "ok": true,
+      "detail": "neutral refusal"
+    },
+    {
+      "name": "the learner page carries a content-security policy",
+      "ok": true,
+      "detail": "default-src 'self'; base-uri 'none'; object-src 'none'; fram"
+    },
+    {
+      "name": "the learner page refuses MIME sniffing",
+      "ok": true,
+      "detail": "nosniff"
+    },
+    {
+      "name": "the learner page does not inline a script",
+      "ok": true,
+      "detail": "no inline script body"
+    },
+    {
+      "name": "the learner page declares a language",
+      "ok": true,
+      "detail": "lang attribute present"
+    },
+    {
+      "name": "the public ledger publishes no personal name shape",
+      "ok": true,
+      "detail": "no two-word proper name"
+    },
+    {
+      "name": "the public ledger publishes no absolute path",
+      "ok": true,
+      "detail": "no data path"
+    }
+  ],
+  "failed": [],
+  "limits": [
+    "The judge wrote the code it is judging: this is not an independent audit.",
+    "No penetration test, fuzzing campaign or third-party scanner was run.",
+    "Secrets scanning is a separate tool (tools/secrets-scan.mjs) and covers tree and history."
+  ]
+}
