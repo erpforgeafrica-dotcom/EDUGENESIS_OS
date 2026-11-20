@@ -1,5 +1,5 @@
 {
-  "note": "The Phase 0 / Phase 1 / Phase 5 exit criteria, transcribed from 09_TECHNICAL_ARCHITECTURE_AI_BRAIN_AND_DEPLOYMENT.md §12.2, §12.3 and §12.7. A row is `met` only when the named evidence executes and holds. A row that a person must sign, appoint or run outside this tree is `owner-blocked`, names the owner, and carries the unblock path — it is reported as a warning, never as a pass. Phase 0 criterion 5 (an accessibility CI job that fails on ARC-I1) and Phase 1 criterion 3 (a synthetic emission missing accessible_alternative fails CI with ARC-I1) are the same fixture and are recorded once as P0-5; the merge is explicit here so nothing is hidden.",
+  "note": "The Phase 0 / Phase 1 / Phase 5 exit criteria, transcribed from 09_TECHNICAL_ARCHITECTURE_AI_BRAIN_AND_DEPLOYMENT.md §12.2, §12.3 and §12.7. A row is `met` only when the named evidence executes and holds. A row that a person must sign, appoint or run outside this tree is `owner-blocked`, names the owner, and carries the unblock path — it is reported as a warning, never as a pass. Phase 0 criterion 5 (an accessibility CI job that fails on ARC-I1) and Phase 1 criterion 3 (a synthetic emission missing accessible_alternative fails CI with ARC-I1) are the same fixture and are recorded once as P0-5; the merge is explicit here so nothing is hidden. ADR-0028 adds a third status, `placeholder`: the named executable evidence must still run and hold, but the row is reported in its own block and is NEVER counted as met, because the human or external act it needs has not happened. A `placeholder` row carries `placeholder.ownerDirective`, `placeholder.label` and `placeholder.residualRisk`, and is refused if any is missing.",
   "expectedRows": 16,
   "rows": [
     {
@@ -7,10 +7,29 @@
       "phase": 0,
       "criterion": "A signed approval record exists for Doc 1 v1.2 and for this document; checksums are recorded in the register and verifiable by re-hashing the rendered PDFs.",
       "source": "09 §12.2 exit criterion 1; AC-15",
-      "status": "owner-blocked",
+      "status": "placeholder",
       "owner": "Founder & CEO",
-      "reason": "A signature is an act of a person, not of a build. The checksum register exists and re-hashes correctly, but no signed approval record exists in this tree.",
-      "unblock": "Founder & CEO signs Doc 1 v1.2 and 09; Governance records the signature block in the register; `node tools/checksums.mjs --verify` re-hashes both PDFs and the gate flips when the signed record is filed."
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER APPROVAL — a real Ed25519 signature over a real subject digest, signed with an agent-held placeholder key",
+        "residualRisk": "No person with authority has read or approved this release, and the signing key is not in KMS/HSM custody. tools/verify-release-approval.mjs proves the mechanism and refuses any post-approval edit; it cannot prove a human act."
+      },
+      "evidence": [
+        {
+          "kind": "file",
+          "target": "docs/RELEASE-APPROVAL.md",
+          "contains": [
+            "PLACEHOLDER APPROVAL",
+            "Subject digest",
+            "What is still untrue"
+          ]
+        },
+        {
+          "kind": "tool",
+          "target": "verify-release-approval.mjs"
+        }
+      ],
+      "note": "This placeholder is STRICTER than the owner-blocked row it replaces: the gate re-hashes every shipped source and document (packages, apps, tools, docs) and verifies the Ed25519 signature on every run. Editing any file after approval makes the tool exit non-zero."
     },
     {
       "id": "P0-2",
@@ -40,10 +59,29 @@
       "phase": 0,
       "criterion": "A baseline commit has passed CI with a clean secrets scan and a published SBOM and provenance attestation, verifiable by opening the CI run.",
       "source": "09 §12.2 exit criterion 3; AC-22",
-      "status": "owner-blocked",
+      "status": "placeholder",
       "owner": "Repository Owner",
-      "reason": "This repository has no remote, so no CI run exists to open. The local equivalents pass (secrets scan 0 findings, CycloneDX SBOM, signed-attestation workflow committed), but the criterion is written as a CI run URL and cannot be satisfied by a local command.",
-      "unblock": "Repository Owner creates the remote and pushes `main`; the CI workflow runs the gate suite and attestation job; the run URL is recorded against P0-3 and the row flips to met."
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER CI — the shipped workflow is structure-checked and executed locally; no hosted run exists",
+        "residualRisk": "GitHub Actions is disabled at the account level, so seven check-runs per commit are created with zero steps and zero output and no run URL can be cited. tools/ci-parity.mjs proves the workflow resolves and executes the steps the bound verify run does not cover; it cannot produce a hosted run."
+      },
+      "evidence": [
+        {
+          "kind": "file",
+          "target": ".github/workflows/ci.yml",
+          "contains": [
+            "jobs:",
+            "actions/checkout@",
+            "node-version: '22'"
+          ]
+        },
+        {
+          "kind": "tool",
+          "target": "ci-parity.mjs"
+        }
+      ],
+      "note": "The tool refuses an unknown action, a missing script, a missing tool, a job without checkout or the Node floor, and a dropped GL job. It writes artifacts/ci-parity-structure.json and states that no hosted run is claimed."
     },
     {
       "id": "P0-4",
@@ -98,10 +136,31 @@
       "phase": 0,
       "criterion": "Officer roles left open by U-11 and OQ-7 are filled by name, verifiable against the register.",
       "source": "09 §12.2 exit criterion 6",
-      "status": "owner-blocked",
+      "status": "placeholder",
       "owner": "Founder & CEO",
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER SEATS — every officer role has a documented, scoped interim holder; none is a named human appointment",
+        "residualRisk": "Nine seats are held in an interim, agent-operated capacity, and the Child Safeguarding Officer seat cannot be delegated to an agent at all. No person has been appointed to them, and a build must never invent a person."
+      },
       "reason": "Three roles are named in the approved architecture document and are recorded in docs/OFFICERS.md (Chief AI & Model Orchestrator: Marcus Thorne; Chief Inclusion & Accessibility Officer: Noni / Amara Diop; Chief Learning Scientist: Nelly / Dr. Elena Rostova). Chief Systems Architect, the accountable role named by ADR-0013 to ADR-0018, had no row in the register at all; by owner decision D-4 (2026-11-15) the Founder & CEO took that seat, so it now reads APPOINTED. The remaining nine roles have no named person, and a build cannot invent an appointment.",
-      "unblock": "Founder & CEO appoints each vacant role in docs/OFFICERS.md; the gate re-reads the register and flips when no row reads VACANT."
+      "unblock": "Founder & CEO appoints each vacant role in docs/OFFICERS.md; the gate re-reads the register and flips when no row reads VACANT.",
+      "evidence": [
+        {
+          "kind": "file",
+          "target": "docs/OFFICERS.md",
+          "contains": [
+            "PLACEHOLDER SEAT",
+            "Child Safeguarding Officer",
+            "No row reads VACANT"
+          ]
+        },
+        {
+          "kind": "tool",
+          "target": "docs-drift.mjs"
+        }
+      ],
+      "note": "docs-drift.mjs refuses an ADR whose accountable owner has no row in the officer register, so the register cannot silently lose a seat while this row cites it."
     },
     {
       "id": "P1-1",

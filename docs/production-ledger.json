@@ -1,8 +1,16 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "title": "EduGenesis OS production-readiness ledger",
-  "generatedBy": "production completion mandate 2026-11-17",
-  "note": "One record per PG item. Status: pending | in-progress | closed | owner-gated. 'owner' is agent or owner-only. proof must be a reproducible claim (command/URL/file:line).",
+  "generatedBy": "production completion mandate 2026-11-17; placeholder closure directive O-2026-11-19-1",
+  "note": "One record per PG item. Status: closed | placeholder (ADR-0028). `closed` means proven and reproducible. `placeholder` means the machinery is real and proven at the SAME bar, but a human or external act has not happened; every placeholder carries placeholder.ownerDirective, placeholder.label and placeholder.residualRisk and is NEVER counted as closed. pilot-launch ready means 0 open records and every placeholder named in docs/PLACEHOLDER-CLOSURE-REGISTER.md.",
+  "summary": {
+    "closed": 14,
+    "placeholder": 6,
+    "pending": 0,
+    "inProgress": 0,
+    "ownerGated": 0,
+    "openItems": 0
+  },
   "records": [
     {
       "id": "PG-01",
@@ -10,9 +18,9 @@
       "wave": "W1",
       "status": "closed",
       "owner": "agent",
-      "judge": "node --test packages/auth/dist/**/*.test.js apps/cli/dist/serve.test.js",
-      "proof": "node --test apps/cli/dist/auth-routes.test.js -> 12/12 PASS; packages/auth scrypt/HMAC/roles/lockout tests PASS; live anon /api/settings 403 and /api/auth/me 401 at c10d07c",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "node --test apps/cli/dist/auth-routes.test.js",
+      "proof": "node --test apps/cli/dist/auth-routes.test.js -> 12/12 PASS; packages/auth scrypt/HMAC/roles/lockout tests PASS; live anon GET /api/settings 403 and /api/auth/me 401 at c10d07c",
+      "evidence": "artifacts/verify-report.json; session compact 2026-11-18"
     },
     {
       "id": "PG-02",
@@ -20,9 +28,9 @@
       "wave": "W1",
       "status": "closed",
       "owner": "agent",
-      "judge": "node --test apps/cli/dist/serve.test.js --test-name-pattern=settings",
+      "judge": "node --test apps/cli/dist/auth-routes.test.js",
       "proof": "ADR-0022; node --test apps/cli/dist/auth-routes.test.js -> anonymous 403, operator redacted 200, learner 403; live anon GET /api/settings HTTP 403 at c10d07c",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "evidence": "artifacts/verify-report.json; session compact 2026-11-18"
     },
     {
       "id": "PG-03",
@@ -30,9 +38,9 @@
       "wave": "W1",
       "status": "closed",
       "owner": "agent",
-      "judge": "node tools/verify-all.mjs",
-      "proof": "ADR-0021 + feature flags; node --test apps/cli/dist/auth-routes.test.js -> flags-off 403, guardian enrol 200 with CSRF, auditor audit 200; live anon 403",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "node --test apps/cli/dist/auth-routes.test.js",
+      "proof": "ADR-0021 + feature flags; node --test apps/cli/dist/auth-routes.test.js -> flags-off 403, guardian enrol 200 with CSRF, auditor audit 200; live anon 403 at c10d07c",
+      "evidence": "artifacts/verify-report.json; session compact 2026-11-18"
     },
     {
       "id": "PG-04",
@@ -40,9 +48,9 @@
       "wave": "W2",
       "status": "closed",
       "owner": "agent",
-      "judge": "node --test apps/cli/dist/sponsor.test.js packages/ledger/dist/ledger-store.test.js",
+      "judge": "node --test apps/cli/dist/sponsor.test.js",
       "proof": "node --test apps/cli/dist/sponsor.test.js -> 10/10 PASS (pledge+allocation, idempotency, PII guard, durable journal); live anon POST /api/sponsor/funding 403 at c10d07c",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "evidence": "artifacts/verify-report.json; session compact 2026-11-18"
     },
     {
       "id": "PG-05",
@@ -50,9 +58,9 @@
       "wave": "W2",
       "status": "closed",
       "owner": "agent",
-      "judge": "node --test apps/cli/dist/sponsor.test.js packages/ledger/dist/sponsor-report.test.js",
-      "proof": "node --test apps/cli/dist/sponsor.test.js -> publicLedger uses exportPublic and refuses a broken chain; live GET /api/ledger 200 chainOk=true at c10d07c",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "node --test apps/cli/dist/sponsor.test.js",
+      "proof": "node --test apps/cli/dist/sponsor.test.js -> publicLedger uses exportPublic and refuses a broken chain; live GET /api/ledger 200 with verification.ok=true at c10d07c",
+      "evidence": "artifacts/verify-report.json; session compact 2026-11-18"
     },
     {
       "id": "PG-06",
@@ -60,9 +68,9 @@
       "wave": "W2",
       "status": "closed",
       "owner": "agent",
-      "judge": "node --test apps/cli/dist/sponsor.test.js packages/ledger/dist/reinvestment.test.js",
-      "proof": "ADR-0025; node --test apps/cli/dist/sponsor.test.js -> 1000c grants 600c allocation and 60 credits, consumeCredit never denies core learning; route e2e test PASS",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "node --test apps/cli/dist/sponsor.test.js",
+      "proof": "ADR-0025; node --test apps/cli/dist/sponsor.test.js -> 1000c grants a 600c allocation and 60 credits, consumeCredit never denies core learning; route e2e test PASS",
+      "evidence": "artifacts/verify-report.json; session compact 2026-11-18"
     },
     {
       "id": "PG-07",
@@ -70,19 +78,24 @@
       "wave": "W4",
       "status": "closed",
       "owner": "agent",
-      "judge": "node tools/verify-all.mjs",
+      "judge": "npm run verify",
       "proof": "npm run verify -> form-semantics PASS on all 5 shipped pages, pwa-light-default PASS, token-contrast PASS; live /dashboard /sponsor /operator 200 and anonymous /api/dashboard/sponsor 403 /operator 403 at 0043995",
-      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
+      "evidence": "artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-08",
       "title": "Tier 1 AI wiring",
       "wave": "W3",
-      "status": "owner-gated",
+      "status": "placeholder",
       "owner": "owner-only",
-      "judge": "node $TEMP/opencode/eg-live-contract.mjs",
-      "proof": "OWNER decision + unblock: provision a provider credential server-side on Render; no key exists on the free tier, so Tier 1 remains honestly unavailable and Tier 0 serves all learners. Packet PG-20 #5.",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "node --test packages/onekey/dist/conformance.test.js packages/onekey/dist/provider-wiring.test.js",
+      "proof": "node --test packages/onekey/dist/conformance.test.js -> adapter conformance PASS; provider-wiring tests -> an unconfigured or blank provider key wires NO adapter and falls through to Tier 0; egress allowlist, redaction, breaker, kill switch and two-sided caps PASS in packages/onekey",
+      "evidence": "artifacts/verify-report.json; docs/PLACEHOLDER-CLOSURE-REGISTER.md item 5",
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER TIER 1 — the whole model path exists and is tested; no provider credential exists, so Tier 0 serves every learner",
+        "residualRisk": "Tier 1 is unreachable in production until one provider credential is set as a server-side environment variable. Nothing in the repository can create that credential, and no learner is harmed meanwhile: Tier 0 is the designed fallback and core learning is never denied."
+      }
     },
     {
       "id": "PG-09",
@@ -90,19 +103,24 @@
       "wave": "W3",
       "status": "closed",
       "owner": "agent",
-      "judge": "node --test packages/onekey/dist/curriculum/*.test.js",
-      "proof": "node --test packages/curriculum/dist/*.test.js -> 51/51 PASS (starter pack valid); learner.ts defaultTierZero() loads the validated pack; live algebra/fraction/photosynthesis lessons answered and honest gap retained, probe 40/40",
-      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
+      "judge": "node --test packages/curriculum/dist/index.test.js",
+      "proof": "node --test packages/curriculum/dist/*.test.js -> 51/51 PASS (starter pack valid); learner.ts defaultTierZero() loads the validated pack; live algebra/fraction/photosynthesis lessons answered and the honest gap retained, probe 40/40",
+      "evidence": "artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-10",
       "title": "Durability without paying (export/restore)",
       "wave": "W5",
-      "status": "closed",
-      "owner": "agent",
-      "judge": "node --test apps/cli/dist/backup.test.js",
-      "proof": "node --test apps/cli/dist/backup.test.ts -> 10/10 PASS including the named restore drill, byte-identical export/restore, tamper and checksum refusal; docs/RUNBOOK-BACKUP-RESTORE.md; paid persistent disk is OWNER-BLOCKED (PG-20 #9)",
-      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
+      "status": "placeholder",
+      "owner": "owner-only",
+      "judge": "npm run backup:export",
+      "proof": "node --test apps/cli/dist/backup.test.js -> 10/10 PASS including the named restore drill, byte-identical export/restore, tamper and checksum refusal; npm run backup:export seals the stores, re-verifies the seal and rotates old exports (artifacts/durable-export.json); docs/RUNBOOK-BACKUP-RESTORE.md records the restore procedure",
+      "evidence": "artifacts/verify-report.json; artifacts/durable-export.json; docs/PLACEHOLDER-CLOSURE-REGISTER.md item 9",
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER DURABILITY — sealed export, re-verified on every run; the free instance is still ephemeral across redeploys",
+        "residualRisk": "A free Render instance loses .edugenesis-data on redeploy or spin-down. The export protects the data only if a scheduled job runs and someone restores it; only a paid persistent disk (render.yaml has the tested switch) makes durability automatic."
+      }
     },
     {
       "id": "PG-11",
@@ -110,99 +128,120 @@
       "wave": "W5",
       "status": "closed",
       "owner": "agent",
-      "judge": "node tools/verify-all.mjs",
-      "proof": "docs/RUNBOOK-INCIDENT.md + docs/RUNBOOK-BACKUP-RESTORE.md + docs/PRIVACY-DPIA-DATA-FLOW.md; /api/health depth, rate limits retained, kill-switch audit logged, retention/deletion workflow documented",
-      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
+      "judge": "npm run verify",
+      "proof": "docs/RUNBOOK-INCIDENT.md + docs/RUNBOOK-BACKUP-RESTORE.md + docs/PRIVACY-DPIA-DATA-FLOW.md shipped; /api/health depth, rate limits retained, kill-switch audit logged, retention/deletion workflow documented",
+      "evidence": "artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
     {
       "id": "PG-12",
       "title": "Privacy and compliance paperwork",
       "wave": "W5",
-      "status": "owner-gated",
+      "status": "placeholder",
       "owner": "owner-only",
-      "judge": "node tools/verify-all.mjs",
-      "proof": "OWNER decision + unblock: legal counsel sign-off on docs/PRIVACY-DPIA-DATA-FLOW.md; documentation for legal review, not legal advice. Packet PG-20 #7.",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "node tools/docs-drift.mjs",
+      "proof": "node tools/docs-drift.mjs -> PASS; docs/PRIVACY-DPIA-DATA-FLOW.md, docs/RUNBOOK-INCIDENT.md, docs/RUNBOOK-BACKUP-RESTORE.md and docs/LEGAL-REVIEW-RECORD.md ship as one packet with six specific questions for counsel and an explicit NOT REVIEWED status",
+      "evidence": "docs/LEGAL-REVIEW-RECORD.md; docs/PLACEHOLDER-CLOSURE-REGISTER.md item 7",
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER LEGAL — a complete, current counsel packet; no lawyer has reviewed anything",
+        "residualRisk": "No legal review has occurred, so the pilot may run only on the demonstration instance, which holds no real learner data. Counsel must answer the six questions and the answers must be applied before any real enrolment."
+      }
     },
     {
       "id": "PG-13",
       "title": "Signed Tier-0 bundle (F1-09)",
       "wave": "W1",
-      "status": "owner-gated",
+      "status": "placeholder",
       "owner": "agent",
-      "judge": "node --test packages/onekey/dist/bundle-signature.test.js",
-      "proof": "OWNER decision + unblock: generate and custody the Ed25519 production key and install the public key in verifier config (tools/sign-tier-zero.mjs + ceremony doc); code/tests refuse unsigned bundles. Packet PG-20 #4.",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "node --test packages/onekey/dist/registry/tier-zero-trust.test.js",
+      "proof": "node --test packages/onekey/dist/registry/tier-zero-trust.test.js -> 6/6 PASS: the shipped bundle verifies against the installed public key, one changed byte is refused, a reordered lesson list is refused, an empty/malformed signature is refused, a different key cannot verify it, and the trust root is labelled PLACEHOLDER; tools/sign-tier-zero.mjs refuses a key path inside the repository",
+      "evidence": "config/tier-zero-public-key.json; config/tier-zero-bundle.sig; docs/TIER-ZERO-KEY-REGISTER.md; docs/PLACEHOLDER-CLOSURE-REGISTER.md item 4",
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER SIGNING CEREMONY — a real Ed25519 keypair, a real signature and a real verifier; the key is not in KMS/HSM custody",
+        "residualRisk": "The private key sits on an operator machine outside the repository with no second custodian, so anyone with that machine can sign a Tier 0 bundle. The production ceremony requires a key generated inside KMS/HSM and never exported, witnessed by a second custodian."
+      }
     },
     {
       "id": "PG-14",
       "title": "Accessibility proof",
       "wave": "W4",
-      "status": "owner-gated",
+      "status": "placeholder",
       "owner": "owner-only",
-      "judge": "node $TEMP/opencode/eg-live-contract.mjs",
-      "proof": "OWNER decision + unblock: run the guided NVDA/Narrator session; no automated screen reader exists in this harness, so the claim stays UNVERIFIED. Packet PG-20 #8.",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "npm run a11y:narration",
+      "proof": "npm run a11y:narration -> PASS on /learn and the three dashboards: it renders each page from the real server, extracts headings, controls and fields in document order, and FAILS on an unnamed control, an unlabelled field, a missing alt, a missing lang or a missing title; artifacts/a11y-narration.txt is the exact speech text",
+      "evidence": "artifacts/a11y-narration.txt; artifacts/a11y-narration.json; docs/PLACEHOLDER-CLOSURE-REGISTER.md item 8",
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER SCREEN READER — the accessible text tree is machine-verified; no NVDA/Narrator/VoiceOver session was run",
+        "residualRisk": "Focus order, live-region announcements and speech timing are untested by a machine, and this harness cannot run a screen reader. A human 15-minute session on /learn and each dashboard is still required for the criterion to be met in full."
+      }
     },
     {
       "id": "PG-15",
       "title": "Release engineering with no paid CI",
       "wave": "W6",
-      "status": "closed",
+      "status": "placeholder",
       "owner": "agent",
-      "judge": "npm run ci:local",
-      "proof": "npm run ci:local and npm run release implemented (ADR-0027); node --test tools/ci-local.test.mjs -> 6/6 PASS; release.mjs refuses an unverified tree (exit 2 confirmed); P0-3 real hosted CI remains OWNER-BLOCKED (PG-20 #1)",
-      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
+      "judge": "npm run ci:parity",
+      "proof": "npm run ci:parity -> PASS: parses the shipped seven-job workflow, refuses an unknown action, a missing script, a missing tool, a job without checkout or the Node floor and a dropped GL job, executes the steps the bound verify run does not cover, and binds artifacts/verify-report.json by SHA-256; node --test tools/ci-local.test.mjs -> 6/6 PASS; release.mjs refuses an unverified tree with exit 2",
+      "evidence": "artifacts/ci-parity.json; artifacts/ci-parity-structure.json; docs/PLACEHOLDER-CLOSURE-REGISTER.md item 1",
+      "placeholder": {
+        "ownerDirective": "O-2026-11-19-1",
+        "label": "PLACEHOLDER CI — the shipped workflow is structure-checked and executed locally; no hosted run exists",
+        "residualRisk": "GitHub Actions is disabled at the account level: seven check-runs per commit are created with zero steps and zero output, and no run URL can be cited. Clearing that account state and re-running CI on main is the only way to close this row."
+      }
     },
     {
       "id": "PG-16",
       "title": "Performance and resilience",
       "wave": "W5",
-      "status": "pending",
+      "status": "closed",
       "owner": "agent",
-      "judge": "node --test apps/cli/dist/resilience.test.js",
-      "proof": "load/soak/chaos tests not yet implemented",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "judge": "npm run perf:drill",
+      "proof": "npm run perf:drill -> PASS against the real server over a real socket: sequential latency p50/p95/max within budget, a concurrent health burst with zero errors, the rate limiter refusing a burst with Retry-After, an oversized prompt refused, resident memory growth within budget over 150 reads, and the server restarting over the same durable stores with the ledger chain still verifying; numbers are machine-dependent and recorded in artifacts/perf-drill.json",
+      "evidence": "artifacts/perf-drill.json"
     },
     {
       "id": "PG-17",
       "title": "Security pass (first pass W1, final W6)",
       "wave": "W1/W6",
-      "status": "in-progress",
+      "status": "closed",
       "owner": "agent",
-      "judge": "node tools/secrets-scan.mjs",
-      "proof": "first pass: auth/CSRF/role negative tests + secrets scan 0 findings on 221 tree files and 526 history blobs + provider/path gates PASS; a genuinely independent human security audit is not available in this harness",
-      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
+      "judge": "npm run security:pass",
+      "proof": "npm run security:pass -> PASS in hosted mode over a real socket: anonymous denied on settings/sponsor/operator surfaces, learner denied the operator panel, operator write without CSRF refused, wrong password neutral and never echoed, CSP/nosniff/no-inline-script present, public ledger carries no two-word proper name and no absolute path; npm run secrets:scan -> 0 findings across tree and history; the report labels its judge as SAME-HARNESS, not an independent audit",
+      "evidence": "artifacts/security-pass.json; artifacts/verify-report.json",
+      "note": "Independence is the one thing this harness cannot manufacture. The checks are real and executed; the judge wrote the code it judges, and the artifact says so."
     },
     {
       "id": "PG-18",
       "title": "Docs as one source of truth",
       "wave": "W6",
-      "status": "in-progress",
+      "status": "closed",
       "owner": "agent",
-      "judge": "node tools/verify-all.mjs",
-      "proof": "ADR index (27 rows) reconciled with records by adr-governance gate; exit-criteria 13 met / 3 owner-blocked; README, register and process log still need a final drift sweep",
-      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
+      "judge": "npm run docs:drift",
+      "proof": "npm run docs:drift -> PASS: every ADR record has an index row and every row points at a real record, every `npm run` and `node tools/...` a doc promises exists, every documented API route is served, every ADR owner has an officer-register row, the plan and ledger name the same backlog, every placeholder is named in docs/OWNER-PACKETS.md, and README makes no unqualified green-CI claim",
+      "evidence": "artifacts/docs-drift.json"
     },
     {
       "id": "PG-19",
-      "title": "Hygiene (.gitattributes if repro stays 4/4)",
+      "title": "Hygiene (.gitattributes + byte-identical reproduction)",
       "wave": "W6",
-      "status": "pending",
+      "status": "closed",
       "owner": "agent",
       "judge": "npm run verify:repro",
-      "proof": ".gitattributes not added; verify:repro stayed 4/4 byte-identical on 2026-11-18",
-      "evidence": "see session compact 2026-11-18 and artifacts/verify-report.json"
+      "proof": ".gitattributes pins LF for source and marks artifacts/evidence as -text so a checkout cannot translate a hashed byte; npm run verify:repro -> 4/4 byte-identical outputs",
+      "evidence": "artifacts/verify-report.json; .gitattributes"
     },
     {
       "id": "PG-20",
-      "title": "Owner packets",
+      "title": "Owner packets and placeholder closure register",
       "wave": "W7",
       "status": "closed",
       "owner": "agent",
       "judge": "node tools/verify-production-loop.mjs",
-      "proof": "node tools/verify-production-loop.mjs -> exit 0 PASS; docs/OWNER-PACKETS.md holds 10 one-step owner packets; the reconciler ID-set assertion fails a plan that omits any PG id",
-      "evidence": "session compact 2026-11-19; artifacts/verify-report.json; tools/live-contract.mjs 40/40"
+      "proof": "node tools/verify-production-loop.mjs -> exit 0 PASS; docs/OWNER-PACKETS.md holds 10 one-step owner packets, each mapped to its ledger ID or to a named runtime item; docs/PLACEHOLDER-CLOSURE-REGISTER.md names what is real, what is untrue and the exact flip for every placeholder; the reconciler refuses an ID-set drift, a closed/placeholder record without reproducible proof, a placeholder without ownerDirective/label/residualRisk, and any surviving open record",
+      "evidence": "artifacts/verify-report.json; docs/PLACEHOLDER-CLOSURE-REGISTER.md"
     }
   ]
 }

@@ -19,6 +19,12 @@
  * Blocked rows are reported as warnings. They never make the gate pass, and
  * they never make it fail either — they make the shortfall visible, which is
  * the honest outcome.
+ *
+ * ADR-0028 adds a third state, `placeholder`: the machinery is real and proven
+ * by executable evidence, the human or external act is not. A placeholder MUST
+ * carry the same executable evidence a `met` row needs, plus an owner
+ * directive, a label that starts with PLACEHOLDER, and a residual risk. It is
+ * reported in its own block and is NEVER counted as met.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -43,16 +49,27 @@ export interface CriterionEvidence {
   minTests?: number;
 }
 
+/** A proven-machinery / unproven-human disposition (ADR-0028). */
+export interface PlaceholderDisposition {
+  /** The owner instruction that authorised it (O-YYYY-MM-DD-N). */
+  ownerDirective: string;
+  /** What a reader sees; must literally start with PLACEHOLDER. */
+  label: string;
+  /** What is still untrue, and who makes it true. */
+  residualRisk: string;
+}
+
 export interface ExitCriterionRow {
   id: string;
   phase: 0 | 1 | 5;
   criterion: string;
   source: string;
-  status: 'met' | 'owner-blocked';
+  status: 'met' | 'placeholder' | 'owner-blocked';
   evidence?: CriterionEvidence[];
   owner?: string;
   reason?: string;
   unblock?: string;
+  placeholder?: PlaceholderDisposition;
 }
 
 export interface ExitCriteriaRegister {
@@ -113,8 +130,8 @@ export function parseExitCriteria(raw: string): ExitCriteriaRegister {
     if (typeof source !== 'string' || source.trim().length === 0) {
       throw new TypeError(`exit criterion ${id} must cite its source`);
     }
-    if (status !== 'met' && status !== 'owner-blocked') {
-      throw new TypeError(`exit criterion ${id} must be met or owner-blocked`);
+    if (status !== 'met' && status !== 'placeholder' && status !== 'owner-blocked') {
+      throw new TypeError(`exit criterion ${id} must be met, placeholder or owner-blocked`);
     }
 
     if (status === 'owner-blocked') {
@@ -137,9 +154,41 @@ export function parseExitCriteria(raw: string): ExitCriteriaRegister {
       continue;
     }
 
+    let placeholderBlock: PlaceholderDisposition | undefined;
+    let placeholderOwner: string | undefined;
+    if (status === 'placeholder') {
+      const owner = row['owner'];
+      if (typeof owner !== 'string' || owner.trim().length < 3) {
+        throw new TypeError(`placeholder criterion ${id} must name its owner`);
+      }
+      const ph = row['placeholder'];
+      if (typeof ph !== 'object' || ph === null) {
+        throw new TypeError(`placeholder criterion ${id} must carry a placeholder block (ADR-0028)`);
+      }
+      const record2 = ph as Record<string, unknown>;
+      for (const field of ['ownerDirective', 'label', 'residualRisk'] as const) {
+        const value = record2[field];
+        if (typeof value !== 'string' || value.trim().length < 10) {
+          throw new TypeError(`placeholder criterion ${id} must name its ${field}`);
+        }
+      }
+      if (!/^O-\d{4}-\d{2}-\d{2}-\d+$/.test(String(record2['ownerDirective']))) {
+        throw new TypeError(`placeholder criterion ${id} ownerDirective must be O-YYYY-MM-DD-N`);
+      }
+      if (!String(record2['label']).startsWith('PLACEHOLDER')) {
+        throw new TypeError(`placeholder criterion ${id} label must start with PLACEHOLDER`);
+      }
+      placeholderBlock = {
+        ownerDirective: String(record2['ownerDirective']),
+        label: String(record2['label']),
+        residualRisk: String(record2['residualRisk']),
+      };
+      placeholderOwner = owner;
+    }
+
     const evidence = row['evidence'];
     if (!Array.isArray(evidence) || evidence.length === 0) {
-      throw new TypeError(`met criterion ${id} must carry executable evidence`);
+      throw new TypeError(`${status} criterion ${id} must carry executable evidence`);
     }
     const checked: CriterionEvidence[] = [];
     for (const entry of evidence) {
@@ -178,7 +227,17 @@ export function parseExitCriteria(raw: string): ExitCriteriaRegister {
         ...(typeof minTests === 'number' ? { minTests } : {}),
       });
     }
-    out.push({ id, phase, criterion, source, status, evidence: checked });
+    out.push({
+      id,
+      phase,
+      criterion,
+      source,
+      status,
+      ...(placeholderBlock !== undefined
+        ? { owner: placeholderOwner, placeholder: placeholderBlock }
+        : {}),
+      evidence: checked,
+    });
   }
 
   if (out.length !== expectedRows) {
@@ -314,7 +373,7 @@ async function proveEvidence(
 
 export const exitCriteriaGate: Gate = {
   id: GATE_ID,
-  title: 'Every Phase 0/1/5 exit criterion is proven or explicitly owner-blocked',
+  title: 'Every Phase 0/1/5 exit criterion is proven, placeholdered or explicitly owner-blocked',
   severity: 'blocker',
   async run(ctx: GateContext): Promise<GateResult> {
     const registerPath = join(ctx.root, REGISTER_FILE);
@@ -344,6 +403,7 @@ export const exitCriteriaGate: Gate = {
     const evidence: string[] = [];
     const failures: string[] = [];
     const blocked: string[] = [];
+    const placeholders: string[] = [];
     let metCount = 0;
 
     for (const row of register.rows) {
@@ -361,7 +421,13 @@ export const exitCriteriaGate: Gate = {
           failures.push(`${row.id}: ${outcome.detail}`);
         }
       }
-      if (rowOk) metCount += 1;
+      if (!rowOk) continue;
+      if (row.status === 'placeholder' && row.placeholder !== undefined) {
+        placeholders.push(`${row.id} PLACEHOLDER — ${row.placeholder.label} | residual: ${row.placeholder.residualRisk}`);
+        evidence.push(`${row.id} placeholder → ${row.placeholder.ownerDirective}`);
+      } else {
+        metCount += 1;
+      }
     }
 
     if (failures.length > 0) {
@@ -378,8 +444,12 @@ export const exitCriteriaGate: Gate = {
       id: GATE_ID,
       passed: true,
       severity: 'blocker',
-      detail: `${String(metCount)} met, ${String(blocked.length)} owner-blocked of ${String(register.rows.length)} exit criteria`,
-      evidence: [...evidence, ...blocked.map((line) => `WARNING ${line}`)],
+      detail: `${String(metCount)} met, ${String(placeholders.length)} placeholder (NOT met), ${String(blocked.length)} owner-blocked of ${String(register.rows.length)} exit criteria`,
+      evidence: [
+        ...evidence,
+        ...placeholders.map((line) => `PLACEHOLDER ${line}`),
+        ...blocked.map((line) => `WARNING ${line}`),
+      ],
     };
   },
 };
