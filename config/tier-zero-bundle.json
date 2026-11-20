@@ -1,0 +1,38 @@
+{
+  "version": "0.1.0-draft",
+  "watermark": "DRAFT-PLACEHOLDER-CEREMONY",
+  "lessons": [
+    {
+      "id": "algebra/linear-eq",
+      "body": "Draft lesson for review. A linear equation places an equals sign between two expressions that hold the same value. To find the unknown, undo each operation in reverse order, subtracting or dividing on both sides so the balance is kept.\n\nOnce a value is found, substitute it into the original equation and check that both sides agree. That check catches arithmetic slips and confirms the result is genuine rather than assumed."
+    },
+    {
+      "id": "math/fractions-basics",
+      "body": "Draft lesson for review. A fraction names an equal part of a whole using a numerator above a denominator. When two fractions share a denominator, the larger numerator is the larger fraction, and the comparison needs no conversion.\n\nFor unlike denominators, find a common denominator first, then compare the rewritten numerators. Keep each value unchanged by multiplying the top and bottom of a fraction by the same amount."
+    },
+    {
+      "id": "science/photosynthesis",
+      "body": "Draft lesson for review. Photosynthesis is the process by which green plants convert light into chemical energy. Chlorophyll in the leaves absorbs light, and carbon dioxide from the air combines with water drawn up through the stem.\n\nThe products are glucose, which stores energy for growth, and oxygen, which is released into the air. Without this process, the energy entering most food chains would not be captured."
+    },
+    {
+      "id": "science/water-cycle",
+      "body": "Draft lesson for review. The water cycle describes how water moves between the sea, the sky, and the land. Heat from the sun turns surface water into vapour, which rises and cools into clouds.\n\nWater returns as rain or snow, collects in rivers and soil, and eventually flows back to the sea. The same water is used many times, so the cycle has no true beginning or end."
+    },
+    {
+      "id": "biology/cell-structure",
+      "body": "Draft lesson for review. A cell is the smallest unit that carries out the processes of life. Animal and plant cells share a membrane, cytoplasm, and a nucleus that holds the genetic instructions.\n\nPlant cells also have a rigid cell wall and chloroplasts that capture light. These parts work together so the cell can take in nutrients, release energy, and reproduce."
+    },
+    {
+      "id": "physics/gravity",
+      "body": "Draft lesson for review. Gravity is the attraction between objects that have mass. Near the surface of the earth it gives every free object the same downward acceleration, whatever its mass, when air resistance is ignored.\n\nThe strength of the pull grows with the masses involved and weakens with the square of the distance between them. This same force keeps the planets in their paths around the sun."
+    },
+    {
+      "id": "safety/digital-safety",
+      "body": "Draft lesson for review. Digital safety is the set of habits that keep personal information private while using the internet. Strong, unique passwords and care about what is shared reduce the chance that an account is misused.\n\nBefore opening a link, check who sent it and whether the address looks genuine. If something seems wrong, stop and ask a trusted adult rather than replying or paying."
+    },
+    {
+      "id": "life/financial-literacy",
+      "body": "Draft lesson for review. Financial literacy is the ability to read and reason about money. Income is what comes in, expenses are what goes out, and the difference over a period is what remains for saving.\n\nA simple record of income and spending makes it possible to see where money goes and to plan ahead. Borrowing adds a future obligation, so the terms should be read carefully before any agreement is made."
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "keyId": "ph-ed25519-bf69f6994c4f90f7",
+  "algorithm": "ed25519",
+  "status": "PLACEHOLDER",
+  "ownerDirective": "O-2026-11-19-1",
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAYSd9Bi9PS4gDbZRB6IPXiYHKqhBuR2EYQz/KcrlQKOg=\n-----END PUBLIC KEY-----\n",
+  "note": "Placeholder trust root created under the owner's placeholder-closure directive. It proves the signing and verification chain end to end. It is NOT the production key: the private key was minted on the operator machine and is not in KMS/HSM custody. See docs/TIER-ZERO-KEY-REGISTER.md."
+}
