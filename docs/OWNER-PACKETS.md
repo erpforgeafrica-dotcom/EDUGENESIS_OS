@@ -1,25 +1,35 @@
 # EduGenesis OS — owner packets (PG-20)
 
-One step each. Do the step, paste back the exact confirmation, and I will close
-the matching item in `docs/production-ledger.json` with fresh evidence.
-Nothing here requires the owner to write code. Secrets are never pasted into chat.
+**Every backlog item is now closed or placeholdered (ADR-0028).** A placeholder
+is not a promise that someone is working on it: it is a real, tested mechanism
+plus a named residual that only the owner can remove. This file is the one-step
+instruction for each flip.
 
-| # | Item | Exact owner action | Paste back | I will then |
+**Pilot launch** may proceed with the placeholders below. **Public launch** may
+not: `docs/PLACEHOLDER-CLOSURE-REGISTER.md` must read zero owner rows first.
+
+Nothing here requires the owner to write code, and no secret is ever pasted into
+chat.
+
+| # | Backlog / criterion | Exact owner action | Paste back | The flip |
 |---|---|---|---|---|
-| 1 | P0-3 / PG-15 real CI | Enable GitHub Actions billing on `erpforgeafrica-dotcom`, then push `main` (or re-run the existing `.github/workflows/ci.yml`). | The run URL `https://github.com/erpforgeafrica-dotcom/EDUGENESIS_OS/actions/runs/<id>` and its green conclusion. | Mark P0-3 VERIFIED, keep `ci:local` as the zero-cost fallback, re-run the release gate. |
-| 2 | P0-1 signed approval record | Record the Founder & CEO's written approval of this release (the name is enough; no signature image needed in chat). | The approval reference or date. | Attach the reference to `docs/exit-criteria.json` P0-1 and re-score. |
-| 3 | P0-6 nine officer roles | Name the vacant officers listed in `docs/OFFICERS.md` (Security Officer, Finance Lead, Governance Lead, Child Safeguarding Officer, Programme Lead, OpenCode Lead, Hiring Platform Lead, Communications Lead, Founder & CEO is already recorded). | The names, one per role. | Record them in `docs/OFFICERS.md` and close P0-6. |
-| 4 | PG-13 signing-key ceremony | On an OFFLINE machine, run `node tools/sign-tier-zero.mjs <bundle.json> <out.sig>` with `EDUGENESIS_BUNDLE_SIGNING_KEY` set to the path of an Ed25519 private key you generated and custodied in KMS/HSM. Follow `docs/TIER-ZERO-SIGNING-CEREMONY.md`. | "Ceremony complete, public key installed at <config location>" — NOT the private key. | Flip the verifier to the production public key and mark the signed bundle VERIFIED. |
-| 5 | PG-08 Tier 1 provider key | Create a provider account, then set its key as a server-side Render environment variable named for the provider (never in the repo, never in chat). | "Provider credential provisioned on Render" plus which provider. | Wire Tier 1 behind per-learner/global caps, redaction, breaker, kill switch and the honest Tier 0 fallback; ADR it. |
-| 6 | PG-07/operator hosted auth | Set Render env `EDUGENESIS_SESSION_SECRET` (random, server-side only) and bootstrap one operator account via the documented local command. | "Session secret and operator account provisioned." | Exercise the end-to-end value chain on the deployed instance: sponsor funds → ledger → report → learner lesson, and record the live scenario. |
-| 7 | PG-12 legal sign-off | Send `docs/PRIVACY-DPIA-DATA-FLOW.md`, `docs/RUNBOOK-INCIDENT.md` and the retention schedule to legal counsel. | "Legal review completed on <date>" and any required changes. | Apply only the requested changes and mark sign-off OWNER-BLOCKED→VERIFIED with the date. |
-| 8 | PG-14 screen reader | Run the guided 15-minute NVDA/Narrator script in `docs/DASHBOARD-SPEC.md`/accessibility evidence (install NVDA free, or use Windows Narrator) on `/learn` and each dashboard. | The speech-output capture or a short note of what was announced. | Mark screen-reader behaviour VERIFIED, or keep it explicitly UNVERIFIED if you decline. |
-| 9 | PG-10 durable disk | If true durability is wanted, select a paid Render persistent disk and attach it to `srv-dbsu4q0ae00c7393kod0`. | "Persistent disk attached" and the mount path. | Enable the commented, tested `render.yaml` switch and run the backup/restore drill against it. |
-| 10 | PG-15 free-CI mirror (optional) | If you want a real hosted run without GitHub Actions billing, authorise a free CI host (e.g. a CircleCI/woodpecker account) and paste the repo hook URL. | The webhook URL or repo hook confirmation. | Add the mirror config as an option; it never becomes a requirement. |
+| 1 | **PG-15 / P0-3** hosted CI | Clear the GitHub Actions block at the account level for `erpforgeafrica-dotcom`, then re-run `CI` on `main`. The repository is public, so Actions is not billable; the block is account state, not a workflow defect (seven check-runs per commit with zero steps and zero output). | The run URL `https://github.com/erpforgeafrica-dotcom/EDUGENESIS_OS/actions/runs/<id>` and its green conclusion. | PG-15 and P0-3 → `closed`/`met`; `npm run ci:parity` still runs as the zero-cost local mirror. |
+| 2 | **P0-1** signed approval | Read the subject digest in `docs/RELEASE-APPROVAL.md` (it names exactly which files were approved) and approve this release in writing. | The approval reference and date. | Re-sign the same subject with the production key; P0-1 → `met`. |
+| 3 | **P0-6** nine officer seats | Name a human for each `PLACEHOLDER SEAT` in `docs/OFFICERS.md`. The Child Safeguarding Officer **cannot** be delegated to an agent. | The names, one per role. | P0-6 → `met`; the interim column is replaced, never silently dropped. |
+| 4 | **PG-13** key ceremony | Generate an Ed25519 key inside KMS/HSM, export only the SPKI public key, then follow `docs/TIER-ZERO-KEY-REGISTER.md` → "Replacing it" on an offline machine. | "Ceremony complete, public key installed at `<config location>`" — **not** the private key. | PG-13 → `closed`; the placeholder key is retired and deleted. |
+| 5 | **PG-08** Tier 1 credential | Create one provider account and set its key as a **server-side** Render environment variable named for the provider. | "Provider credential provisioned on Render" plus which provider. | Run the failover drill; PG-08 → `closed`. |
+| 6 | **PG-12** legal sign-off | Send `docs/PRIVACY-DPIA-DATA-FLOW.md`, `docs/RUNBOOK-INCIDENT.md`, `docs/RUNBOOK-BACKUP-RESTORE.md` and `docs/LEGAL-REVIEW-RECORD.md` to counsel. | "Legal review completed on `<date>`" and the required changes. | Apply the changes; PG-12 → `closed`. |
+| 7 | **PG-14** screen reader | Run the guided 15-minute NVDA/Narrator session on `/learn` and the three dashboards. `artifacts/a11y-narration.txt` is the exact text to expect. | The speech output capture, or a note of what was announced. | PG-14 → `closed`. |
+| 8 | **PG-10** persistent disk | Select a paid Render persistent disk and attach it to `srv-dbsu4q0ae00c7393kod0`. | "Persistent disk attached" and the mount path. | Enable the tested `render.yaml` switch; PG-10 → `closed`. |
+| 9 | **Runtime — operator hosted auth** (no backlog id) | Provision `EDUGENESIS_SESSION_SECRET` and a pilot operator account as server-side Render environment values. The build can do this over the Render API once you confirm the account; it never prints the values. | "Session secret and operator account provisioned." | The live value chain can be exercised: login → sponsor funding → ledger → sponsor report → learner lesson. |
+| 10 | **Business — first sponsor** (no backlog id) | Run one real funding round through the sponsor dashboard, using a pseudonymous sponsor reference (the ledger publishes refs, amounts and a hash chain — never a person's name). | The sponsor reference and the funding confirmation. | The ledger carries a real entry; learners can consume the allocated credits. |
 
 ## Standing note
 
 No item above authorises spending money, touching billing, or pasting a secret.
-The release is "pilot-launch ready pending owner actions" until items 1, 2, 3,
-5, 6, 7 and 8 are closed. Items 4 and 9 are hardening upgrades with an honest
-free-tier fallback already shipped.
+
+`docs/production-ledger.json` reads **14 closed / 6 placeholder / 0 open**. The
+six placeholders are PG-08, PG-10, PG-12, PG-13, PG-14 and PG-15; the three
+Phase 0 criteria are P0-1, P0-3 and P0-6. Every one is itemised in
+`docs/PLACEHOLDER-CLOSURE-REGISTER.md` with what is real, what is untrue and the
+exact flip.
