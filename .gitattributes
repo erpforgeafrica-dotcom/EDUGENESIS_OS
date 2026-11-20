@@ -1,0 +1,51 @@
+# EduGenesis OS - checkout normalisation (PG-19).
+#
+# Git must never rewrite a byte that the reproducibility chain hashes. Text
+# files are normalised to LF in the repository. A Windows checkout with
+# core.autocrlf=true materialises CRLF, so the same content can occupy different
+# raw bytes on two machines; that is why the release-approval subject is hashed
+# in canonical LF form (tools/approval-subject.mjs) and why tools/verify-repro.mjs
+# compares the GENERATED evidence rather than the checkout form. Binary and
+# generated files are marked so Git never attempts a text conversion at all.
+#
+# WHY `-text` on artifacts: the attestation, the checksums manifest and the SBOM
+# are compared byte-for-byte by tools/verify-repro.mjs. A newline translation on
+# checkout would break a legitimate reproduction without any code changing.
+
+* text=auto
+
+# Source, configuration and documentation: normalised, never converted again.
+*.ts   text
+*.mts  text
+*.js   text
+*.mjs  text
+*.json text
+*.md   text
+*.yml  text
+*.yaml text
+*.css  text
+*.html text
+*.sql  text
+*.ps1  text
+*.sh   text
+
+# Evidence and generated output: bytes are evidence; never translate them.
+artifacts/** -text
+artifacts/checksums.sha256 -text
+artifacts/attestation.json -text
+artifacts/sbom.cdx.json -text
+
+# Binary payloads.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.pdf  binary
+*.sqlite binary
+*.sqlite3 binary
+*.db   binary
+*.zip  binary
+*.gz   binary

@@ -5,8 +5,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Runtime data and settings secrets — NEVER committed (portability law: settings live in the project)
+# Runtime data and settings secrets - NEVER committed (portability law: settings live in the project)
 .edugenesis-data/
+data/backups/
 settings/settings.local.json
 settings/*.local.json
 

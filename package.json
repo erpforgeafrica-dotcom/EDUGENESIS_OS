@@ -28,7 +28,14 @@
     "verify": "npm run build && npm run test:only && node tools/verify-all.mjs && npm run secrets:scan && npm run sbom && node tools/checksums.mjs && node tools/attest.mjs",
     "verify:repro": "node tools/verify-repro.mjs",
     "ci:local": "node tools/ci-local.mjs",
-    "release": "node tools/release.mjs"
+    "ci:parity": "node tools/ci-parity.mjs --execute",
+    "release": "node tools/release.mjs",
+    "perf:drill": "node tools/perf-drill.mjs",
+    "security:pass": "node tools/security-pass.mjs",
+    "docs:drift": "node tools/docs-drift.mjs",
+    "backup:export": "node tools/durable-export.mjs",
+    "backup:restore": "node tools/backup-restore.mjs",
+    "a11y:narration": "node tools/a11y-narration.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

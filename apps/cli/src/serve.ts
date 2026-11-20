@@ -578,6 +578,52 @@ export interface ServeHandle {
   close(): Promise<void>;
 }
 
+/** Roles a bootstrap entry may carry. Anything else is refused, never coerced. */
+const BOOTSTRAP_ROLES: readonly AuthRole[] = ['learner', 'guardian', 'sponsor', 'operator', 'auditor'];
+
+/**
+ * Read `EDUGENESIS_AUTH_BOOTSTRAP`: a JSON array of `{ id, password, roles }`.
+ *
+ * WHY AN ENV SLOT: a hosted instance's first operator has to come from
+ * somewhere, and the free instance's filesystem is ephemeral — an account
+ * created through a route would vanish on the next deploy. The value lives only
+ * in the platform's server-side environment, never in the repository, and this
+ * function never logs it: a malformed value produces one neutral warning with
+ * no value, hash or fragment.
+ */
+function readEnvBootstrap(): readonly { id: string; password: string; roles: readonly AuthRole[] }[] {
+  const raw = process.env['EDUGENESIS_AUTH_BOOTSTRAP'];
+  if (typeof raw !== 'string' || raw.trim() === '') return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.warn('EDUGENESIS_AUTH_BOOTSTRAP is not valid JSON; no bootstrap account was created.');
+    return [];
+  }
+  if (!Array.isArray(parsed)) {
+    console.warn('EDUGENESIS_AUTH_BOOTSTRAP must be a JSON array; no bootstrap account was created.');
+    return [];
+  }
+  const accounts: { id: string; password: string; roles: readonly AuthRole[] }[] = [];
+  for (const item of parsed) {
+    if (typeof item !== 'object' || item === null) continue;
+    const record = item as Record<string, unknown>;
+    const id = record['id'];
+    const password = record['password'];
+    const roles = record['roles'];
+    if (typeof id !== 'string' || id.trim().length < 3) continue;
+    if (typeof password !== 'string' || password.length < 12) continue;
+    if (!Array.isArray(roles) || roles.length === 0) continue;
+    const resolved = roles.filter(
+      (role): role is AuthRole => typeof role === 'string' && BOOTSTRAP_ROLES.includes(role as AuthRole),
+    );
+    if (resolved.length !== roles.length) continue;
+    accounts.push({ id, password, roles: resolved });
+  }
+  return accounts;
+}
+
 /**
  * Start the server.
  *
@@ -619,7 +665,7 @@ export async function startServer(options: ServeOptions = {}): Promise<ServeHand
   const authAvailable = !hosted || options.sessionSecret !== undefined || process.env['EDUGENESIS_SESSION_SECRET'] !== undefined;
   const sessions = createSessionManager({ secret: sessionSecret, ttlSec: 3600 });
   const authStore: AuthStore = createAuthStore({ dataDir: join(dataDir, 'auth') });
-  for (const account of options.authBootstrap ?? []) {
+  for (const account of options.authBootstrap ?? readEnvBootstrap()) {
     if (authStore.rolesOf(account.id) === undefined) {
       authStore.register(account);
       authStore.auditEvent({ actor: 'system', action: 'bootstrap', target: account.id, outcome: 'registered' });
