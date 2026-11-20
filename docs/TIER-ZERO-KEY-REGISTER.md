@@ -6,7 +6,7 @@ never be, inside the tree.
 
 | Key ID | Algorithm | Class | Custody | Installed | Status |
 |---|---|---|---|---|---|
-| `ph-ed25519-bf69f6994c4f90f7` | Ed25519 | **PLACEHOLDER** | operator machine, outside the repo (`~/.edugenesis-keys/`), file mode 0600 | 2026-11-19 | ACTIVE — pilot only |
+| `ph-ed25519-bf69f6994c4f90f7` | Ed25519 | **PLACEHOLDER** | operator machine, outside the repo (`~/.edugenesis-keys/`); NTFS permissions inherited from the owner's profile — the file reports mode `666` on this Windows host, so no POSIX `0600` is claimed | 2026-11-19 | ACTIVE — pilot only |
 
 ## What the placeholder key proves
 

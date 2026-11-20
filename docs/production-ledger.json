@@ -103,7 +103,7 @@
       "wave": "W3",
       "status": "closed",
       "owner": "agent",
-      "judge": "node --test packages/curriculum/dist/index.test.js",
+      "judge": "node --test packages/curriculum/dist/*.test.js",
       "proof": "node --test packages/curriculum/dist/*.test.js -> 51/51 PASS (starter pack valid); learner.ts defaultTierZero() loads the validated pack; live algebra/fraction/photosynthesis lessons answered and the honest gap retained, probe 40/40",
       "evidence": "artifacts/verify-report.json; tools/live-contract.mjs 40/40"
     },
@@ -230,7 +230,7 @@
       "status": "closed",
       "owner": "agent",
       "judge": "npm run verify:repro",
-      "proof": ".gitattributes pins LF for source and marks artifacts/evidence as -text so a checkout cannot translate a hashed byte; npm run verify:repro -> 4/4 byte-identical outputs",
+      "proof": ".gitattributes pins LF for source and marks artifacts/** as -text so a checkout cannot translate a hashed byte; npm run verify:repro -> 4/4 byte-identical outputs",
       "evidence": "artifacts/verify-report.json; .gitattributes"
     },
     {

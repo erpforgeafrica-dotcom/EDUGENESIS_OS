@@ -12,7 +12,7 @@ distinction. A build never invents a person.
 
 | Role | Appointed person | Status | Interim seat (placeholder) | Appointed by | Date |
 |---|---|---|---|---|---|
-| Founder & CEO | — | VACANT — Founder & CEO | PLACEHOLDER — owner seat, not delegated | Board of Trustees | — |
+| Founder & CEO | — | OWNER SEAT — held by the owner, with no appointment instrument in this tree | PLACEHOLDER — owner seat, not delegated | — (no instrument in this tree) | — |
 | Chief AI & Model Orchestrator | Marcus Thorne | APPOINTED | — | Founder & CEO | 2026-11-12 |
 | Chief Systems Architect | Founder & CEO | APPOINTED | — | Founder & CEO (owner decision D-4) | 2026-11-15 |
 | Chief Inclusion & Accessibility Officer | Noni / Amara Diop | APPOINTED | — | Founder & CEO | 2026-11-12 |
@@ -35,6 +35,9 @@ distinction. A build never invents a person.
   The seat is accountable for exactly the machinery named in its row and for
   nothing that needs a person's judgement.
 - **VACANT** — would mean no interim holder and no scope. No row reads VACANT.
+- **OWNER SEAT** — the founder's own seat. The owner holds it by ownership; no
+  appointment instrument for it exists in this tree, so this register neither
+  claims an appointment nor names an appointing body. It is not an APPOINTED row.
 
 ## The safeguarding limit (non-negotiable)
 
