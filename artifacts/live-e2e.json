@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "tool": "eg-live-e2e.mjs",
+  "tool": "tools/live-e2e.mjs",
   "base": "https://edugenesis-web-yju6.onrender.com",
-  "ranAt": "2026-11-20T02:57:40.885Z",
+  "ranAt": "2026-11-20T08:15:00.836Z",
   "result": "PASS",
   "passed": 30,
   "total": 30,
   "sponsorRef": "KEEP-Rotation-Engine",
   "amountCents": 100000,
-  "ledgerEntries": 4,
+  "ledgerEntries": 2,
   "checks": [
     {
       "name": "the deployed instance answers /api/health",
@@ -63,7 +63,7 @@
     {
       "name": "the public ledger carries the funding entry",
       "ok": true,
-      "detail": "4 entries"
+      "detail": "2 entries"
     },
     {
       "name": "the public ledger verifies its own hash chain",
